@@ -1,0 +1,5 @@
+node_modules
+dist
+.trae
+RUST-SRC
+pnpm-lock.yaml
