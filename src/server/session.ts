@@ -100,6 +100,9 @@ export class Session {
       const user = await this.state.mutex.runExclusive(async () => {
         const existing = this.state.users.get(me.id);
         if (existing) {
+          if (existing.session) {
+            throw new Error("该账号已在线，已阻止重复连接");
+          }
           isReconnect = true;
           existing.setSession(this);
           return existing;

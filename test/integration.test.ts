@@ -165,5 +165,22 @@ describe("端到端（mock 远端 HTTP）", () => {
       await running.close();
     }
   });
+
+  test("阻止同一玩家重复在线连接", async () => {
+    const running = await startServer({ port: 0, config: { monitors: [200] } });
+    const port = running.address().port;
+
+    const c1 = await Client.connect("127.0.0.1", port);
+    const c2 = await Client.connect("127.0.0.1", port);
+
+    try {
+      await c1.authenticate("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+      await expect(c2.authenticate("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")).rejects.toThrow("该账号已在线");
+    } finally {
+      await c1.close();
+      await c2.close();
+      await running.close();
+    }
+  });
 });
 
