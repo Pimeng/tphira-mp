@@ -1,9 +1,9 @@
 # Phira MP（Node.js 版）
 
 > [!TIP]
-> 本项目由 TRAE SOLO 模式开发，存在一定的问题，见谅，如有更好的实现欢迎 PR。
-> 目前为早期移植版本，仅实现了基础功能，后续会持续完善。
-> 不会写代码，勿喷（（（
+> 本项目由 TRAE SOLO 模式开发，存在一定的问题，见谅，如有更好的实现欢迎 PR。<br>
+> 目前为早期移植版本，仅实现了基础功能，后续会持续完善。<br>
+> 不会写代码，勿喷（（（<br>
 
 本项目基于 https://github.com/TeamFlos/phira-mp 中的实现，将同一套多人联机/观战服务按原逻辑迁移到 Node.js（TypeScript）版本，目标是保持协议与核心行为一致（握手、编解码、房间状态机、观战转发、认证流程等）。
 
@@ -57,8 +57,15 @@ pnpm start -- --port 12346
 
 ## 服务端配置（server_config.yml）
 
+支持大写/小写两种键名（例如 `HOST` / `host`）
+
 - server_name(string): 当前服务器名字，会显示在欢迎信息中
 - monitors(array): 观战用户ID列表（默认 `2`）
+- HOST(string): TCP 服务监听地址（默认 `::`）
+- PORT(number): TCP 服务监听端口（默认 `12346`）
+- HTTP_SERVICE(boolean): 是否启动 HTTP 服务（默认 `false`）
+- HTTP_PORT(number): HTTP 服务监听端口（默认 `12347`）
+- ROOM_MAX_USERS(number): 单房间最大玩家数（默认 `8`，最大 `64`）
 
 未提供该文件时默认值为：
 
@@ -66,6 +73,11 @@ pnpm start -- --port 12346
 server_name: Phira MP
 monitors:
   - 2
+HOST: "::"
+PORT: 12346
+HTTP_SERVICE: false
+HTTP_PORT: 12347
+ROOM_MAX_USERS: 8
 ```
 
 会解析为：
@@ -73,7 +85,12 @@ monitors:
 ```json
 {
   "server_name": "Phira MP",
-  "monitors": [2]
+  "monitors": [2],
+  "host": "::",
+  "port": 12346,
+  "http_service": false,
+  "http_port": 12347,
+  "room_max_users": 8
 }
 ```
 

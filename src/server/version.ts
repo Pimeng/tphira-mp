@@ -1,17 +1,20 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { getAppPaths } from "./appPaths.js";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 export function readAppVersion(): string {
-  const env = process.env.PHIRA_MP_VERSION?.trim();
-  if (env) return env;
-  try {
-    const { appDir } = getAppPaths();
-    const pkgPath = join(appDir, "package.json");
-    const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as { version?: string };
-    return pkg.version ?? "unknown";
-  } catch {
-    return "unknown";
+  const candidates = [join(process.cwd(), "package.json"), join(dirname(process.execPath), "package.json")];
+
+  for (const p of candidates) {
+    if (!existsSync(p)) continue;
+    try {
+      const text = readFileSync(p, "utf8");
+      const json = JSON.parse(text) as { version?: unknown };
+      if (typeof json.version === "string" && json.version.trim().length > 0) return json.version.trim();
+    } catch {
+      continue;
+    }
   }
+
+  return "unknown";
 }
 

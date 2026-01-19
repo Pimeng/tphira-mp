@@ -1,6 +1,11 @@
 export type ServerConfig = {
   monitors: number[];
   server_name?: string;
+  host?: string;
+  port?: number;
+  http_service?: boolean;
+  http_port?: number;
+  room_max_users?: number;
 };
 
 export type Chart = {

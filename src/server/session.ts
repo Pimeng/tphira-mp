@@ -250,7 +250,9 @@ export class Session {
           const id = cmd.id;
           await this.state.mutex.runExclusive(async () => {
             if (this.state.rooms.has(id)) throw new Error(user.lang.format("create-id-occupied"));
-            const room = new RoomClass({ id, hostId: user.id });
+            const maxUsersRaw = this.state.config.room_max_users;
+            const maxUsers = Number.isInteger(maxUsersRaw) ? Math.min(Math.max(maxUsersRaw, 1), 64) : 8;
+            const room = new RoomClass({ id, hostId: user.id, maxUsers });
             this.state.rooms.set(id, room);
             user.room = room;
           });

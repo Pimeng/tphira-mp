@@ -1,19 +1,19 @@
 import { parseArgs } from "node:util";
 import { startServer } from "./server.js";
 
-function parsePort(argv: string[]): number {
+function parsePort(argv: string[]): number | undefined {
   const { values } = parseArgs({
     args: argv,
     options: {
       port: {
         type: "string",
-        short: "p",
-        default: "12346"
+        short: "p"
       }
     },
     allowPositionals: true
   });
 
+  if (values.port === undefined) return undefined;
   const port = Number(values.port);
   if (!Number.isInteger(port) || port <= 0 || port > 65535) {
     throw new Error("端口号不合法");

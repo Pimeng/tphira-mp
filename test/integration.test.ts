@@ -103,5 +103,51 @@ describe("端到端（mock 远端 HTTP）", () => {
       await running.close();
     }
   });
+
+  test("HTTP /room 返回房间列表并过滤 _ 前缀", async () => {
+    const running = await startServer({ port: 0, config: { monitors: [200], http_service: true, http_port: 0 } });
+    const port = running.address().port;
+    const httpPort = running.http!.address().port;
+
+    const alice = await Client.connect("127.0.0.1", port);
+    const bob = await Client.connect("127.0.0.1", port);
+
+    try {
+      await alice.authenticate("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+      await bob.authenticate("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+
+      await alice.createRoom("room1");
+      await bob.createRoom("_hidden");
+
+      const resp = await originalFetch(`http://127.0.0.1:${httpPort}/room`);
+      expect(resp.ok).toBe(true);
+      const json = (await resp.json()) as { rooms: string[] };
+      expect(json.rooms).toEqual(["room1"]);
+    } finally {
+      await alice.close();
+      await bob.close();
+      await running.close();
+    }
+  });
+
+  test("ROOM_MAX_USERS 生效（最多 1 人）", async () => {
+    const running = await startServer({ port: 0, config: { monitors: [200], room_max_users: 1 } });
+    const port = running.address().port;
+
+    const alice = await Client.connect("127.0.0.1", port);
+    const bob = await Client.connect("127.0.0.1", port);
+
+    try {
+      await alice.authenticate("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+      await bob.authenticate("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+
+      await alice.createRoom("room1");
+      await expect(bob.joinRoom("room1", false)).rejects.toThrow("房间已满");
+    } finally {
+      await alice.close();
+      await bob.close();
+      await running.close();
+    }
+  });
 });
 

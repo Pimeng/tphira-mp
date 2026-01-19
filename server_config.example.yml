@@ -1,3 +1,17 @@
+# 监听地址
+HOST: "::"
+# 监听端口
+PORT: 12346
+
+# 是否启用 HTTP 服务
+HTTP_SERVICE: false
+# HTTP 服务监听端口
+HTTP_PORT: 12347
+
+# 单间最大用户数
+ROOM_MAX_USERS: 8
+
+# 观战用户ID
 monitors:
   - 2
 

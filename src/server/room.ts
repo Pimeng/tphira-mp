@@ -5,8 +5,6 @@ import type { Chart, RecordData } from "./types.js";
 import type { User } from "./user.js";
 import type { Logger } from "./logger.js";
 
-const ROOM_MAX_USERS = 8;
-
 export type InternalRoomState =
   | { type: "SelectChart" }
   | { type: "WaitForReady"; started: Set<number> }
@@ -14,6 +12,7 @@ export type InternalRoomState =
 
 export class Room {
   readonly id: RoomId;
+  readonly maxUsers: number;
   hostId: number;
   state: InternalRoomState = { type: "SelectChart" };
 
@@ -25,8 +24,9 @@ export class Room {
   private monitors: number[] = [];
   chart: Chart | null = null;
 
-  constructor(opts: { id: RoomId; hostId: number }) {
+  constructor(opts: { id: RoomId; hostId: number; maxUsers: number }) {
     this.id = opts.id;
+    this.maxUsers = opts.maxUsers;
     this.hostId = opts.hostId;
     this.users = [opts.hostId];
   }
@@ -88,7 +88,7 @@ export class Room {
       if (!this.monitors.includes(user.id)) this.monitors.push(user.id);
       return true;
     }
-    if (this.users.length >= ROOM_MAX_USERS) return false;
+    if (this.users.length >= this.maxUsers) return false;
     if (!this.users.includes(user.id)) this.users.push(user.id);
     return true;
   }
