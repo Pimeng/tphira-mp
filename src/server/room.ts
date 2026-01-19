@@ -192,7 +192,7 @@ export class Room {
 
         const scoreText = `最高分：“${bestScoreName}”(${bestScoreIds[0]}) ${bestScore}`;
         const accText = `最高准度：“${bestAccName}”(${bestAccIds[0]}) ${(bestAcc * 100).toFixed(2)}%`;
-        const summary = `房间 “${this.id}” 本局结算：${scoreText}；${accText}`;
+        const summary = `本局结算：\n${scoreText}\n${accText}`;
 
         await this.send(opts.broadcast, { type: "Chat", user: 0, content: summary });
       }

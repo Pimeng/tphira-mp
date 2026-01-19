@@ -29,7 +29,7 @@ pnpm run build
 
 ## 启动服务端
 
-开发模式（不产物，直接运行 TS）：
+开发模式（从源代码运行）：
 
 ```bash
 pnpm run dev:server -- --port 12346
@@ -57,53 +57,24 @@ pnpm start -- --port 12346
 
 ## 服务端配置（server_config.yml）
 
-工作目录下可放置 `server_config.yml`，用于配置允许以“旁观/观战（monitor）”身份加入房间的用户 ID 列表。
-
-示例：
-
-```yml
-monitors:
-  - 10001
-  - 10002
-```
+- server_name(string): 当前服务器名字，会显示在欢迎信息中
+- monitors(array): 观战用户ID列表（默认 `2`）
 
 未提供该文件时默认值为：
 
 ```yml
+server_name: Phira MP
 monitors:
   - 2
 ```
 
-## 协议要点（与 Rust 对齐）
+会解析为：
 
-- 连接建立时握手版本字节
-  - 客户端：连接后先写 1 字节 version（当前为 1）
-  - 服务端：连接后先读 1 字节 version
-- 每个数据包：`len(varint-u32, 7bit continuation, <= 5字节) + payload`
-  - 单包 payload 上限 2 MiB
-- payload 使用自定义二进制序列化（小端）：
-  - `String`：`uleb(len) + bytes`
-  - `Vec<T>`：`uleb(len) + elements`
-  - `HashMap<K,V>`：`uleb(len) + (K,V)...`
-  - `Uuid`：`low(u64-le) + high(u64-le)`（与 Rust 的 `from_u64_pair/as_u64_pair` 逻辑一致）
-  - `CompactPos`：`f16 bits`（两个 `u16-le`）
-- 枚举序列化：`u8 tag + payload`，tag 顺序严格等同 Rust 源文件中的 variant 声明顺序
-
-## 客户端库使用示例
-
-```ts
-import { Client } from "./dist/client/client.js";
-
-const client = await Client.connect("127.0.0.1", 12346);
-await client.authenticate("0123456789abcdef0123456789abcdef");
-
-await client.createRoom("room1");
-await client.selectChart(1);
-await client.requestStart();
-await client.ready();
-
-console.log(client.takeMessages());
-await client.close();
+```json
+{
+  "server_name": "Phira MP",
+  "monitors": [2]
+}
 ```
 
 ## 测试
@@ -111,9 +82,6 @@ await client.close();
 ```bash
 pnpm test
 ```
-
-- `test/protocol.test.ts`：协议 golden（含 f16 CompactPos 等关键点）
-- `test/integration.test.ts`：端到端流程（使用 mock 的 `/me`、`/chart/{id}`、`/record/{id}`）
 
 ## 致谢
 
