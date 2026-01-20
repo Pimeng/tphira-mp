@@ -49,6 +49,8 @@ docker run --rm -p 12346:12346 -p 12347:12347 ^
 注意事项：
 - 如果容器内运行时工作目录不是项目根目录，请设置 `PHIRA_MP_HOME=/app`（指向包含 `locales/` 与 `server_config.yml` 的目录），避免本地化与配置读取失败。
 
+## 🚇 在 RailWay上部署
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/b5IFPX?referralCode=GjgH_Y)
 
 ## 🔧 服务端配置（server_config.yml）
 
