@@ -21,7 +21,7 @@ describe("端到端（mock 远端 HTTP）", () => {
   const originalFetch = globalThis.fetch;
 
   beforeAll(() => {
-    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
       if (url.endsWith("/me")) {
         const auth = String(init?.headers && (init.headers as any).Authorization ? (init.headers as any).Authorization : (init?.headers as any)?.get?.("Authorization") ?? "");
@@ -107,7 +107,7 @@ describe("端到端（mock 远端 HTTP）", () => {
 
   test("认证阻塞时仍能响应 Ping（避免心跳误判/客户端超时）", async () => {
     const prevFetch = globalThis.fetch;
-    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
       if (url.endsWith("/me")) {
         await sleep(3500);
@@ -182,7 +182,7 @@ describe("端到端（mock 远端 HTTP）", () => {
 
     const prevFetch = globalThis.fetch;
     let fetchCalled = 0;
-    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
       fetchCalled++;
       return prevFetch(input, init);
     }) as typeof fetch;

@@ -24,8 +24,8 @@ export class Language {
   readonly lang: SupportedLang;
 
   constructor(lang: string) {
-    const resolved = negotiateLanguages([lang], SUPPORTED_LANGS, { defaultLocale: "en-US" });
-    this.lang = (resolved[0] as SupportedLang) ?? "en-US";
+    const resolved = negotiateLanguages([lang], SUPPORTED_LANGS, { defaultLocale: "zh-CN" });
+    this.lang = (resolved[0] as SupportedLang) ?? "zh-CN";
   }
 
   format(key: string, args?: Record<string, FluentVariable>): string {
