@@ -7,6 +7,12 @@
 
 本项目基于 https://github.com/TeamFlos/phira-mp 中的实现，将同一套多人联机/观战服务按原逻辑迁移到 Node.js（TypeScript）版本，目标是保持协议与核心行为一致（握手、编解码、房间状态机、观战转发、认证流程等）。
 
+## ☁️ 雨云云应用（推荐）
+
+（审核中，暂时无法快速部署）
+[![Deploy on RainYun](https://rainyun-apps.cn-nb1.rains3.com/materials/deploy-on-rainyun-en.svg)](https://app.rainyun.com/apps/rca/store/7497?ref=Pimeng_)
+[![通过雨云一键部署](https://rainyun-apps.cn-nb1.rains3.com/materials/deploy-on-rainyun-cn.svg)](https://app.rainyun.com/apps/rca/store/7497?ref=Pimeng_)
+
 ## 🐳 Docker 运行
 
 镜像托管在 GHCR：
