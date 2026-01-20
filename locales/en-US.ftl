@@ -12,6 +12,10 @@ http-not-found = Not found
 http-internal-error = Internal error
 
 cli-invalid-port = Invalid port number
+cli-invalid-http-service = Invalid HTTP service flag
+cli-invalid-http-port = Invalid HTTP port number
+cli-invalid-room-max-users = Invalid ROOM_MAX_USERS
+cli-invalid-monitors = Invalid MONITORS
 
 label-monitor-suffix = (monitor)
 

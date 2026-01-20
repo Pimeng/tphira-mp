@@ -12,6 +12,10 @@ http-not-found = 未找到
 http-internal-error = 服务器内部错误
 
 cli-invalid-port = 端口号不合法
+cli-invalid-http-service = HTTP_SERVICE 不合法
+cli-invalid-http-port = HTTP 端口号不合法
+cli-invalid-room-max-users = ROOM_MAX_USERS 不合法
+cli-invalid-monitors = MONITORS 不合法
 
 label-monitor-suffix = （观战者）
 

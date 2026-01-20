@@ -16,7 +16,7 @@ import { readAppVersion } from "./version.js";
 import { startHttpService, type HttpService } from "./httpService.js";
 import { tl } from "./l10n.js";
 
-export type StartServerOptions = { host?: string; port?: number; config?: ServerConfig };
+export type StartServerOptions = { host?: string; port?: number; config?: Partial<ServerConfig> };
 
 export type RunningServer = {
   server: net.Server;
@@ -26,6 +26,70 @@ export type RunningServer = {
   close: () => Promise<void>;
   address: () => net.AddressInfo;
 };
+
+function parseBoolEnv(value: string | undefined): boolean | undefined {
+  if (!value) return undefined;
+  const v = value.trim().toLowerCase();
+  if (v === "1" || v === "true" || v === "yes" || v === "on") return true;
+  if (v === "0" || v === "false" || v === "no" || v === "off") return false;
+  return undefined;
+}
+
+function parsePortEnv(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const v = Number(value);
+  if (!Number.isInteger(v) || v <= 0 || v > 65535) return undefined;
+  return v;
+}
+
+function parseRoomMaxUsersEnv(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const v = Number(value);
+  if (!Number.isInteger(v) || v < 1) return undefined;
+  return Math.min(v, 64);
+}
+
+function parseMonitorsEnv(value: string | undefined): number[] | undefined {
+  if (!value) return undefined;
+  const ids = value
+    .split(",")
+    .map((it) => Number(it.trim()))
+    .filter((it) => Number.isInteger(it));
+  if (ids.length === 0) return undefined;
+  return ids;
+}
+
+function loadEnvConfig(): Partial<ServerConfig> {
+  const monitors = parseMonitorsEnv(process.env.MONITORS);
+  const server_name = process.env.SERVER_NAME?.trim() || undefined;
+  const host = process.env.HOST?.trim() || undefined;
+  const port = parsePortEnv(process.env.PORT);
+  const http_service = parseBoolEnv(process.env.HTTP_SERVICE);
+  const http_port = parsePortEnv(process.env.HTTP_PORT);
+  const room_max_users = parseRoomMaxUsersEnv(process.env.ROOM_MAX_USERS);
+
+  const out: Partial<ServerConfig> = {};
+  if (monitors) out.monitors = monitors;
+  if (server_name) out.server_name = server_name;
+  if (host) out.host = host;
+  if (port !== undefined) out.port = port;
+  if (http_service !== undefined) out.http_service = http_service;
+  if (http_port !== undefined) out.http_port = http_port;
+  if (room_max_users !== undefined) out.room_max_users = room_max_users;
+  return out;
+}
+
+function mergeConfig(base: ServerConfig, override: Partial<ServerConfig>): ServerConfig {
+  return {
+    monitors: override.monitors ?? base.monitors,
+    server_name: override.server_name ?? base.server_name,
+    host: override.host ?? base.host,
+    port: override.port ?? base.port,
+    http_service: override.http_service ?? base.http_service,
+    http_port: override.http_port ?? base.http_port,
+    room_max_users: override.room_max_users ?? base.room_max_users
+  };
+}
 
 function loadConfig(): ServerConfig {
   try {
@@ -87,13 +151,20 @@ function formatNodeVersion(v: string): string {
 export async function startServer(options: StartServerOptions): Promise<RunningServer> {
   const paths = getAppPaths();
   const logger = new Logger({ logsDir: paths.logsDir });
-  const cfg = options.config ?? loadConfig();
-  const serverName = process.env.SERVER_NAME?.trim() || cfg.server_name || "Phira MP";
-  const state = new ServerState(cfg, logger, serverName);
+  const fileCfg = loadConfig();
+  const envCfg = loadEnvConfig();
+  const cliCfg: Partial<ServerConfig> = {
+    ...(options.config ?? {}),
+    ...(options.host !== undefined ? { host: options.host } : {}),
+    ...(options.port !== undefined ? { port: options.port } : {})
+  };
+  const mergedCfg = mergeConfig(mergeConfig(fileCfg, envCfg), cliCfg);
+  const serverName = mergedCfg.server_name || "Phira MP";
+  const state = new ServerState(mergedCfg, logger, serverName);
 
   const version = readAppVersion();
-  const listenHost = options.host ?? cfg.host ?? "::";
-  const listenPort = options.port ?? cfg.port ?? 12346;
+  const listenHost = mergedCfg.host ?? "::";
+  const listenPort = mergedCfg.port ?? 12346;
 
   const server = net.createServer(async (socket) => {
     const id = newUuid();
@@ -138,7 +209,7 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
     server.listen({ port: listenPort, host: listenHost }, () => resolve());
   });
 
-  const httpService = cfg.http_service === true ? await startHttpService({ state, host: listenHost, port: cfg.http_port ?? 12347 }) : null;
+  const httpService = mergedCfg.http_service === true ? await startHttpService({ state, host: listenHost, port: mergedCfg.http_port ?? 12347 }) : null;
 
   const addr = server.address() as net.AddressInfo;
   logger.mark(tl(state.serverLang, "log-server-version", { version }));
