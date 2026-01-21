@@ -392,6 +392,38 @@ describe("端到端（mock 远端 HTTP）", () => {
     }
   });
 
+  test("管理员 API CORS：允许所有来源并支持预检", async () => {
+    const prev = process.env.ADMIN_TOKEN;
+    process.env.ADMIN_TOKEN = "test-token";
+
+    const running = await startServer({ port: 0, config: { monitors: [200], http_service: true, http_port: 0 } });
+    const httpPort = running.http!.address().port;
+
+    try {
+      const preflight = await originalFetch(`http://127.0.0.1:${httpPort}/admin/rooms`, {
+        method: "OPTIONS",
+        headers: {
+          Origin: "https://example.com",
+          "Access-Control-Request-Method": "GET",
+          "Access-Control-Request-Headers": "x-admin-token,content-type"
+        }
+      });
+      expect(preflight.status).toBe(204);
+      expect(preflight.headers.get("access-control-allow-origin")).toBe("*");
+      expect(preflight.headers.get("access-control-allow-methods")?.toLowerCase()).toContain("options");
+      expect(preflight.headers.get("access-control-allow-headers")?.toLowerCase()).toContain("x-admin-token");
+
+      const res = await originalFetch(`http://127.0.0.1:${httpPort}/admin/rooms`, {
+        headers: { Origin: "https://example.com", "x-admin-token": "test-token" }
+      });
+      expect(res.ok).toBe(true);
+      expect(res.headers.get("access-control-allow-origin")).toBe("*");
+    } finally {
+      process.env.ADMIN_TOKEN = prev;
+      await running.close();
+    }
+  });
+
   test("管理员封禁持久化：重启后仍生效", async () => {
     const prevToken = process.env.ADMIN_TOKEN;
     const prevPath = process.env.ADMIN_DATA_PATH;

@@ -18,6 +18,19 @@ export async function startHttpService(opts: { state: ServerState; host: string;
     void (async () => {
       const lang = req.headers["accept-language"] ? new Language(String(req.headers["accept-language"])) : state.serverLang;
       const url = new URL(req.url ?? "/", "http://localhost");
+      const applyCors = () => {
+        const reqHeaders = typeof req.headers["access-control-request-headers"] === "string" ? req.headers["access-control-request-headers"] : "";
+        res.setHeader("access-control-allow-origin", "*");
+        res.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");
+        res.setHeader("access-control-allow-headers", reqHeaders || "content-type,x-admin-token,authorization");
+        res.setHeader("access-control-max-age", "600");
+      };
+      applyCors();
+      if (req.method === "OPTIONS") {
+        res.statusCode = 204;
+        res.end();
+        return;
+      }
       const writeJson = (status: number, body: unknown) => {
         const text = JSON.stringify(body);
         res.statusCode = status;
