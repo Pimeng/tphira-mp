@@ -284,6 +284,42 @@ describe("端到端（mock 远端 HTTP）", () => {
     }
   });
 
+  test("HTTP_SERVICE 默认关闭：不启动 HTTP 服务", async () => {
+    const prevHttp = process.env.HTTP_SERVICE;
+    const prevHttpPort = process.env.HTTP_PORT;
+    delete process.env.HTTP_SERVICE;
+    delete process.env.HTTP_PORT;
+
+    const running = await startServer({ port: 0, config: { monitors: [200] } });
+    try {
+      expect(running.http).toBeUndefined();
+    } finally {
+      process.env.HTTP_SERVICE = prevHttp;
+      process.env.HTTP_PORT = prevHttpPort;
+      await running.close();
+    }
+  });
+
+  test("HTTP_SERVICE 环境变量可开启 HTTP 服务", async () => {
+    const prevHttp = process.env.HTTP_SERVICE;
+    const prevHttpPort = process.env.HTTP_PORT;
+    process.env.HTTP_SERVICE = "true";
+    delete process.env.HTTP_PORT;
+
+    const running = await startServer({ port: 0, config: { monitors: [200], http_port: 0 } });
+    const httpPort = running.http!.address().port;
+    try {
+      const res = await originalFetch(`http://127.0.0.1:${httpPort}/room`);
+      expect(res.ok).toBe(true);
+      const data = await res.json();
+      expect(data).toHaveProperty("rooms");
+    } finally {
+      process.env.HTTP_SERVICE = prevHttp;
+      process.env.HTTP_PORT = prevHttpPort;
+      await running.close();
+    }
+  });
+
   test("MONITORS 环境变量生效：观战用户可加入", async () => {
     const prev = process.env.MONITORS;
     process.env.MONITORS = "200";
@@ -457,6 +493,30 @@ describe("端到端（mock 远端 HTTP）", () => {
       await running.close();
     }
   }, 20000);
+
+  test("ROOM_MAX_USERS 环境变量生效（最多 1 人）", async () => {
+    const prev = process.env.ROOM_MAX_USERS;
+    process.env.ROOM_MAX_USERS = "1";
+
+    const running = await startServer({ port: 0, config: { monitors: [200] } });
+    const port = running.address().port;
+
+    const alice = await Client.connect("127.0.0.1", port);
+    const bob = await Client.connect("127.0.0.1", port);
+
+    try {
+      await alice.authenticate("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+      await bob.authenticate("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+
+      await alice.createRoom("room1");
+      await expect(bob.joinRoom("room1", false)).rejects.toThrow("房间已满");
+    } finally {
+      process.env.ROOM_MAX_USERS = prev;
+      await alice.close();
+      await bob.close();
+      await running.close();
+    }
+  });
 
   test("ROOM_MAX_USERS 生效（最多 1 人）", async () => {
     const running = await startServer({ port: 0, config: { monitors: [200], room_max_users: 1 } });
