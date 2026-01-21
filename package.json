@@ -1,8 +1,8 @@
 {
   "name": "phira-mp-nodejs",
   "author": "TeamFlos, Pimeng, TRAE SOLO, GPT-5.2",
-  "license": "MIT",
-  "version": "0.2.4",
+  "license": "AGPL-3.0",
+  "version": "0.3",
   "type": "module",
   "engines": {
     "node": ">=22"
