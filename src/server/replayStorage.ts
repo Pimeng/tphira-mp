@@ -31,9 +31,28 @@ export async function ensureReplayDir(baseDir: string, userId: number, chartId: 
 export async function readReplayHeader(filePath: string): Promise<ReplayHeader | null> {
   const handle = await open(filePath, "r");
   try {
-    const buf = Buffer.allocUnsafe(12);
-    const res = await handle.read(buf, 0, 12, 0);
+    const buf = Buffer.allocUnsafe(16);
+    const res = await handle.read(buf, 0, 16, 0);
     if (res.bytesRead < 12) return null;
+
+    const isMagic504D = res.bytesRead >= 2 && buf.readUInt16LE(0) === 0x504d;
+    if (isMagic504D) {
+      if (res.bytesRead < 14) return null;
+      const chartId = buf.readUInt32LE(2);
+      const userId = buf.readUInt32LE(6);
+      const recordId = buf.readUInt32LE(10);
+      return { chartId, userId, recordId };
+    }
+
+    const isMagicPHIR = res.bytesRead >= 4 && buf[0] === 0x50 && buf[1] === 0x48 && buf[2] === 0x49 && buf[3] === 0x52;
+    if (isMagicPHIR) {
+      if (res.bytesRead < 16) return null;
+      const chartId = buf.readUInt32LE(4);
+      const userId = buf.readUInt32LE(8);
+      const recordId = buf.readUInt32LE(12);
+      return { chartId, userId, recordId };
+    }
+
     const chartId = buf.readUInt32LE(0);
     const userId = buf.readUInt32LE(4);
     const recordId = buf.readUInt32LE(8);
@@ -83,6 +102,26 @@ export async function listReplaysForUser(baseDir: string, userId: number): Promi
     if (entries.length > 0) out.set(chartId, entries);
   }
   return out;
+}
+
+export async function deleteReplayForUser(baseDir: string, userId: number, chartId: number, timestamp: number): Promise<boolean> {
+  const filePath = replayFilePath(baseDir, userId, chartId, timestamp);
+  try {
+    await rm(filePath);
+  } catch (e: any) {
+    if (e && typeof e === "object" && "code" in e && (e as any).code === "ENOENT") return false;
+    throw e;
+  }
+
+  const chartDir = join(baseDir, String(userId), String(chartId));
+  const remainChart = await readdir(chartDir).catch(() => []);
+  if (remainChart.length === 0) await rm(chartDir, { recursive: true, force: true }).catch(() => {});
+
+  const userDir = join(baseDir, String(userId));
+  const remainUser = await readdir(userDir).catch(() => []);
+  if (remainUser.length === 0) await rm(userDir, { recursive: true, force: true }).catch(() => {});
+
+  return true;
 }
 
 export async function cleanupExpiredReplays(baseDir: string, nowMs: number, ttlDays: number): Promise<void> {
@@ -136,9 +175,13 @@ export async function patchReplayRecordId(filePath: string, recordId: number): P
   if (!Number.isInteger(recordId) || recordId < 0) return;
   const handle = await open(filePath, "r+");
   try {
+    const head = Buffer.allocUnsafe(4);
+    const read = await handle.read(head, 0, 4, 0);
+    const hasMagicPHIR = read.bytesRead === 4 && head[0] === 0x50 && head[1] === 0x48 && head[2] === 0x49 && head[3] === 0x52;
+    const hasMagic504D = read.bytesRead >= 2 && head.readUInt16LE(0) === 0x504d;
     const buf = Buffer.allocUnsafe(4);
     buf.writeUInt32LE(recordId >>> 0, 0);
-    await handle.write(buf, 0, 4, 8);
+    await handle.write(buf, 0, 4, hasMagic504D ? 10 : hasMagicPHIR ? 12 : 8);
   } finally {
     await handle.close();
   }

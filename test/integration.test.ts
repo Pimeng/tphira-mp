@@ -617,6 +617,47 @@ describe("端到端（mock 远端 HTTP）", () => {
     }
   });
 
+  test("管理员接口：动态修改指定房间最大人数", async () => {
+    const prev = process.env.ADMIN_TOKEN;
+    process.env.ADMIN_TOKEN = "test-token";
+
+    const running = await startServer({ port: 0, config: { monitors: [200], http_service: true, http_port: 0 } });
+    const port = running.address().port;
+    const httpPort = running.http!.address().port;
+
+    const alice = await Client.connect("127.0.0.1", port);
+    const bob = await Client.connect("127.0.0.1", port);
+    try {
+      await alice.authenticate("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+      await bob.authenticate("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+
+      await alice.createRoom("room1");
+
+      const set1 = await originalFetch(`http://127.0.0.1:${httpPort}/admin/rooms/room1/max_users`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-admin-token": "test-token" },
+        body: JSON.stringify({ maxUsers: 1 })
+      });
+      expect(set1.ok).toBe(true);
+
+      await expect(bob.joinRoom("room1", false)).rejects.toThrow("房间已满");
+
+      const set2 = await originalFetch(`http://127.0.0.1:${httpPort}/admin/rooms/room1/max_users`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-admin-token": "test-token" },
+        body: JSON.stringify({ maxUsers: 2 })
+      });
+      expect(set2.ok).toBe(true);
+
+      await expect(bob.joinRoom("room1", false)).resolves.toBeTruthy();
+    } finally {
+      process.env.ADMIN_TOKEN = prev;
+      await alice.close();
+      await bob.close();
+      await running.close();
+    }
+  });
+
   test("阻止同一玩家重复在线连接", async () => {
     const running = await startServer({ port: 0, config: { monitors: [200] } });
     const port = running.address().port;
@@ -626,7 +667,7 @@ describe("端到端（mock 远端 HTTP）", () => {
 
     try {
       await c1.authenticate("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-      await expect(c2.authenticate("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")).rejects.toThrow("该账号已在线");
+      await expect(c2.authenticate("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")).rejects.toThrow(/连接过快|该账号已在线/);
     } finally {
       await c1.close();
       await c2.close();
@@ -702,9 +743,10 @@ describe("端到端（mock 远端 HTTP）", () => {
 
       const filePath = join(dir, files[0]!);
       const buf = await readFile(filePath);
-      expect(buf.readUInt32LE(0)).toBe(1);
-      expect(buf.readUInt32LE(4)).toBe(100);
-      expect(buf.readUInt32LE(8)).toBe(1);
+      expect(buf.readUInt16LE(0)).toBe(0x504d);
+      expect(buf.readUInt32LE(2)).toBe(1);
+      expect(buf.readUInt32LE(6)).toBe(100);
+      expect(buf.readUInt32LE(10)).toBe(1);
 
       const authRes = await originalFetch(`http://127.0.0.1:${httpPort}/replay/auth`, {
         method: "POST",
@@ -722,9 +764,22 @@ describe("端到端（mock 远端 HTTP）", () => {
       const dl = await originalFetch(`http://127.0.0.1:${httpPort}/replay/download?sessionToken=${encodeURIComponent(authRes.sessionToken)}&chartId=1&timestamp=${ts}`);
       expect(dl.status).toBe(200);
       const dlBuf = Buffer.from(await dl.arrayBuffer());
-      expect(dlBuf.readUInt32LE(0)).toBe(1);
-      expect(dlBuf.readUInt32LE(4)).toBe(100);
-      expect(dlBuf.readUInt32LE(8)).toBe(1);
+      expect(dlBuf.readUInt16LE(0)).toBe(0x504d);
+      expect(dlBuf.readUInt32LE(2)).toBe(1);
+      expect(dlBuf.readUInt32LE(6)).toBe(100);
+      expect(dlBuf.readUInt32LE(10)).toBe(1);
+
+      const delRes = await originalFetch(`http://127.0.0.1:${httpPort}/replay/delete`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sessionToken: authRes.sessionToken, chartId: 1, timestamp: ts })
+      }).then((r) => r.json() as any);
+      expect(delRes.ok).toBe(true);
+
+      await waitFor(() => !existsSync(filePath), 5000);
+
+      const dl2 = await originalFetch(`http://127.0.0.1:${httpPort}/replay/download?sessionToken=${encodeURIComponent(authRes.sessionToken)}&chartId=1&timestamp=${ts}`);
+      expect(dl2.status).toBe(404);
     } finally {
       await alice.close();
       await bob.close();

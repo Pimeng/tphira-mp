@@ -8,7 +8,7 @@ import { newUuid } from "../common/uuid.js";
 import type { ServerState } from "./state.js";
 import { Language, tl } from "./l10n.js";
 import type { ServerCommand } from "../common/commands.js";
-import { defaultReplayBaseDir, listReplaysForUser, readReplayHeader, replayFilePath } from "./replayStorage.js";
+import { defaultReplayBaseDir, deleteReplayForUser, listReplaysForUser, readReplayHeader, replayFilePath } from "./replayStorage.js";
 
 export type HttpService = {
   server: http.Server;
@@ -270,6 +270,44 @@ export async function startHttpService(opts: { state: ServerState; host: string;
         return;
       }
 
+      if (req.method === "POST" && url.pathname === "/replay/delete") {
+        const body = await readJson();
+        const sessionToken = typeof (body as any)?.sessionToken === "string" ? String((body as any).sessionToken).trim() : "";
+        const chartId = Number((body as any)?.chartId ?? "");
+        const timestamp = Number((body as any)?.timestamp ?? "");
+        if (!sessionToken || !Number.isInteger(chartId) || !Number.isInteger(timestamp) || chartId < 0 || timestamp <= 0) {
+          writeJson(400, { ok: false, error: "bad-request" });
+          return;
+        }
+
+        for (const [k, v] of replaySessions) {
+          if (Date.now() > v.expiresAt) replaySessions.delete(k);
+        }
+
+        const sess = replaySessions.get(sessionToken);
+        if (!sess || Date.now() > sess.expiresAt) {
+          writeJson(401, { ok: false, error: "unauthorized" });
+          return;
+        }
+
+        const baseDir = defaultReplayBaseDir();
+        const filePath = replayFilePath(baseDir, sess.userId, chartId, timestamp);
+        const header = await readReplayHeader(filePath).catch(() => null);
+        if (!header || header.userId !== sess.userId || header.chartId !== chartId) {
+          writeJson(404, { ok: false, error: "not-found" });
+          return;
+        }
+
+        const deleted = await deleteReplayForUser(baseDir, sess.userId, chartId, timestamp);
+        if (!deleted) {
+          writeJson(404, { ok: false, error: "not-found" });
+          return;
+        }
+
+        writeJson(200, { ok: true });
+        return;
+      }
+
       if (url.pathname.startsWith("/admin/")) {
         if (!requireAdmin()) return;
 
@@ -307,6 +345,37 @@ export async function startHttpService(opts: { state: ServerState; host: string;
             return { ok: true, rooms };
           });
           writeJson(200, out);
+          return;
+        }
+
+        const mRoomMaxUsers = /^\/admin\/rooms\/(.+)\/max_users$/.exec(url.pathname);
+        if (req.method === "POST" && mRoomMaxUsers) {
+          const roomIdText = decodeURIComponent(mRoomMaxUsers[1]!);
+          let rid: RoomId;
+          try {
+            rid = parseRoomId(roomIdText);
+          } catch {
+            writeJson(400, { ok: false, error: "bad-room-id" });
+            return;
+          }
+          const body = await readJson();
+          const raw = (body ?? {}) as { maxUsers?: unknown };
+          const maxUsers = Number(raw.maxUsers);
+          if (!Number.isInteger(maxUsers) || maxUsers < 1 || maxUsers > 64) {
+            writeJson(400, { ok: false, error: "bad-max-users" });
+            return;
+          }
+          const updated = await state.mutex.runExclusive(async () => {
+            const room = state.rooms.get(rid);
+            if (!room) return null;
+            room.maxUsers = maxUsers;
+            return roomIdToString(room.id);
+          });
+          if (!updated) {
+            writeJson(404, { ok: false, error: "room-not-found" });
+            return;
+          }
+          writeJson(200, { ok: true, roomid: updated, max_users: maxUsers });
           return;
         }
 

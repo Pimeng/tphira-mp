@@ -20,6 +20,7 @@ export class ReplayRecorder {
   private readonly baseDir: string;
   private readonly inflightByKey = new Map<string, InFlight>();
   private readonly keysByRoom = new Map<string, Set<string>>();
+  private readonly magicU16 = 0x504d;
 
   constructor(baseDir: string) {
     this.baseDir = baseDir;
@@ -37,7 +38,7 @@ export class ReplayRecorder {
       await ensureReplayDir(this.baseDir, userId, chartId);
       const path = replayFilePath(this.baseDir, userId, chartId, ts);
       const handle = await open(path, "w");
-      await handle.write(this.buildHeader(chartId, userId, 0), 0, 12, 0);
+      await handle.write(this.buildHeader(chartId, userId, 0), 0, 14, 0);
       await handle.close();
 
       const stream = createWriteStream(path, { flags: "a" });
@@ -73,7 +74,7 @@ export class ReplayRecorder {
     void it.queue.then(async () => {
       const handle = await open(it.path, "r+");
       try {
-        await handle.write(buf, 0, 4, 8);
+        await handle.write(buf, 0, 4, 10);
       } finally {
         await handle.close();
       }
@@ -112,10 +113,11 @@ export class ReplayRecorder {
   }
 
   private buildHeader(chartId: number, userId: number, recordId: number): Buffer {
-    const buf = Buffer.allocUnsafe(12);
-    buf.writeUInt32LE(chartId >>> 0, 0);
-    buf.writeUInt32LE(userId >>> 0, 4);
-    buf.writeUInt32LE(recordId >>> 0, 8);
+    const buf = Buffer.allocUnsafe(14);
+    buf.writeUInt16LE(this.magicU16, 0);
+    buf.writeUInt32LE(chartId >>> 0, 2);
+    buf.writeUInt32LE(userId >>> 0, 6);
+    buf.writeUInt32LE(recordId >>> 0, 10);
     return buf;
   }
 

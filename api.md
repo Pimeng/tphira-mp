@@ -122,10 +122,32 @@ Body：
 - `timestamp`：回放文件名中的时间戳（毫秒）
 - 限速：每个下载连接按 50KB/s 节流
 
+#### 3) 删除回放文件
+
+`POST /replay/delete`
+
+Body：
+
+```json
+{ "sessionToken": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx", "chartId": 1, "timestamp": 1730000000000 }
+```
+
+成功：`200 { "ok": true }`
+
+- 仅允许删除该 `sessionToken` 绑定用户自己的回放文件
+- 删除后不可恢复；同一回放再次下载会返回 `404`
+
+常见错误：
+
+- 参数不合法：`400 { "ok": false, "error": "bad-request" }`
+- `sessionToken` 无效/过期：`401 { "ok": false, "error": "unauthorized" }`
+- 回放不存在：`404 { "ok": false, "error": "not-found" }`
+
 #### 回放文件格式（.phirarec）
 
-文件头固定 12 字节（小端）：
+文件头固定 14 字节（小端）：
 
+- 2 字节：文件标识（UInt16LE，固定为 `0x504D`）
 - 4 字节：谱面 ID（UInt32LE）
 - 4 字节：用户 ID（UInt32LE）
 - 4 字节：成绩 ID（UInt32LE，若无成绩则为 0）
@@ -161,6 +183,33 @@ Body：
   ]
 }
 ```
+
+### 1.1) 动态修改指定房间最大人数
+
+`POST /admin/rooms/:roomId/max_users`
+
+Body：
+
+```json
+{ "maxUsers": 8 }
+```
+
+成功：
+
+```json
+{ "ok": true, "roomid": "room1", "max_users": 8 }
+```
+
+说明：
+
+- 仅影响该房间后续加入校验与房间列表过滤；不会踢出已在房间内的玩家
+- `maxUsers` 限制范围：`1..64`
+
+常见错误：
+
+- 房间号不合法：`400 { "ok": false, "error": "bad-room-id" }`
+- `maxUsers` 不合法：`400 { "ok": false, "error": "bad-max-users" }`
+- 房间不存在：`404 { "ok": false, "error": "room-not-found" }`
 
 ### 2) 查询任意玩家在哪个房间
 

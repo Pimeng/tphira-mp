@@ -12,7 +12,7 @@ export type InternalRoomState =
 
 export class Room {
   readonly id: RoomId;
-  readonly maxUsers: number;
+  maxUsers: number;
   hostId: number;
   state: InternalRoomState = { type: "SelectChart" };
 

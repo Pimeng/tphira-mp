@@ -39,7 +39,7 @@ chat-game-summary-std = 最佳无瑕度：“{ $name } ”({ $id }) { $std }ms
 
 auth-invalid-token = token 不合法
 auth-fetch-me-failed = 获取用户信息失败
-auth-account-already-online = 该账号已在线，已阻止重复连接
+auth-account-already-online = 连接过快，请等待5秒后再试
 auth-failed = 认证失败
 auth-repeated-authenticate = 重复认证
 auth-banned = 你已被封禁，无法进入服务器
