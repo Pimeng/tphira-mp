@@ -1,5 +1,5 @@
 # Phira MP Typescript
-## Ver 0.3
+## Ver 0.4.0
 
 Phira MP 的 Typescript 实现，目前正在逐步完善，还请多多包涵
 > 注：本项目参考了 [Phira MP Rust](https://github.com/TeamFlos/Phira-MP) 网络协议实现，感谢 TeamFlos 团队的贡献
