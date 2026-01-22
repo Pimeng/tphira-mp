@@ -110,7 +110,7 @@ describe("端到端（mock 远端 HTTP）", () => {
           .filter((m) => m.type === "Chat" && m.user === 0)
           .map((m) => (m as any).content as string);
         bobChat.push(...batch);
-        return bobChat.some((s) => s.includes("当前可用的房间如下：")) && bobChat.some((s) => s.includes("群：123456"));
+        return bobChat.some((s) => s.includes("当前可用的房间如下：")) && bobChat.some((s) => s.includes("群：123456")) && bobChat.some((s) => s.includes("欲买桂花同载酒"));
       }, 2000);
 
       expect(bobChat.join("\n")).toContain("欲买桂花同载酒，荒泷天下第一斗。");
@@ -700,6 +700,9 @@ describe("端到端（mock 远端 HTTP）", () => {
   test("回放录制：落盘、列表、下载", async () => {
     await rm(join(process.cwd(), "record"), { recursive: true, force: true });
 
+    const prevAdmin = process.env.ADMIN_TOKEN;
+    process.env.ADMIN_TOKEN = "test-token";
+
     const running = await startServer({ port: 0, config: { monitors: [200], http_service: true, http_port: 0 } });
     const port = running.address().port;
     const httpPort = running.http!.address().port;
@@ -708,6 +711,18 @@ describe("端到端（mock 远端 HTTP）", () => {
     const bob = await Client.connect("127.0.0.1", port);
 
     try {
+      const cfg0 = await originalFetch(`http://127.0.0.1:${httpPort}/admin/replay/config`, {
+        headers: { "x-admin-token": "test-token" }
+      }).then((r) => r.json() as any);
+      expect(cfg0).toMatchObject({ ok: true, enabled: false });
+
+      const cfg1 = await originalFetch(`http://127.0.0.1:${httpPort}/admin/replay/config`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-admin-token": "test-token" },
+        body: JSON.stringify({ enabled: true })
+      }).then((r) => r.json() as any);
+      expect(cfg1).toMatchObject({ ok: true, enabled: true });
+
       await alice.authenticate("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
       await bob.authenticate("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
 
@@ -781,6 +796,56 @@ describe("端到端（mock 远端 HTTP）", () => {
       const dl2 = await originalFetch(`http://127.0.0.1:${httpPort}/replay/download?sessionToken=${encodeURIComponent(authRes.sessionToken)}&chartId=1&timestamp=${ts}`);
       expect(dl2.status).toBe(404);
     } finally {
+      process.env.ADMIN_TOKEN = prevAdmin;
+      await alice.close();
+      await bob.close();
+      await running.close();
+      await rm(join(process.cwd(), "record"), { recursive: true, force: true });
+    }
+  }, 30000);
+
+  test("回放录制开关：开启后不影响已存在房间", async () => {
+    await rm(join(process.cwd(), "record"), { recursive: true, force: true });
+
+    const prevAdmin = process.env.ADMIN_TOKEN;
+    process.env.ADMIN_TOKEN = "test-token";
+
+    const running = await startServer({ port: 0, config: { monitors: [200], http_service: true, http_port: 0 } });
+    const port = running.address().port;
+    const httpPort = running.http!.address().port;
+
+    const alice = await Client.connect("127.0.0.1", port);
+    const bob = await Client.connect("127.0.0.1", port);
+
+    try {
+      await alice.authenticate("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+      await bob.authenticate("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+
+      await alice.createRoom("room1");
+      await bob.joinRoom("room1", true);
+
+      await alice.selectChart(1);
+      await alice.requestStart();
+      await bob.ready();
+      await waitFor(() => alice.roomState()?.type === "Playing", 5000);
+
+      const cfg1 = await originalFetch(`http://127.0.0.1:${httpPort}/admin/replay/config`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-admin-token": "test-token" },
+        body: JSON.stringify({ enabled: true })
+      }).then((r) => r.json() as any);
+      expect(cfg1).toMatchObject({ ok: true, enabled: true });
+
+      await alice.sendTouches([{ time: 1, points: [[0, { x: 0, y: 1 }]] }]);
+      await alice.sendJudges([{ time: 1, line_id: 1, note_id: 1, judgement: 0 } as any]);
+
+      await alice.played(1);
+      await waitFor(() => alice.roomState()?.type === "SelectChart", 5000);
+
+      const userDir = join(process.cwd(), "record", "100");
+      expect(existsSync(userDir)).toBe(false);
+    } finally {
+      process.env.ADMIN_TOKEN = prevAdmin;
       await alice.close();
       await bob.close();
       await running.close();

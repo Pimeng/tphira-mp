@@ -211,6 +211,43 @@ Body：
 - `maxUsers` 不合法：`400 { "ok": false, "error": "bad-max-users" }`
 - 房间不存在：`404 { "ok": false, "error": "room-not-found" }`
 
+### 1.2) 回放录制开关（默认关闭）
+
+查询当前状态：
+
+`GET /admin/replay/config`
+
+返回示例：
+
+```json
+{ "ok": true, "enabled": false }
+```
+
+开启/关闭：
+
+`POST /admin/replay/config`
+
+Body：
+
+```json
+{ "enabled": true }
+```
+
+成功：
+
+```json
+{ "ok": true, "enabled": true }
+```
+
+说明：
+
+- `enabled=false` 会停止当前所有房间的录制（若有正在录制的文件，会关闭文件句柄并停止继续写入）
+- `enabled=true` 仅对**开启后创建的房间**生效（已存在的房间/已在对局中的房间不会因此开始录制）
+
+常见错误：
+
+- Body 缺少 `enabled`：`400 { "ok": false, "error": "bad-enabled" }`
+
 ### 2) 查询任意玩家在哪个房间
 
 `GET /admin/users/:id`

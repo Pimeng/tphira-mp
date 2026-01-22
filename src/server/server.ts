@@ -68,6 +68,7 @@ function loadEnvConfig(): Partial<ServerConfig> {
   const http_service = parseBoolEnv(process.env.HTTP_SERVICE);
   const http_port = parsePortEnv(process.env.HTTP_PORT);
   const room_max_users = parseRoomMaxUsersEnv(process.env.ROOM_MAX_USERS);
+  const replay_enabled = parseBoolEnv(process.env.REPLAY_ENABLED);
   const admin_token = process.env.ADMIN_TOKEN?.trim() || undefined;
   const admin_data_path = process.env.ADMIN_DATA_PATH?.trim() || undefined;
   const room_list_tip = process.env.ROOM_LIST_TIP?.trim() || undefined;
@@ -80,6 +81,7 @@ function loadEnvConfig(): Partial<ServerConfig> {
   if (http_service !== undefined) out.http_service = http_service;
   if (http_port !== undefined) out.http_port = http_port;
   if (room_max_users !== undefined) out.room_max_users = room_max_users;
+  if (replay_enabled !== undefined) out.replay_enabled = replay_enabled;
   if (admin_token) out.admin_token = admin_token;
   if (admin_data_path) out.admin_data_path = admin_data_path;
   if (room_list_tip) out.room_list_tip = room_list_tip;
@@ -95,6 +97,7 @@ function mergeConfig(base: ServerConfig, override: Partial<ServerConfig>): Serve
     http_service: override.http_service ?? base.http_service,
     http_port: override.http_port ?? base.http_port,
     room_max_users: override.room_max_users ?? base.room_max_users,
+    replay_enabled: override.replay_enabled ?? base.replay_enabled,
     admin_token: override.admin_token ?? base.admin_token,
     admin_data_path: override.admin_data_path ?? base.admin_data_path,
     room_list_tip: override.room_list_tip ?? base.room_list_tip
@@ -148,6 +151,9 @@ function loadConfig(): ServerConfig {
     const roomMaxUsers = typeof roomMaxUsersRaw === "number" ? roomMaxUsersRaw : Number(roomMaxUsersRaw);
     const room_max_users = Number.isInteger(roomMaxUsers) && roomMaxUsers >= 1 ? Math.min(roomMaxUsers, 64) : undefined;
 
+    const replayEnabledRaw = read<unknown>(["replay_enabled", "REPLAY_ENABLED", "replayEnabled"]);
+    const replay_enabled = typeof replayEnabledRaw === "boolean" ? replayEnabledRaw : undefined;
+
     const adminTokenRaw = read<unknown>(["admin_token", "ADMIN_TOKEN", "adminToken"]);
     const admin_token = typeof adminTokenRaw === "string" && adminTokenRaw.trim().length > 0 ? adminTokenRaw.trim() : undefined;
 
@@ -157,7 +163,7 @@ function loadConfig(): ServerConfig {
     const roomListTipRaw = read<unknown>(["room_list_tip", "ROOM_LIST_TIP", "roomListTip"]);
     const room_list_tip = typeof roomListTipRaw === "string" && roomListTipRaw.trim().length > 0 ? roomListTipRaw.trim() : undefined;
 
-    return { monitors, server_name, host, port: safePort, http_service, http_port: safeHttpPort, room_max_users, admin_token, admin_data_path, room_list_tip };
+    return { monitors, server_name, host, port: safePort, http_service, http_port: safeHttpPort, room_max_users, replay_enabled, admin_token, admin_data_path, room_list_tip };
   } catch {
     return { monitors: [2] };
   }

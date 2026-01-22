@@ -13,6 +13,7 @@ export type InternalRoomState =
 export class Room {
   readonly id: RoomId;
   maxUsers: number;
+  readonly replayEligible: boolean;
   hostId: number;
   state: InternalRoomState = { type: "SelectChart" };
 
@@ -25,9 +26,10 @@ export class Room {
   private monitors: number[] = [];
   chart: Chart | null = null;
 
-  constructor(opts: { id: RoomId; hostId: number; maxUsers: number }) {
+  constructor(opts: { id: RoomId; hostId: number; maxUsers: number; replayEligible: boolean }) {
     this.id = opts.id;
     this.maxUsers = opts.maxUsers;
+    this.replayEligible = opts.replayEligible;
     this.hostId = opts.hostId;
     this.users = [opts.hostId];
   }

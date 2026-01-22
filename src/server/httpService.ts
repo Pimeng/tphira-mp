@@ -311,6 +311,34 @@ export async function startHttpService(opts: { state: ServerState; host: string;
       if (url.pathname.startsWith("/admin/")) {
         if (!requireAdmin()) return;
 
+        if (req.method === "GET" && url.pathname === "/admin/replay/config") {
+          writeJson(200, { ok: true, enabled: state.replayEnabled });
+          return;
+        }
+
+        if (req.method === "POST" && url.pathname === "/admin/replay/config") {
+          const body = await readJson();
+          const raw = (body ?? {}) as { enabled?: unknown };
+          if (raw.enabled === undefined) {
+            writeJson(400, { ok: false, error: "bad-enabled" });
+            return;
+          }
+          const enabled = Boolean(raw.enabled);
+          const snapshot = await state.mutex.runExclusive(async () => {
+            state.replayEnabled = enabled;
+            const roomIds = enabled ? [] : [...state.rooms.keys()];
+            return { enabled, roomIds };
+          });
+
+          if (!snapshot.enabled) {
+            const tasks = snapshot.roomIds.map((rid) => state.replayRecorder.endRoom(rid));
+            await Promise.allSettled(tasks);
+          }
+
+          writeJson(200, { ok: true, enabled: snapshot.enabled });
+          return;
+        }
+
         if (req.method === "GET" && url.pathname === "/admin/rooms") {
           const out = await state.mutex.runExclusive(async () => {
             const rooms = [...state.rooms.entries()].map(([rid, room]) => {
@@ -680,13 +708,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           await room.send((c) => broadcastRoomAll(room.id, c), { type: "StartPlaying" });
           room.resetGameTime((id) => state.users.get(id));
           room.live = true;
-          const fake = state.replayRecorder.fakeMonitorInfo();
-          await broadcastRoomAll(room.id, { type: "OnJoinRoom", info: fake });
-          await room.send((c) => broadcastRoomAll(room.id, c), { type: "JoinRoom", user: fake.id, name: fake.name });
-          setTimeout(() => {
-            void room.send((c) => broadcastRoomAll(room.id, c), { type: "LeaveRoom", user: fake.id, name: fake.name });
-          }, 200);
-          await state.replayRecorder.startRoom(room.id, room.chart!.id, room.userIds());
+          if (state.replayEnabled && room.replayEligible) await state.replayRecorder.startRoom(room.id, room.chart!.id, room.userIds());
           room.state = { type: "Playing", results: new Map(), aborted: new Set() };
           await room.onStateChange((c) => broadcastRoomAll(room.id, c));
           writeJson(200, { ok: true });
