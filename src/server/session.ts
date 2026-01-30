@@ -403,7 +403,7 @@ export class Session {
         return { type: "Chat", result: await errToStr(async () => {
           const room = this.requireRoom(user);
           this.state.logger.info(tl(this.state.serverLang, "log-user-chat", { user: user.name, room: room.id }));
-          await room.sendAs((c) => this.broadcastRoom(room, c), user, cmd.message);
+          await room.sendAs((c) => this.broadcastRoom(room, c), user, "为符合规范，该服务器已禁用聊天功能"); // "" --> cmd.message
           return {};
         }) };
       case "Touches": {

@@ -20,7 +20,7 @@ cli-invalid-monitors = MONITORS 不合法
 label-monitor-suffix = （观战者）
 
 chat-welcome = "{ $userName }"你好！欢迎来到 { $serverName } 服务器！
-chat-separator = ==================
+chat-separator = =======================================================================
 chat-hitokoto = { $quote } —— { $from }
 chat-hitokoto-from-unknown = 佚名
 chat-hitokoto-unavailable = 一言获取失败
