@@ -4,7 +4,7 @@ Phira MP 的 Typescript 实现，目前正在逐步完善，还请多多包涵
 > 注：本项目参考了 [Phira MP Rust](https://github.com/TeamFlos/Phira-MP) 网络协议实现，感谢 TeamFlos 团队的贡献
 
 > [!TIP]
-> 本项目由 TRAE SOLO 模式开发，存在一定的问题，见谅，如有更好的实现欢迎 PR<br>
+> 本项目由各种AI工具开发，存在一定的问题，见谅，如有更好的实现欢迎 PR<br>
 > 不会写代码，轻喷（（（
 
 ## ☁️ 在雨云部署（推荐）
@@ -22,23 +22,10 @@ Phira MP 的 Typescript 实现，目前正在逐步完善，还请多多包涵
 
 镜像托管在 GHCR：
 
-- `ghcr.io/pimeng/phira-mp-ts`<br>
-镜像 -> `ghcr.1ms.run/pimeng/phira-mp-ts`<br>
+- `ghcr.io/pimeng/phira-mp-ts` <br>
+- 镜像 -> `ghcr.1ms.run/pimeng/phira-mp-ts` <br>
+
 建议优先使用镜像源而并非 ghcr.io
-
-启动示例（使用环境变量生成配置文件）：
-
-```bash
-docker run --rm -p 12346:12346 -p 12347:12347 ^
-  -e TZ="Asia/Shanghai" ^
-  -e HOST="::" ^
-  -e PORT=12346 ^
-  -e HTTP_SERVICE=true ^
-  -e HTTP_PORT=12347 ^
-  -e ROOM_MAX_USERS=8 ^
-  -e MONITORS="2" ^
-  ghcr.1ms.run/pimeng/phira-mp-ts:latest
-```
 
 - 可选环境变量：
   - `LOG_LEVEL`：控制写入日志文件的最小等级（默认 `INFO`），可选值：`DEBUG`、`INFO`、`MARK`、`WARN`、`ERROR`。也可在 `server_config.yml` 中配置 `log_level`
@@ -51,7 +38,7 @@ docker run --rm -p 12346:12346 -p 12347:12347 ^
 
 ## 🔧 服务端配置（server_config.yml）
 
-支持大写/小写两种键名（例如 `HOST` / `host`）
+支持大写/小写两种键名（例如 `HOST` / `host`），支持使用环境变量配置，优先级：命令行>环境变量>配置文件
 
 - SERVER_NAME(string): 当前服务器名字，会显示在欢迎信息中（默认 `Phira MP`）
 - MONITORS(array): 观战用户ID列表（默认 `2`）
@@ -68,7 +55,7 @@ docker run --rm -p 12346:12346 -p 12347:12347 ^
 
 ## 🔨 安装与构建
 
-本项目使用 pnpm 作为包管理器，请先安装 pnpm 9.15 或以上版本
+本项目使用 pnpm 作为包管理器，请先安装 pnpm 10.26.0 或以上版本
 ```bash
 npm install -g pnpm
 ```
@@ -122,9 +109,9 @@ pnpm run package:sea
 ## 📋 环境要求
 
 - Node.js >= 22
-- pnpm >= 9.15
+- pnpm >= 10.26.0
 
-## 🖥️ 硬件要求
+<!-- ## 🖥️ 硬件要求
 
 经过测试，本服务端可以跑在 0.5核 128MB 5Mbps 非常极限的情况下经过压测仍然不死
 
@@ -139,11 +126,13 @@ pnpm run package:sea
 ![聊天截图](https://github.com/Pimeng/phira-mp-ts/raw/main/.github/resources/chat_.png)
 ![phira](https://github.com/Pimeng/phira-mp-ts/raw/main/.github/resources/phira_.png)
 
+-->
+
 ## 🔭 本项目长期远景
 
 - [x] 谱面录制功能
 - [ ] 谱面回放播放客户端/网页端
-- [ ] 完善协议层，完整适配原版 Phira 客户端
+- [x] 完善协议层，完整适配原版 Phira 客户端
 - [ ] 完善服务端，添加更多功能
 - [ ] 等待~~画饼~~添加
 
@@ -157,9 +146,7 @@ https://admin.phira.link/
 
 ## 🙏 致谢
 
-- [Phira MP（Rust 版）](https://github.com/TeamFlos/phira-mp)：项目本体，协议与核心逻辑参考
-- [TRAE](https://www.trae.ai/)：本项目IDE，以及 SOLO 模式的提供
-- GPT-5.2 模型
+- [Michaelwucoc](https://github.com/Michaelwucoc)：赞助了本项目，为本项目大力推动了进度
 
 还有帮助我测试的朋友们：
 
@@ -167,7 +154,7 @@ https://admin.phira.link/
 - [RainCore1115](https://github.com/RainCore1115)
 - [RENaa_FD](https://github.com/lRENyaaa)
 
-感谢
+在这里大力的感谢你们！谢谢！没有你们就没有本项目的今天！
 
 ## 开源协议与版权声明 (License & Copyright)
 
