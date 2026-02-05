@@ -41,8 +41,10 @@ docker run --rm -p 12346:12346 -p 12347:12347 ^
 ```
 
 - 可选环境变量：
-  - `LOG_LEVEL`：控制写入日志文件的最小等级（默认 `INFO`）
-  - `CONSOLE_LOG_LEVEL`：控制输出到终端的最小等级（默认 `INFO`）
+  - `LOG_LEVEL`：控制写入日志文件的最小等级（默认 `INFO`），可选值：`DEBUG`、`INFO`、`MARK`、`WARN`、`ERROR`。也可在 `server_config.yml` 中配置 `log_level`
+  - `CONSOLE_LOG_LEVEL`：控制输出到终端的最小等级（默认 `INFO`），可选值同上；也可在配置文件中设置 `console_log_level`
+  - 若只设置其中一个，则文件与控制台会使用同一等级（例如只设 `CONSOLE_LOG_LEVEL=DEBUG` 时，文件与控制台均为 DEBUG）
+  - 启动时会在终端打印当前生效的日志等级（如 `[Phira MP] 日志等级: 文件=DEBUG, 控制台=DEBUG`），便于确认是否生效
 
 注意事项：
 - 如果容器内运行时工作目录不是项目根目录，请设置 `PHIRA_MP_HOME=/app`（指向包含 `locales/` 与 `server_config.yml` 的目录），避免本地化与配置读取失败。

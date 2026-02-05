@@ -22,6 +22,9 @@ export class Room {
   cycle = false;
   contest: { whitelist: Set<number>; manualStart: boolean; autoDisband: boolean } | null = null;
 
+  /** 由 Redis ROOM_CREATE 同步而来的远端房间（非本机创建），仅用于房间列表与加入校验 */
+  remote = false;
+
   private users: number[] = [];
   private monitors: number[] = [];
   chart: Chart | null = null;

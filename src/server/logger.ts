@@ -33,10 +33,12 @@ function formatLocalTimestamp(d: Date): string {
   return `${formatLocalDateKey(d)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}.${pad3(d.getMilliseconds())}`;
 }
 
-function parseLevel(input: string | undefined, fallback: LogLevel): LogLevel {
-  if (!input) return fallback;
-  const v = input.toUpperCase();
-  if (v === "DEBUG" || v === "INFO" || v === "MARK" || v === "WARN" || v === "ERROR") return v;
+/** 解析日志等级字符串，供配置/环境变量使用；无效值时返回 fallback */
+export function parseLevel(input: string | undefined, fallback: LogLevel): LogLevel {
+  const v = input?.trim();
+  if (!v) return fallback;
+  const u = v.toUpperCase();
+  if (u === "DEBUG" || u === "INFO" || u === "MARK" || u === "WARN" || u === "ERROR") return u;
   return fallback;
 }
 
@@ -51,6 +53,8 @@ function colorForLevel(level: LogLevel): string | null {
   if (level === "DEBUG") return "\x1b[34m";
   if (level === "INFO") return "\x1b[32m";
   if (level === "MARK") return "\x1b[90m";
+  if (level === "WARN") return "\x1b[33m";
+  if (level === "ERROR") return "\x1b[31m";
   return null;
 }
 
@@ -70,6 +74,7 @@ export class Logger {
     this.useColor = shouldUseColor();
 
     mkdirSync(this.logsDir, { recursive: true });
+    process.stdout.write(`[Phira MP] 日志等级: 文件=${this.minLevel}, 控制台=${this.consoleMinLevel}\n`);
   }
 
   debug(message: string, meta?: Record<string, unknown>): void {

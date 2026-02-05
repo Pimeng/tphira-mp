@@ -10,12 +10,13 @@ import type { ClientCommand, ServerCommand } from "../common/commands.js";
 import { ServerState } from "./state.js";
 import type { ServerConfig } from "./types.js";
 import { Session } from "./session.js";
-import { Logger } from "./logger.js";
+import { Logger, parseLevel } from "./logger.js";
 import { getAppPaths } from "./appPaths.js";
 import { readAppVersion } from "./version.js";
 import { startHttpService, type HttpService } from "./httpService.js";
 import { tl } from "./l10n.js";
 import { startReplayCleanup } from "./replayCleanup.js";
+import { RedisService } from "./redis.js";
 
 export type StartServerOptions = { host?: string; port?: number; config?: Partial<ServerConfig> };
 
@@ -72,6 +73,13 @@ function loadEnvConfig(): Partial<ServerConfig> {
   const admin_token = process.env.ADMIN_TOKEN?.trim() || undefined;
   const admin_data_path = process.env.ADMIN_DATA_PATH?.trim() || undefined;
   const room_list_tip = process.env.ROOM_LIST_TIP?.trim() || undefined;
+  const redis_host = process.env.REDIS_HOST?.trim() || undefined;
+  const redis_port = process.env.REDIS_PORT !== undefined ? parsePortEnv(process.env.REDIS_PORT) : undefined;
+  const redis_db = process.env.REDIS_DB !== undefined ? (Number(process.env.REDIS_DB) | 0) : undefined;
+  const redis_password = process.env.REDIS_PASSWORD?.trim() || undefined;
+  const server_id = process.env.SERVER_ID?.trim() || undefined;
+  const log_level = process.env.LOG_LEVEL?.trim() || undefined;
+  const console_log_level = process.env.CONSOLE_LOG_LEVEL?.trim() || undefined;
 
   const out: Partial<ServerConfig> = {};
   if (monitors) out.monitors = monitors;
@@ -85,6 +93,13 @@ function loadEnvConfig(): Partial<ServerConfig> {
   if (admin_token) out.admin_token = admin_token;
   if (admin_data_path) out.admin_data_path = admin_data_path;
   if (room_list_tip) out.room_list_tip = room_list_tip;
+  if (redis_host) out.redis_host = redis_host;
+  if (redis_port !== undefined) out.redis_port = redis_port;
+  if (redis_db !== undefined) out.redis_db = redis_db;
+  if (redis_password !== undefined) out.redis_password = redis_password;
+  if (server_id) out.server_id = server_id;
+  if (log_level !== undefined) out.log_level = log_level;
+  if (console_log_level !== undefined) out.console_log_level = console_log_level;
   return out;
 }
 
@@ -100,7 +115,14 @@ function mergeConfig(base: ServerConfig, override: Partial<ServerConfig>): Serve
     replay_enabled: override.replay_enabled ?? base.replay_enabled,
     admin_token: override.admin_token ?? base.admin_token,
     admin_data_path: override.admin_data_path ?? base.admin_data_path,
-    room_list_tip: override.room_list_tip ?? base.room_list_tip
+    room_list_tip: override.room_list_tip ?? base.room_list_tip,
+    redis_host: override.redis_host ?? base.redis_host,
+    redis_port: override.redis_port ?? base.redis_port,
+    redis_db: override.redis_db ?? base.redis_db,
+    redis_password: override.redis_password ?? base.redis_password,
+    server_id: override.server_id ?? base.server_id,
+    log_level: override.log_level ?? base.log_level,
+    console_log_level: override.console_log_level ?? base.console_log_level
   };
 }
 
@@ -163,7 +185,44 @@ function loadConfig(): ServerConfig {
     const roomListTipRaw = read<unknown>(["room_list_tip", "ROOM_LIST_TIP", "roomListTip"]);
     const room_list_tip = typeof roomListTipRaw === "string" && roomListTipRaw.trim().length > 0 ? roomListTipRaw.trim() : undefined;
 
-    return { monitors, server_name, host, port: safePort, http_service, http_port: safeHttpPort, room_max_users, replay_enabled, admin_token, admin_data_path, room_list_tip };
+    const redisHostRaw = read<unknown>(["redis_host", "REDIS_HOST"]);
+    const redis_host = typeof redisHostRaw === "string" && redisHostRaw.trim().length > 0 ? redisHostRaw.trim() : undefined;
+    const redisPortRaw = read<unknown>(["redis_port", "REDIS_PORT"]);
+    const redis_port = typeof redisPortRaw === "number" ? redisPortRaw : Number(redisPortRaw);
+    const safeRedisPort = Number.isInteger(redis_port) && redis_port > 0 && redis_port <= 65535 ? redis_port : undefined;
+    const redisDbRaw = read<unknown>(["redis_db", "REDIS_DB"]);
+    const redis_db = typeof redisDbRaw === "number" ? redisDbRaw : Number(redisDbRaw);
+    const safeRedisDb = Number.isInteger(redis_db) && redis_db >= 0 ? redis_db : undefined;
+    const serverIdRaw = read<unknown>(["server_id", "SERVER_ID"]);
+    const server_id = typeof serverIdRaw === "string" && serverIdRaw.trim().length > 0 ? serverIdRaw.trim() : undefined;
+    const redisPasswordRaw = read<unknown>(["redis_password", "REDIS_PASSWORD"]);
+    const redis_password = typeof redisPasswordRaw === "string" && redisPasswordRaw.length > 0 ? redisPasswordRaw : undefined;
+
+    const logLevelRaw = read<unknown>(["log_level", "LOG_LEVEL"]);
+    const log_level = typeof logLevelRaw === "string" && logLevelRaw.trim().length > 0 ? logLevelRaw.trim() : undefined;
+    const consoleLogLevelRaw = read<unknown>(["console_log_level", "CONSOLE_LOG_LEVEL"]);
+    const console_log_level = typeof consoleLogLevelRaw === "string" && consoleLogLevelRaw.trim().length > 0 ? consoleLogLevelRaw.trim() : undefined;
+
+    return {
+      monitors,
+      server_name,
+      host,
+      port: safePort,
+      http_service,
+      http_port: safeHttpPort,
+      room_max_users,
+      replay_enabled,
+      admin_token,
+      admin_data_path,
+      room_list_tip,
+      redis_host,
+      redis_port: safeRedisPort,
+      redis_db: safeRedisDb,
+      redis_password,
+      server_id,
+      log_level,
+      console_log_level
+    };
   } catch {
     return { monitors: [2] };
   }
@@ -185,7 +244,6 @@ function formatNodeVersion(v: string): string {
 
 export async function startServer(options: StartServerOptions): Promise<RunningServer> {
   const paths = getAppPaths();
-  const logger = new Logger({ logsDir: paths.logsDir });
   const fileCfg = loadConfig();
   const envCfg = loadEnvConfig();
   const cliCfg: Partial<ServerConfig> = {
@@ -194,10 +252,43 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
     ...(options.port !== undefined ? { port: options.port } : {})
   };
   const mergedCfg = mergeConfig(mergeConfig(fileCfg, envCfg), cliCfg);
+  const fileLevel = parseLevel(mergedCfg.log_level, "INFO");
+  const consoleLevel = parseLevel(mergedCfg.console_log_level, "INFO");
+  const onlyFileSet = mergedCfg.log_level !== undefined && mergedCfg.console_log_level === undefined;
+  const onlyConsoleSet = mergedCfg.console_log_level !== undefined && mergedCfg.log_level === undefined;
+  const logger = new Logger({
+    logsDir: paths.logsDir,
+    minLevel: onlyConsoleSet ? consoleLevel : fileLevel,
+    consoleMinLevel: onlyFileSet ? fileLevel : consoleLevel
+  });
   const serverName = mergedCfg.server_name || "Phira MP";
   const adminDataPath = mergedCfg.admin_data_path ?? paths.adminDataPath;
-  const state = new ServerState(mergedCfg, logger, serverName, adminDataPath);
+
+  let redis: RedisService | null = null;
+  if (mergedCfg.redis_host && mergedCfg.server_id) {
+    redis = new RedisService({
+      host: mergedCfg.redis_host,
+      port: mergedCfg.redis_port ?? 6379,
+      db: mergedCfg.redis_db ?? 0,
+      password: mergedCfg.redis_password,
+      serverId: mergedCfg.server_id,
+      logger
+    });
+    logger.debug("[Server] Redis 分布式状态层已连接", {
+      host: mergedCfg.redis_host,
+      port: mergedCfg.redis_port ?? 6379,
+      db: mergedCfg.redis_db ?? 0,
+      server_id: mergedCfg.server_id,
+      auth: mergedCfg.redis_password ? "yes" : "no"
+    });
+  }
+  const state = new ServerState(mergedCfg, logger, serverName, adminDataPath, redis);
   await state.loadAdminData();
+
+  if (redis) {
+    await redis.subscribe((payload) => state.handleRedisEvent(payload));
+    logger.debug("[Server] 调用 Redis 订阅");
+  }
   const replayCleanup = startReplayCleanup({ ttlDays: 4, logger });
 
   const version = readAppVersion();
@@ -247,7 +338,14 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
     server.listen({ port: listenPort, host: listenHost }, () => resolve());
   });
 
-  const httpService = mergedCfg.http_service === true ? await startHttpService({ state, host: listenHost, port: mergedCfg.http_port ?? 12347 }) : null;
+  // 互通服（Redis）模式下禁止启用管理员 HTTP 接口
+  const httpService =
+    mergedCfg.http_service === true && !redis
+      ? await startHttpService({ state, host: listenHost, port: mergedCfg.http_port ?? 12347 })
+      : null;
+  if (redis && mergedCfg.http_service === true) {
+    logger.warn("[互通服] 已禁用管理员 HTTP 接口（Redis 分布式模式下不允许使用）");
+  }
 
   const addr = server.address() as net.AddressInfo;
   logger.mark(tl(state.serverLang, "log-server-version", { version }));
@@ -270,6 +368,10 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
     address: () => server.address() as net.AddressInfo,
     close: async () => {
       try {
+        if (redis) {
+          await state.cleanupRedisOnShutdown();
+          await redis.close();
+        }
         if (httpService) await httpService.close();
         await new Promise<void>((resolve, reject) => {
           server.close((err) => {

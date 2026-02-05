@@ -3,7 +3,7 @@ HOST: "::"
 # 监听端口
 PORT: 12346
 
-# 是否启用 HTTP 服务
+# 是否启用 HTTP 服务（管理员接口）。互通服（启用 Redis）时强制关闭，不可使用
 HTTP_SERVICE: false
 # HTTP 服务监听端口
 HTTP_PORT: 12347
@@ -26,4 +26,17 @@ server_name: Phira MP
 
 # 登录后展示可用房间列表后追加的提示文案（可用于群宣传/查房间等，纯文本）
 # ROOM_LIST_TIP: "欢迎加入交流群：123456；查房间：example.com"
+
+# === 日志等级（可选，也可用环境变量 LOG_LEVEL / CONSOLE_LOG_LEVEL）===
+# 写入日志文件的最小等级，可选：DEBUG、INFO、MARK、WARN、ERROR
+# LOG_LEVEL: "INFO"
+# 输出到终端的最小等级，可选同上；仅设一项时文件与终端使用同一等级
+# CONSOLE_LOG_LEVEL: "INFO"
+
+# === 分布式 Redis（可选，配置后启用跨服状态与 Pub/Sub）===
+# REDIS_HOST: "127.0.0.1"
+# REDIS_PORT: 6379
+# REDIS_DB: 3
+# REDIS_PASSWORD: ""   # 可选，留空或注释则无密码
+# SERVER_ID: "node-1"
 

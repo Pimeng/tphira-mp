@@ -1,8 +1,8 @@
 {
   "name": "phira-mp-nodejs",
-  "author": "TeamFlos, Pimeng, TRAE SOLO, GPT-5.2",
+  "author": "Pimeng",
   "license": "AGPL-3.0",
-  "version": "0.5.5",
+  "version": "0.6",
   "type": "module",
   "engines": {
     "node": ">=22"
@@ -16,10 +16,11 @@
     "test": "vitest run",
     "test:watch": "vitest"
   },
-  "packageManager": "pnpm@9.15.4",
+  "packageManager": "pnpm@10.28.2",
   "dependencies": {
     "@fluent/bundle": "^0.18.0",
     "@fluent/langneg": "^0.7.0",
+    "ioredis": "^5.4.1",
     "js-yaml": "^4.1.0",
     "uuid": "^11.1.0"
   },

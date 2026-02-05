@@ -2,8 +2,9 @@ import type net from "node:net";
 import { err, ok, type StringResult } from "../common/binary.js";
 import type { ClientCommand, ClientRoomState, JoinRoomResponse, ServerCommand } from "../common/commands.js";
 import { HEARTBEAT_DISCONNECT_TIMEOUT_MS } from "../common/commands.js";
-import { parseRoomId } from "../common/roomId.js";
+import { parseRoomId, roomIdToString } from "../common/roomId.js";
 import type { Stream } from "../common/stream.js";
+import { RedisRoomState } from "./redis.js";
 import type { Room } from "./room.ts";
 import { Room as RoomClass } from "./room.js";
 import type { ServerState } from "./state.js";
@@ -155,6 +156,7 @@ export class Session {
     if (this.panicked || this.lost) return;
 
     if (cmd.type === "Ping") {
+      if (this.user) this.state.redis?.updatePlayerLastSeen(this.user.id).catch(() => {});
       await this.trySend({ type: "Pong" });
       return;
     }
@@ -221,6 +223,13 @@ export class Session {
         user: user.name,
         monitorSuffix
       }));
+
+      await this.state.redis?.setPlayerSession({
+        uid: user.id,
+        roomId: user.room?.id ?? null,
+        name: user.name,
+        isMonitor: user.monitor
+      }).catch(() => {});
 
       await this.trySend({
         type: "Message",
@@ -310,7 +319,10 @@ export class Session {
     const who = user ? tl(this.state.serverLang, "log-disconnect-user", { user: user.name }) : "";
     this.state.logger.debug(tl(this.state.serverLang, "log-disconnect", { id: this.id, who }));
 
-    if (user && detachedUserSession && !this.preserveRoomOnLost && user.session === null) await this.dangleUser(user);
+    if (user && detachedUserSession) {
+      this.state.redis?.deletePlayerSession(user.id).catch(() => {});
+      if (!this.preserveRoomOnLost && user.session === null) await this.dangleUser(user);
+    }
   }
 
   async adminDisconnect(opts: { preserveRoom: boolean }): Promise<void> {
@@ -325,6 +337,7 @@ export class Session {
       await this.state.mutex.runExclusive(async () => {
         this.state.users.delete(user.id);
       });
+      const oldHostId = room.hostId;
       const shouldDrop = await room.onUserLeave({
         user,
         usersById: (id) => this.state.users.get(id),
@@ -334,6 +347,7 @@ export class Session {
         lang: this.state.serverLang,
         logger: this.state.logger,
         onEnterPlaying: async (r) => {
+          await this.onEnterPlayingRedis(r);
           if (!r.chart) return;
           if (this.state.replayEnabled && r.replayEligible) await this.state.replayRecorder.startRoom(r.id, r.chart.id, r.userIds());
         },
@@ -341,7 +355,9 @@ export class Session {
           await this.state.replayRecorder.endRoom(r.id);
         }
       });
+      await this.afterUserLeaveRedis(room, user, oldHostId === user.id);
       if (shouldDrop) {
+        await this.publishRoomDeleteAndDeleteRoom(room);
         this.state.logger.info(tl(this.state.serverLang, "log-room-recycled", { room: room.id }));
         await this.state.mutex.runExclusive(async () => {
           this.state.rooms.delete(room.id);
@@ -361,6 +377,7 @@ export class Session {
         await this.state.mutex.runExclusive(async () => {
           this.state.users.delete(user.id);
         });
+        const oldHostId2 = room2.hostId;
         const shouldDrop = await room2.onUserLeave({
           user,
           usersById: (id) => this.state.users.get(id),
@@ -370,6 +387,7 @@ export class Session {
           lang: this.state.serverLang,
           logger: this.state.logger,
           onEnterPlaying: async (r) => {
+            await this.onEnterPlayingRedis(r);
             if (!r.chart) return;
             if (this.state.replayEnabled && r.replayEligible) await this.state.replayRecorder.startRoom(r.id, r.chart.id, r.userIds());
           },
@@ -377,7 +395,9 @@ export class Session {
             await this.state.replayRecorder.endRoom(r.id);
           }
         });
+        await this.afterUserLeaveRedis(room2, user, oldHostId2 === user.id);
         if (shouldDrop) {
+          await this.publishRoomDeleteAndDeleteRoom(room2);
           this.state.logger.info(tl(this.state.serverLang, "log-room-recycled", { room: room2.id }));
           await this.state.mutex.runExclusive(async () => {
             this.state.rooms.delete(room2.id);
@@ -444,6 +464,12 @@ export class Session {
             user.room = room;
           });
           const room = user.room!;
+          await this.state.redis?.initRoom(room.id, user.id, room.maxUsers).catch(() => {});
+          this.state.redis?.publishEvent({
+            event: "ROOM_CREATE",
+            room_id: roomIdToString(room.id),
+            data: { uid: user.id, name: user.name }
+          }).catch(() => {});
           this.state.logger.mark(tl(this.state.serverLang, "log-room-created", { user: user.name, room: room.id }));
           await room.send((c) => this.broadcastRoom(room, c), { type: "CreateRoom", user: user.id });
           if (this.state.replayEnabled && room.replayEligible) {
@@ -475,19 +501,33 @@ export class Session {
           if (!room) throw new Error(user.lang.format("room-not-found"));
 
           room.validateJoin(user, cmd.monitor);
+          const useRedis = !!this.state.redis;
+          if (useRedis) {
+            const ok = await this.state.redis!.tryAddRoomPlayer(room.id, user.id, room.maxUsers);
+            if (!ok) throw new Error(user.lang.format("join-room-full"));
+          }
           const okJoin = room.addUser(user, cmd.monitor);
           if (!okJoin) throw new Error(user.lang.format("join-room-full"));
 
           user.monitor = cmd.monitor;
 
-          const suffix = cmd.monitor ? tl(this.state.serverLang, "label-monitor-suffix") : "";
-          this.state.logger.mark(tl(this.state.serverLang, "log-room-joined", { user: user.name, suffix, room: room.id }));
-          await this.broadcastRoom(room, { type: "OnJoinRoom", info: user.toInfo() });
-          await room.send((c) => this.broadcastRoom(room, c), { type: "JoinRoom", user: user.id, name: user.name });
-
           await this.state.mutex.runExclusive(async () => {
             user.room = room;
           });
+
+          const suffix = cmd.monitor ? tl(this.state.serverLang, "label-monitor-suffix") : "";
+          this.state.logger.mark(tl(this.state.serverLang, "log-room-joined", { user: user.name, suffix, room: room.id }));
+          if (useRedis) {
+            await this.state.redis!.setPlayerSession({ uid: user.id, roomId: room.id, name: user.name, isMonitor: user.monitor });
+            await this.state.redis!.publishEvent({
+              event: "PLAYER_JOIN",
+              room_id: roomIdToString(room.id),
+              data: { uid: user.id, name: user.name, is_monitor: user.monitor }
+            });
+          } else {
+            await this.broadcastRoom(room, { type: "OnJoinRoom", info: user.toInfo() });
+            await room.send((c) => this.broadcastRoom(room, c), { type: "JoinRoom", user: user.id, name: user.name });
+          }
 
           const users = [...room.userIds(), ...room.monitorIds()]
             .map((id) => this.state.users.get(id))
@@ -518,6 +558,7 @@ export class Session {
           const room = this.requireRoom(user);
           const suffix = user.monitor ? tl(this.state.serverLang, "label-monitor-suffix") : "";
           this.state.logger.mark(tl(this.state.serverLang, "log-room-left", { user: user.name, suffix, room: room.id }));
+          const oldHostId = room.hostId;
           const shouldDrop = await room.onUserLeave({
             user,
             usersById: (id) => this.state.users.get(id),
@@ -528,6 +569,7 @@ export class Session {
             logger: this.state.logger,
             disbandRoom: (r) => this.disbandRoom(r),
             onEnterPlaying: async (r) => {
+              await this.onEnterPlayingRedis(r);
               if (!r.chart) return;
               if (this.state.replayEnabled && r.replayEligible) await this.state.replayRecorder.startRoom(r.id, r.chart.id, r.userIds());
             },
@@ -535,7 +577,9 @@ export class Session {
               await this.state.replayRecorder.endRoom(r.id);
             }
           });
+          await this.afterUserLeaveRedis(room, user, oldHostId === user.id);
           if (shouldDrop) {
+            await this.publishRoomDeleteAndDeleteRoom(room);
             this.state.logger.info(tl(this.state.serverLang, "log-room-recycled", { room: room.id }));
             await this.state.mutex.runExclusive(async () => {
               this.state.rooms.delete(room.id);
@@ -549,6 +593,15 @@ export class Session {
           room.checkHost(user);
           room.locked = cmd.lock;
           this.state.logger.mark(tl(this.state.serverLang, "log-room-lock", { user: user.name, room: room.id, lock: cmd.lock ? "true" : "false" }));
+          const stateNum = room.state.type === "SelectChart" ? RedisRoomState.SelectChart : room.state.type === "WaitForReady" ? RedisRoomState.WaitingForReady : RedisRoomState.Playing;
+          await this.state.redis?.setRoomInfo({
+            rid: room.id,
+            hostId: room.hostId,
+            state: stateNum,
+            chartId: room.chart?.id ?? 0,
+            isLocked: room.locked,
+            isCycle: room.cycle
+          }).catch(() => {});
           await room.send((c) => this.broadcastRoom(room, c), { type: "LockRoom", lock: cmd.lock });
           return {};
         }) };
@@ -558,6 +611,15 @@ export class Session {
           room.checkHost(user);
           room.cycle = cmd.cycle;
           this.state.logger.mark(tl(this.state.serverLang, "log-room-cycle", { user: user.name, room: room.id, cycle: cmd.cycle ? "true" : "false" }));
+          const stateNum = room.state.type === "SelectChart" ? RedisRoomState.SelectChart : room.state.type === "WaitForReady" ? RedisRoomState.WaitingForReady : RedisRoomState.Playing;
+          await this.state.redis?.setRoomInfo({
+            rid: room.id,
+            hostId: room.hostId,
+            state: stateNum,
+            chartId: room.chart?.id ?? 0,
+            isLocked: room.locked,
+            isCycle: room.cycle
+          }).catch(() => {});
           await room.send((c) => this.broadcastRoom(room, c), { type: "CycleRoom", cycle: cmd.cycle });
           return {};
         }) };
@@ -568,8 +630,24 @@ export class Session {
           const chart = await this.fetchChart(user, cmd.id);
           room.chart = chart;
           this.state.logger.mark(tl(this.state.serverLang, "log-room-select-chart", { user: user.name, userId: String(user.id), room: room.id, chart: chart.name }));
-          await room.send((c) => this.broadcastRoom(room, c), { type: "SelectChart", user: user.id, name: chart.name, id: chart.id });
-          await room.onStateChange((c) => this.broadcastRoom(room, c));
+          if (this.state.redis) {
+            await this.state.redis.setRoomInfo({
+              rid: room.id,
+              hostId: room.hostId,
+              state: RedisRoomState.SelectChart,
+              chartId: chart.id,
+              isLocked: room.locked,
+              isCycle: room.cycle
+            });
+            await this.state.redis.publishEvent({
+              event: "STATE_CHANGE",
+              room_id: roomIdToString(room.id),
+              data: { new_state: RedisRoomState.SelectChart, chart_id: chart.id }
+            });
+          } else {
+            await room.send((c) => this.broadcastRoom(room, c), { type: "SelectChart", user: user.id, name: chart.name, id: chart.id });
+            await room.onStateChange((c) => this.broadcastRoom(room, c));
+          }
           return {};
         }) };
       case "RequestStart":
@@ -580,7 +658,23 @@ export class Session {
           this.state.logger.mark(tl(this.state.serverLang, "log-room-request-start", { user: user.name, room: room.id }));
           await room.send((c) => this.broadcastRoom(room, c), { type: "GameStart", user: user.id });
           room.state = { type: "WaitForReady", started: new Set([user.id]) };
-          await room.onStateChange((c) => this.broadcastRoom(room, c));
+          if (this.state.redis) {
+            await this.state.redis.setRoomInfo({
+              rid: room.id,
+              hostId: room.hostId,
+              state: RedisRoomState.WaitingForReady,
+              chartId: room.chart?.id ?? 0,
+              isLocked: room.locked,
+              isCycle: room.cycle
+            });
+            await this.state.redis.publishEvent({
+              event: "STATE_CHANGE",
+              room_id: roomIdToString(room.id),
+              data: { new_state: RedisRoomState.WaitingForReady, chart_id: room.chart?.id }
+            });
+          } else {
+            await room.onStateChange((c) => this.broadcastRoom(room, c));
+          }
           await room.checkAllReady({
             usersById: (id) => this.state.users.get(id),
             broadcast: (c) => this.broadcastRoom(room, c),
@@ -590,6 +684,7 @@ export class Session {
             logger: this.state.logger,
             disbandRoom: (r) => this.disbandRoom(r),
             onEnterPlaying: async (r) => {
+              await this.onEnterPlayingRedis(r);
               if (!r.chart) return;
               if (this.state.replayEnabled && r.replayEligible) await this.state.replayRecorder.startRoom(r.id, r.chart.id, r.userIds());
             },
@@ -661,6 +756,11 @@ export class Session {
             if (room.state.results.has(user.id)) throw new Error(user.lang.format("record-already-uploaded"));
             room.state.results.set(user.id, record);
             if (this.state.replayEnabled && room.replayEligible) this.state.replayRecorder.setRecordId(room.id, user.id, record.id);
+            this.state.redis?.publishEvent({
+              event: "SYNC_SCORE",
+              room_id: roomIdToString(room.id),
+              data: { uid: user.id, record_id: String(record.id) }
+            }).catch(() => {});
             await room.checkAllReady({
               usersById: (id) => this.state.users.get(id),
               broadcast: (c) => this.broadcastRoom(room, c),
@@ -670,6 +770,7 @@ export class Session {
               logger: this.state.logger,
               disbandRoom: (r) => this.disbandRoom(r),
               onEnterPlaying: async (r) => {
+                await this.onEnterPlayingRedis(r);
                 if (!r.chart) return;
                 if (this.state.replayEnabled && r.replayEligible) await this.state.replayRecorder.startRoom(r.id, r.chart.id, r.userIds());
               },
@@ -698,6 +799,7 @@ export class Session {
               logger: this.state.logger,
               disbandRoom: (r) => this.disbandRoom(r),
               onEnterPlaying: async (r) => {
+                await this.onEnterPlayingRedis(r);
                 if (!r.chart) return;
                 if (this.state.replayEnabled && r.replayEligible) await this.state.replayRecorder.startRoom(r.id, r.chart.id, r.userIds());
               },
@@ -717,6 +819,56 @@ export class Session {
     const room = user.room;
     if (!room) throw new Error(user.lang.format("room-no-room"));
     return room;
+  }
+
+  /** 玩家离开房间后同步 Redis 并发布 PLAYER_LEAVE（仅当启用 Redis 时） */
+  private async afterUserLeaveRedis(room: RoomClass, user: User, wasHost: boolean): Promise<void> {
+    const r = this.state.redis;
+    if (!r) return;
+    await r.removeRoomPlayer(room.id, user.id);
+    await r.setPlayerSession({ uid: user.id, roomId: null, name: user.name, isMonitor: user.monitor });
+    await r.publishEvent({
+      event: "PLAYER_LEAVE",
+      room_id: roomIdToString(room.id),
+      data: { uid: user.id, is_host_changed: wasHost, new_host: room.hostId }
+    });
+    this.state.logger.debug("[Redis] 玩家离开房间已同步", { room_id: roomIdToString(room.id), uid: user.id });
+  }
+
+  /** 房间进入 Playing 时同步 Redis（仅当启用 Redis 时） */
+  private async onEnterPlayingRedis(room: RoomClass): Promise<void> {
+    if (!this.state.redis || !room.chart) return;
+    await this.state.redis.setRoomInfo({
+      rid: room.id,
+      hostId: room.hostId,
+      state: RedisRoomState.Playing,
+      chartId: room.chart.id,
+      isLocked: room.locked,
+      isCycle: room.cycle
+    });
+    await this.state.redis.publishEvent({
+      event: "STATE_CHANGE",
+      room_id: roomIdToString(room.id),
+      data: { new_state: RedisRoomState.Playing, chart_id: room.chart.id }
+    });
+    this.state.logger.debug("[Redis] 房间进入 Playing 已同步", { room_id: roomIdToString(room.id) });
+  }
+
+  /** 发布 ROOM_DELETE 并删除 Redis 房间数据（仅由本机创建的房间在解散时调用，与规范一致） */
+  private async publishRoomDeleteAndDeleteRoom(room: RoomClass): Promise<void> {
+    if (!this.state.redis) return;
+    if (room.remote) return;
+    if (room.userIds().length > 0) {
+      this.state.logger.debug("[Redis] 房间内仍有玩家，不执行 ROOM_DELETE", { room_id: roomIdToString(room.id) });
+      return;
+    }
+    const hostName = this.state.users.get(room.hostId)?.name ?? String(room.hostId);
+    await this.state.redis.publishEvent({
+      event: "ROOM_DELETE",
+      room_id: roomIdToString(room.id),
+      data: { uid: room.hostId, name: hostName }
+    }).catch(() => {});
+    await this.state.redis.deleteRoom(room.id).catch(() => {});
   }
 
   private async broadcastRoom(room: Room, cmd: ServerCommand): Promise<void> {
@@ -753,6 +905,7 @@ export class Session {
         lang: this.state.serverLang,
         logger: this.state.logger,
         onEnterPlaying: async (r) => {
+          await this.onEnterPlayingRedis(r);
           if (!r.chart) return;
           if (this.state.replayEnabled && r.replayEligible) await this.state.replayRecorder.startRoom(r.id, r.chart.id, r.userIds());
         },
@@ -761,6 +914,7 @@ export class Session {
         }
       });
     }
+    await this.publishRoomDeleteAndDeleteRoom(room);
     await this.state.mutex.runExclusive(async () => {
       this.state.rooms.delete(room.id);
     });
