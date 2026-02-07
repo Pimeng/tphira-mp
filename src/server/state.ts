@@ -11,6 +11,9 @@ import type { Logger } from "./logger.js";
 import { Language } from "./l10n.js";
 import { ReplayRecorder } from "./replayRecorder.js";
 import { defaultReplayBaseDir } from "./replayStorage.js";
+import { FederationManager } from "./federation/index.js";
+import { FederationProxyManager } from "./federation/proxy.js";
+import { FederationSync } from "./federation/sync.js";
 
 type AdminDataFile = { version: 1; bannedUsers: number[]; bannedRoomUsers: Record<string, number[]> };
 
@@ -33,6 +36,13 @@ export class ServerState {
 
   readonly replayRecorder: ReplayRecorder;
 
+  /** 联邦（互通服）管理器 */
+  readonly federation: FederationManager | null;
+  /** 联邦代理管理器 */
+  readonly federationProxy: FederationProxyManager | null;
+  /** 联邦同步服务 */
+  readonly federationSync: FederationSync | null;
+
   constructor(config: ServerConfig, logger: Logger, serverName: string, adminDataPath: string) {
     this.config = config;
     this.logger = logger;
@@ -41,6 +51,18 @@ export class ServerState {
     this.adminDataPath = adminDataPath;
     this.replayEnabled = Boolean(config.replay_enabled);
     this.replayRecorder = new ReplayRecorder(defaultReplayBaseDir());
+
+    // 初始化联邦模块
+    if (config.federation?.enabled && config.federation.shared_secret) {
+      this.federation = new FederationManager({ config: config.federation, logger });
+      this.federationProxy = new FederationProxyManager(logger);
+      this.federationSync = new FederationSync({ manager: this.federation, logger });
+      logger.mark(`[Federation] 联邦互通已启用, 对等服务器: ${config.federation.peers.length} 个`);
+    } else {
+      this.federation = null;
+      this.federationProxy = null;
+      this.federationSync = null;
+    }
   }
 
   private snapshotAdminData(): AdminDataFile {

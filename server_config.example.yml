@@ -27,3 +27,32 @@ server_name: Phira MP
 # 登录后展示可用房间列表后追加的提示文案（可用于群宣传/查房间等，纯文本）
 # ROOM_LIST_TIP: "欢迎加入交流群：123456；查房间：example.com"
 
+# ==================== 联邦互通服配置 ====================
+#
+# 允许多个 phira-mp 服务器之间的玩家互通。
+# 玩家可以跨服务器加入其他服务器上的房间。
+#
+# 工作原理：
+#   1. 所有互通服务器共享一个密钥（shared_secret）
+#   2. 服务器间通过 HTTP API 同步房间列表
+#   3. 玩家加入远程房间时，通过透明代理转发连接
+#   4. 仅在鉴权阶段进行微调，完全遵循原版协议
+#
+# 需要同时启用 HTTP 服务（http_service: true）才能使用联邦功能
+
+# federation:
+#   enabled: true
+#   # 服务器间共享密钥（所有互通服务器必须使用相同的密钥）
+#   # 用于 HMAC-SHA256-96 签名验证
+#   shared_secret: "replace-with-a-strong-secret-key"
+#   # 对等服务器列表
+#   peers:
+#     - name: "Server-A"
+#       # TCP 游戏端口地址
+#       address: "server-a.example.com:12346"
+#       # HTTP API 地址（用于房间列表同步和票据创建）
+#       http_address: "http://server-a.example.com:12347"
+#     - name: "Server-B"
+#       address: "server-b.example.com:12346"
+#       http_address: "http://server-b.example.com:12347"
+

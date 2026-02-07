@@ -8,7 +8,7 @@ import { Stream } from "../common/stream.js";
 import type { StreamCodec } from "../common/stream.js";
 import type { ClientCommand, ServerCommand } from "../common/commands.js";
 import { ServerState } from "./state.js";
-import type { ServerConfig } from "./types.js";
+import type { ServerConfig, FederationConfig, FederationPeer } from "./types.js";
 import { Session } from "./session.js";
 import { Logger } from "./logger.js";
 import { getAppPaths } from "./appPaths.js";
@@ -100,7 +100,8 @@ function mergeConfig(base: ServerConfig, override: Partial<ServerConfig>): Serve
     replay_enabled: override.replay_enabled ?? base.replay_enabled,
     admin_token: override.admin_token ?? base.admin_token,
     admin_data_path: override.admin_data_path ?? base.admin_data_path,
-    room_list_tip: override.room_list_tip ?? base.room_list_tip
+    room_list_tip: override.room_list_tip ?? base.room_list_tip,
+    federation: override.federation ?? base.federation
   };
 }
 
@@ -163,10 +164,38 @@ function loadConfig(): ServerConfig {
     const roomListTipRaw = read<unknown>(["room_list_tip", "ROOM_LIST_TIP", "roomListTip"]);
     const room_list_tip = typeof roomListTipRaw === "string" && roomListTipRaw.trim().length > 0 ? roomListTipRaw.trim() : undefined;
 
-    return { monitors, server_name, host, port: safePort, http_service, http_port: safeHttpPort, room_max_users, replay_enabled, admin_token, admin_data_path, room_list_tip };
+    // 解析联邦（互通服）配置
+    const federation = parseFederationConfig(read<unknown>(["federation"]));
+
+    return { monitors, server_name, host, port: safePort, http_service, http_port: safeHttpPort, room_max_users, replay_enabled, admin_token, admin_data_path, room_list_tip, federation };
   } catch {
     return { monitors: [2] };
   }
+}
+
+function parseFederationConfig(raw: unknown): FederationConfig | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+
+  const cfg = raw as Record<string, unknown>;
+  const enabled = cfg.enabled === true;
+  if (!enabled) return undefined;
+
+  const shared_secret = typeof cfg.shared_secret === "string" ? cfg.shared_secret.trim() : "";
+  if (!shared_secret) return undefined;
+
+  const peersRaw = Array.isArray(cfg.peers) ? cfg.peers : [];
+  const peers: FederationPeer[] = [];
+  for (const p of peersRaw) {
+    if (!p || typeof p !== "object") continue;
+    const peer = p as Record<string, unknown>;
+    const name = typeof peer.name === "string" ? peer.name.trim() : "";
+    const address = typeof peer.address === "string" ? peer.address.trim() : "";
+    if (!name || !address) continue;
+    const http_address = typeof peer.http_address === "string" ? peer.http_address.trim() : undefined;
+    peers.push({ name, address, http_address });
+  }
+
+  return { enabled, shared_secret, peers };
 }
 
 const codec: StreamCodec<ServerCommand, ClientCommand> = {
@@ -249,6 +278,11 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
 
   const httpService = mergedCfg.http_service === true ? await startHttpService({ state, host: listenHost, port: mergedCfg.http_port ?? 12347 }) : null;
 
+  // 启动联邦同步服务
+  if (state.federationSync) {
+    state.federationSync.start();
+  }
+
   const addr = server.address() as net.AddressInfo;
   logger.mark(tl(state.serverLang, "log-server-version", { version }));
   logger.mark(tl(state.serverLang, "log-runtime-env", {
@@ -261,6 +295,9 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
     logger.mark(tl(state.serverLang, "log-http-listen", { addr: formatListenHostPort(httpAddr.address, httpAddr.port) }));
   }
   logger.mark(tl(state.serverLang, "log-server-name", { name: serverName }));
+  if (state.federation) {
+    logger.mark(`[Federation] 互通服已启用, 共享密钥已配置, ${state.federation.peers.length} 个对等服务器`);
+  }
 
   return {
     server,
@@ -270,6 +307,11 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
     address: () => server.address() as net.AddressInfo,
     close: async () => {
       try {
+        // 关闭联邦模块
+        if (state.federationSync) state.federationSync.stop();
+        if (state.federationProxy) state.federationProxy.closeAll();
+        if (state.federation) state.federation.close();
+
         if (httpService) await httpService.close();
         await new Promise<void>((resolve, reject) => {
           server.close((err) => {

@@ -16,6 +16,9 @@ export class User {
   monitor = false;
   gameTime = Number.NEGATIVE_INFINITY;
 
+  /** 联邦来源服务器名称（null 表示本地玩家） */
+  federatedFrom: string | null = null;
+
   private dangleToken: object | null = null;
 
   constructor(opts: { id: number; name: string; language: string; server: ServerState }) {

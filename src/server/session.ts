@@ -10,6 +10,7 @@ import type { ServerState } from "./state.js";
 import type { Chart, RecordData } from "./types.js";
 import { User } from "./user.js";
 import { tl, type Language } from "./l10n.js";
+import { isFederationToken, extractFederationTicket } from "./federation/protocol.js";
 
 const HOST = "https://phira.5wyxi.com";
 const FETCH_TIMEOUT_MS = 8000;
@@ -171,6 +172,21 @@ export class Session {
 
   private async handleAuthenticate(token: string): Promise<void> {
     try {
+      // ==================== 联邦鉴权检测 ====================
+      //
+      // 协议黑盒（Protocol Hack）：仅在鉴权阶段进行微调。
+      // 检测 token 首字符：
+      // - "@" 前缀 → 联邦令牌（来自其他转发服务器的玩家）
+      // - 其他     → 普通 Phira Bearer Token
+      //
+      // 由于 HTTP Bearer Token 首字节 MSB 通常为 0（标准 ASCII），
+      // 使用 "@" 前缀安全区分联邦令牌。
+
+      if (isFederationToken(token) && this.state.federation) {
+        await this.handleFederationAuthenticate(token);
+        return;
+      }
+
       const me = await fetchWithTimeout(`${HOST}/me`, {
         headers: { Authorization: `Bearer ${token}` }
       }, FETCH_TIMEOUT_MS).then(async (r) => {
@@ -236,6 +252,93 @@ export class Session {
       const localized = this.localizeError(this.state.serverLang, e instanceof Error ? e : new Error("auth-failed"));
       this.state.logger.warn(tl(this.state.serverLang, "log-auth-failed", { id: this.id, reason: localized }));
       await this.trySend({ type: "Authenticate", result: err(localized) });
+      this.panicked = true;
+      await this.markLost();
+    }
+  }
+
+  /**
+   * 联邦鉴权处理
+   *
+   * 当检测到 token 首字节标志位表明来自转发服务器时：
+   * 1. 从 token 中提取 ticket
+   * 2. 在本地票据存储中查找并验证
+   * 3. 使用票据中预注册的玩家信息创建 User（无需调用 Phira API）
+   * 4. 鉴权成功后，后续完全遵循原版协议
+   *
+   * 这是"协议黑盒"方案的核心：只修改鉴权逻辑，其余协议不变。
+   */
+  private async handleFederationAuthenticate(token: string): Promise<void> {
+    const federation = this.state.federation!;
+
+    try {
+      const ticket = extractFederationTicket(token);
+      const ticketData = federation.consumeTicket(ticket);
+
+      if (!ticketData) {
+        throw new Error("federation-invalid-ticket");
+      }
+
+      this.state.logger.info(
+        `[Federation] 联邦鉴权: player=${ticketData.playerName}(${ticketData.playerId}), ` +
+        `from=${ticketData.sourceServer}, room=${ticketData.targetRoomId}`
+      );
+
+      // 检查是否被封禁
+      const banned = await this.state.mutex.runExclusive(async () => this.state.bannedUsers.has(ticketData.playerId));
+      if (banned) throw new Error("auth-banned");
+
+      // 创建或更新用户（与普通鉴权类似，但无需调用 Phira API）
+      const { user, staleSession } = await this.state.mutex.runExclusive(async () => {
+        const existing = this.state.users.get(ticketData.playerId);
+        if (existing) {
+          let staleSession: Session | null = null;
+          if (existing.session) {
+            const sock = existing.session.socket;
+            if (sock.destroyed || sock.readyState !== "open") {
+              staleSession = existing.session;
+              existing.setSession(null);
+            } else {
+              throw new Error("auth-account-already-online");
+            }
+          }
+          existing.setSession(this);
+          return { user: existing, staleSession };
+        }
+
+        // 联邦玩家使用票据中的信息创建 User
+        // language 默认使用服务器语言，因为无法从 Phira API 获取
+        const created = new User({
+          id: ticketData.playerId,
+          name: ticketData.playerName,
+          language: this.state.serverLang.lang,
+          server: this.state,
+        });
+        created.setSession(this);
+        this.state.users.set(ticketData.playerId, created);
+        return { user: created, staleSession: null };
+      });
+
+      this.user = user;
+      if (staleSession) void staleSession.adminDisconnect({ preserveRoom: true });
+
+      // 标记为联邦用户（用于后续识别）
+      user.federatedFrom = ticketData.sourceServer;
+
+      const roomState: ClientRoomState | null = user.room
+        ? user.room.clientState(user, (id) => this.state.users.get(id))
+        : null;
+      await this.trySend({ type: "Authenticate", result: ok([user.toInfo(), roomState]) });
+      this.waitingForAuthenticate = false;
+
+      this.state.logger.mark(
+        `[Federation] 联邦玩家鉴权成功: ${ticketData.playerName}(${ticketData.playerId}) ` +
+        `来自 ${ticketData.sourceServer}`
+      );
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      this.state.logger.warn(`[Federation] 联邦鉴权失败: ${msg}, session=${this.id}`);
+      await this.trySend({ type: "Authenticate", result: err(msg) });
       this.panicked = true;
       await this.markLost();
     }
