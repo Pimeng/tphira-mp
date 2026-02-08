@@ -126,9 +126,12 @@ export class Room {
     disbandRoom?: (room: Room) => Promise<void>;
     onEnterPlaying?: (room: Room) => Promise<void> | void;
     onGameEnd?: (room: Room) => Promise<void> | void;
+    skipBroadcast?: boolean;
   }): Promise<boolean> {
     const { user } = opts;
-    await this.send(opts.broadcast, { type: "LeaveRoom", user: user.id, name: user.name });
+    if (!opts.skipBroadcast) {
+      await this.send(opts.broadcast, { type: "LeaveRoom", user: user.id, name: user.name });
+    }
     user.room = null;
 
     if (user.monitor) this.monitors = this.monitors.filter((it) => it !== user.id);
@@ -168,6 +171,7 @@ export class Room {
     disbandRoom?: (room: Room) => Promise<void>;
     onEnterPlaying?: (room: Room) => Promise<void> | void;
     onGameEnd?: (room: Room) => Promise<void> | void;
+    skipBroadcast?: boolean;
   }): Promise<void> {
     if (this.state.type === "WaitForReady") {
       const started = this.state.started;
