@@ -1,4 +1,4 @@
-# 当 push 到 main 且 package.json 的 version 比最新 tag 新时，自动：测试 → 构建 → 发布 Release + Docker
+# 当 push 到 main 且本提交的 package.json version 比上一提交更新时，自动：测试 → 构建 → 发布
 name: 版本号变更时自动发布
 
 on:
@@ -16,24 +16,41 @@ jobs:
       should_release: ${{ steps.check.outputs.should_release }}
       version: ${{ steps.check.outputs.version }}
     steps:
-      - name: 检出代码（含全部 tag）
+      - name: 检出代码（当前 + 上一提交）
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 2
 
-      - name: 检查版本是否变更
+      - name: 检查版本是否比上一提交更新
         id: check
         run: |
-          version=$(node -p "require('./package.json').version")
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          latest_tag=$(git tag -l 'v*' --sort=-v:refname | head -1 || echo "")
-          current_tag="v${version}"
-          if [[ -z "$latest_tag" ]] || [[ "$current_tag" != "$latest_tag" ]]; then
-            echo "should_release=true" >> "$GITHUB_OUTPUT"
-            echo "当前 package.json 版本: $current_tag, 最新 tag: ${latest_tag:-无}"
+          current=$(node -p "require('./package.json').version")
+          echo "version=$current" >> "$GITHUB_OUTPUT"
+
+          # 上一提交的 package.json 版本（无上一提交或读取失败则视为 0.0.0）
+          git show HEAD~1:package.json > /tmp/old-package.json 2>/dev/null || true
+          if [[ -s /tmp/old-package.json ]]; then
+            previous=$(node -p "try { require('/tmp/old-package.json').version } catch(e) { '0.0.0' }" 2>/dev/null) || previous="0.0.0"
           else
-            echo "should_release=false" >> "$GITHUB_OUTPUT"
-            echo "版本未变更，跳过发布 ($current_tag)"
+            previous="0.0.0"
+          fi
+
+          # 仅当当前版本 > 上一提交版本 时才发布（x.y.z 语义化比较）
+          node -e "
+            const parse = v => { const m = (v || '0.0.0').match(/^(\\d+)\\.(\\d+)\\.(\\d+)/); return m ? [+m[1], +m[2], +m[3]] : [0,0,0]; };
+            const a = parse(process.env.CURRENT), b = parse(process.env.PREVIOUS);
+            let newer = false;
+            for (let i = 0; i < 3; i++) {
+              if (a[i] > b[i]) { newer = true; break; }
+              if (a[i] < b[i]) break;
+            }
+            require('fs').appendFileSync(process.env.GITHUB_OUTPUT, 'should_release=' + newer + '\n');
+          " CURRENT="$current" PREVIOUS="$previous"
+
+          if [[ "$(grep should_release $GITHUB_OUTPUT | tail -1)" == "should_release=true" ]]; then
+            echo "当前提交版本: $current > 上一提交: $previous，触发发布"
+          else
+            echo "当前 $current 未高于上一提交 $previous，跳过发布"
           fi
 
   test:
