@@ -1,7 +1,6 @@
 # Phira MP Typescript
 
 Phira MP 的 Typescript 实现，目前正在逐步完善，还请多多包涵
-> 注：本项目参考了 [Phira MP Rust](https://github.com/TeamFlos/Phira-MP) 网络协议实现，感谢 TeamFlos 团队的贡献
 
 > [!TIP]
 > 本项目由各种AI工具开发，存在一定的问题，见谅，如有更好的实现欢迎 PR<br>
