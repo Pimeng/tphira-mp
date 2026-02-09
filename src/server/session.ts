@@ -325,28 +325,7 @@ export class Session {
       await this.state.mutex.runExclusive(async () => {
         this.state.users.delete(user.id);
       });
-      const shouldDrop = await room.onUserLeave({
-        user,
-        usersById: (id) => this.state.users.get(id),
-        broadcast: (cmd) => this.broadcastRoom(room, cmd),
-        broadcastToMonitors: (cmd) => this.broadcastRoomMonitors(room, cmd),
-        pickRandomUserId: (ids) => pickRandom(ids),
-        lang: this.state.serverLang,
-        logger: this.state.logger,
-        onEnterPlaying: async (r) => {
-          if (!r.chart) return;
-          if (this.state.replayEnabled && r.replayEligible) await this.state.replayRecorder.startRoom(r.id, r.chart.id, r.userIds());
-        },
-        onGameEnd: async (r) => {
-          await this.state.replayRecorder.endRoom(r.id);
-        }
-      });
-      if (shouldDrop) {
-        this.state.logger.log("INFO", tl(this.state.serverLang, "log-room-recycled", { room: room.id }), undefined, { userId: user.id });
-        await this.state.mutex.runExclusive(async () => {
-          this.state.rooms.delete(room.id);
-        });
-      }
+      await this.handleUserLeaveRoom(user, room);
       return;
     }
 
@@ -361,30 +340,34 @@ export class Session {
         await this.state.mutex.runExclusive(async () => {
           this.state.users.delete(user.id);
         });
-        const shouldDrop = await room2.onUserLeave({
-          user,
-          usersById: (id) => this.state.users.get(id),
-          broadcast: (cmd) => this.broadcastRoom(room2, cmd),
-          broadcastToMonitors: (cmd) => this.broadcastRoomMonitors(room2, cmd),
-          pickRandomUserId: (ids) => pickRandom(ids),
-          lang: this.state.serverLang,
-          logger: this.state.logger,
-          onEnterPlaying: async (r) => {
-            if (!r.chart) return;
-            if (this.state.replayEnabled && r.replayEligible) await this.state.replayRecorder.startRoom(r.id, r.chart.id, r.userIds());
-          },
-          onGameEnd: async (r) => {
-            await this.state.replayRecorder.endRoom(r.id);
-          }
-        });
-        if (shouldDrop) {
-          this.state.logger.log("INFO", tl(this.state.serverLang, "log-room-recycled", { room: room2.id }), undefined, { userId: user.id });
-          await this.state.mutex.runExclusive(async () => {
-            this.state.rooms.delete(room2.id);
-          });
-        }
+        await this.handleUserLeaveRoom(user, room2);
       })();
     }, 10_000);
+  }
+
+  private async handleUserLeaveRoom(user: User, room: Room): Promise<void> {
+    const shouldDrop = await room.onUserLeave({
+      user,
+      usersById: (id) => this.state.users.get(id),
+      broadcast: (cmd) => this.broadcastRoom(room, cmd),
+      broadcastToMonitors: (cmd) => this.broadcastRoomMonitors(room, cmd),
+      pickRandomUserId: (ids) => pickRandom(ids),
+      lang: this.state.serverLang,
+      logger: this.state.logger,
+      onEnterPlaying: async (r) => {
+        if (!r.chart) return;
+        if (this.state.replayEnabled && r.replayEligible) await this.state.replayRecorder.startRoom(r.id, r.chart.id, r.userIds());
+      },
+      onGameEnd: async (r) => {
+        await this.state.replayRecorder.endRoom(r.id);
+      }
+    });
+    if (shouldDrop) {
+      this.state.logger.log("INFO", tl(this.state.serverLang, "log-room-recycled", { room: room.id }), undefined, { userId: user.id });
+      await this.state.mutex.runExclusive(async () => {
+        this.state.rooms.delete(room.id);
+      });
+    }
   }
 
   private async process(cmd: ClientCommand): Promise<ServerCommand | null> {

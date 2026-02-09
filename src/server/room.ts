@@ -144,7 +144,7 @@ export class Room {
     }
 
     await this.checkAllReady(opts);
-    return false;
+    return this.users.length === 0 && this.monitors.length === 0;
   }
 
   resetGameTime(usersById: (id: number) => User | undefined): void {
