@@ -22,8 +22,8 @@ Phira MP 的 Typescript 实现，目前正在逐步完善，还请多多包涵
 
 镜像托管在 GHCR：
 
-- `ghcr.io/pimeng/phira-mp-ts` <br>
-- 镜像 -> `ghcr.1ms.run/pimeng/phira-mp-ts` <br>
+- `ghcr.io/pimeng/tphira-mp` <br>
+- 镜像 -> `ghcr.1ms.run/pimeng/tphira-mp` <br>
 
 建议优先使用镜像源而并非 ghcr.io
 
@@ -129,8 +129,8 @@ pnpm run package:sea
 ## 🔭 本项目长期远景
 
 - [x] 谱面录制功能
-- [ ] 谱面回放播放客户端/网页端
 - [x] 完善协议层，完整适配原版 Phira 客户端
+- [ ] 谱面回放播放客户端/网页端
 - [ ] 完善服务端，添加更多功能
 - [ ] 等待~~画饼~~添加
 
