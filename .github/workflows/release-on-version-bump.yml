@@ -150,13 +150,20 @@ jobs:
         id: notes
         shell: bash
         run: |
-          PREVIOUS_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          # 获取最新的上一个 tag（精确匹配 v 前缀）
+          PREVIOUS_TAG=$(git tag -l 'v*' --sort=-version:refname --merged HEAD | tail -n +2 | head -n 1 2>/dev/null || echo "")
           
           if [ -z "$PREVIOUS_TAG" ]; then
+            # 没有任何 tag，获取所有提交
             COMMITS=$(git log --pretty=format:"%s")
+            echo "未找到上一个 tag，读取所有提交"
           else
+            # 从上一个 tag 到当前提交的所有提交
             COMMITS=$(git log ${PREVIOUS_TAG}..HEAD --pretty=format:"%s")
+            echo "从 ${PREVIOUS_TAG} 到 HEAD 读取提交"
           fi
+          
+          echo "提交列表：$COMMITS"
           
           # 初始化分类
           FEATURES=""
