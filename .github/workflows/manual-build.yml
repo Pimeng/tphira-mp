@@ -91,17 +91,101 @@ jobs:
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: 下载压缩包
         uses: actions/download-artifact@v4
         with:
           path: artifacts
 
+      - name: 生成自定义 Release Notes
+        id: notes
+        shell: bash
+        run: |
+          # 获取最新的上一个 tag（精确匹配 v 前缀）
+          PREVIOUS_TAG=$(git tag -l 'v*' --sort=-version:refname --merged HEAD | tail -n +2 | head -n 1 2>/dev/null || echo "")
+          
+          if [ -z "$PREVIOUS_TAG" ]; then
+            # 没有任何 tag，获取所有提交
+            COMMITS=$(git log --pretty=format:"%s")
+            echo "未找到上一个 tag，读取所有提交"
+          else
+            # 从上一个 tag 到当前提交的所有提交
+            COMMITS=$(git log ${PREVIOUS_TAG}..HEAD --pretty=format:"%s")
+            echo "从 ${PREVIOUS_TAG} 到 HEAD 读取提交"
+          fi
+          
+          echo "提交列表：$COMMITS"
+          
+          # 初始化分类
+          FEATURES=""
+          FIXES=""
+          IMPROVEMENTS=""
+          OTHERS=""
+          
+          # 分类处理每个 commit
+          while IFS= read -r line; do
+            # 跳过空行
+            [[ -z "$line" ]] && continue
+            
+            if [[ $line =~ ^feat(\(.*\))?:\ (.*) ]]; then
+              FEATURES+="* ${BASH_REMATCH[2]}"$'\n'
+            elif [[ $line =~ ^fix(\(.*\))?:\ (.*) ]]; then
+              FIXES+="* ${BASH_REMATCH[2]}"$'\n'
+            elif [[ $line =~ ^(perf|refactor|improvement|chore)(\(.*\))?:\ (.*) ]]; then
+              IMPROVEMENTS+="* ${BASH_REMATCH[3]}"$'\n'
+            elif [[ ! $line =~ ^(docs|test|ci)(\(.*\))?:\ (.*) ]]; then
+              # 不忽略任何其他格式的提交，只忽略 docs/test/ci
+              if [[ ! -z "$line" ]]; then
+                OTHERS+="* $line"$'\n'
+              fi
+            fi
+          done <<< "$COMMITS"
+          
+          # 生成 Release Notes
+          NOTES="## 更新"$'\n'
+          
+          if [ -n "$FEATURES" ]; then
+            NOTES+="### ✨ 新增"$'\n'
+            NOTES+="$FEATURES"
+          fi
+          
+          if [ -n "$FIXES" ]; then
+            NOTES+="### 🐛 修复"$'\n'
+            NOTES+="$FIXES"
+          fi
+          
+          if [ -n "$IMPROVEMENTS" ]; then
+            NOTES+="### 🔄 改进"$'\n'
+            NOTES+="$IMPROVEMENTS"
+          fi
+          
+          if [ -n "$OTHERS" ]; then
+            NOTES+="### 📝 其他"$'\n'
+            NOTES+="$OTHERS"
+          fi
+          
+          NOTES+="***"$'\n'
+          NOTES+="完整更新日志"
+          
+          echo "release_notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: 获取当前版本
+        id: version
+        shell: bash
+        run: |
+          version=$(node -p "require('./package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
       - name: 发布到 Release
         uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/**/*
-          generate_release_notes: true
+          tag_name: v${{ steps.version.outputs.version }}
+          files: artifacts/**/*.zip
+          body: ${{ steps.notes.outputs.release_notes }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

@@ -16,10 +16,10 @@ jobs:
       should_release: ${{ steps.check.outputs.should_release }}
       version: ${{ steps.check.outputs.version }}
     steps:
-      - name: 检出代码（当前 + 上一提交）
+      - name: 检出代码（当前 + 完整历史用于生成 Release Notes）
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
 
       - name: 检查版本是否比上一提交更新
         id: check
@@ -145,6 +145,8 @@ jobs:
 
       - name: 检出代码
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: 生成自定义 Release Notes
         id: notes
@@ -173,14 +175,20 @@ jobs:
           
           # 分类处理每个 commit
           while IFS= read -r line; do
+            # 跳过空行
+            [[ -z "$line" ]] && continue
+            
             if [[ $line =~ ^feat(\(.*\))?:\ (.*) ]]; then
               FEATURES+="* ${BASH_REMATCH[2]}"$'\n'
             elif [[ $line =~ ^fix(\(.*\))?:\ (.*) ]]; then
               FIXES+="* ${BASH_REMATCH[2]}"$'\n'
-            elif [[ $line =~ ^(perf|refactor|improvement)(\(.*\))?:\ (.*) ]]; then
+            elif [[ $line =~ ^(perf|refactor|improvement|chore)(\(.*\))?:\ (.*) ]]; then
               IMPROVEMENTS+="* ${BASH_REMATCH[3]}"$'\n'
-            elif [[ ! $line =~ ^(chore|docs|test|ci)(\(.*\))?:\ (.*) ]]; then
-              OTHERS+="* $line"$'\n'
+            elif [[ ! $line =~ ^(docs|test|ci)(\(.*\))?:\ (.*) ]]; then
+              # 不忽略任何其他格式的提交，只忽略 docs/test/ci
+              if [[ ! -z "$line" ]]; then
+                OTHERS+="* $line"$'\n'
+              fi
             fi
           done <<< "$COMMITS"
           
@@ -218,7 +226,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.check-version.outputs.version }}
-          files: artifacts/**/*
+          files: artifacts/**/*.zip
           body: ${{ steps.notes.outputs.release_notes }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
