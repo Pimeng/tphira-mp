@@ -152,6 +152,9 @@ jobs:
         id: notes
         shell: bash
         run: |
+          # 从远程获取所有 tag
+          git fetch --tags --force
+          
           # 获取最新的上一个 tag（精确匹配 v 前缀）
           PREVIOUS_TAG=$(git tag -l 'v*' --sort=-version:refname --merged HEAD | tail -n +2 | head -n 1 2>/dev/null || echo "")
           
@@ -224,7 +227,13 @@ jobs:
 
       - name: 列出 artifacts 目录结构
         shell: bash
-        run: find artifacts -type f -name "*.zip" | head -20
+        run: |
+          if [ -d "artifacts" ]; then
+            find artifacts -type f -name "*.zip" | head -20
+          else
+            echo "No artifacts directory found. Build may have failed."
+            exit 1
+          fi
 
       - name: 发布到 Release（并创建 tag）
         uses: softprops/action-gh-release@v2
