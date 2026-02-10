@@ -1,5 +1,6 @@
 import { mkdirSync, createWriteStream, type WriteStream } from "node:fs";
 import { join } from "node:path";
+import { RateLimiter } from "./rateLimiter.js";
 
 export type LogLevel = "DEBUG" | "INFO" | "MARK" | "WARN" | "ERROR";
 
@@ -11,7 +12,7 @@ const LEVEL_WEIGHT: Record<LogLevel, number> = {
   ERROR: 40
 };
 
-export type LogContext = { userId?: number };
+
 
 export type LoggerOptions = {
   logsDir?: string;
@@ -19,7 +20,11 @@ export type LoggerOptions = {
   consoleMinLevel?: LogLevel;
   /** 测试账号 ID：当 context.userId 在此列表中且 minLevel 非 DEBUG 时，不写入日志文件 */
   testAccountIds?: number[];
+  /** 启用日志限流和IP黑名单 */
+  enableRateLimiting?: boolean;
 };
+
+export type LogContext = { userId?: number; ip?: string };
 
 function pad2(n: number): string {
   return String(n).padStart(2, "0");
@@ -64,6 +69,7 @@ export class Logger {
   private readonly consoleMinLevel: LogLevel;
   private readonly useColor: boolean;
   private readonly testAccountIds: ReadonlySet<number>;
+  private readonly rateLimiter: RateLimiter | null;
 
   private currentDateKey: string | null = null;
   private stream: WriteStream | null = null;
@@ -74,6 +80,7 @@ export class Logger {
     this.consoleMinLevel = options.consoleMinLevel ?? parseLevel(process.env.CONSOLE_LOG_LEVEL, "INFO");
     this.useColor = shouldUseColor();
     this.testAccountIds = new Set(options.testAccountIds ?? []);
+    this.rateLimiter = options.enableRateLimiting ? new RateLimiter() : null;
 
     mkdirSync(this.logsDir, { recursive: true });
   }
@@ -98,9 +105,29 @@ export class Logger {
     this.write("ERROR", message, meta);
   }
 
-  /** 带上下文的日志：当 context.userId 为测试账号且全局非 DEBUG 时不写入文件 */
+  /** 带上下文的日志：当 context.userId 为测试账号且全局非 DEBUG 时不写入文件；当启用限流且IP被限流时，连接日志不输出 */
   log(level: LogLevel, message: string, meta?: Record<string, unknown>, context?: LogContext): void {
     this.write(level, message, meta, context);
+  }
+
+  /** 获取当前黑名单中的IP列表 */
+  getBlacklistedIps(): Array<{ ip: string; expiresIn: number }> {
+    return this.rateLimiter?.getBlacklistedIps() ?? [];
+  }
+
+  /** 手动将IP从黑名单中移除 */
+  removeFromBlacklist(ip: string): void {
+    this.rateLimiter?.removeFromBlacklist(ip);
+  }
+
+  /** 清空所有黑名单 */
+  clearBlacklist(): void {
+    this.rateLimiter?.clearBlacklist();
+  }
+
+  /** 获取当前日志频率（条/秒） */
+  getCurrentRate(): number {
+    return this.rateLimiter?.getCurrentRate() ?? 0;
   }
 
   close(): void {
@@ -111,6 +138,14 @@ export class Logger {
 
   private write(level: LogLevel, message: string, meta?: Record<string, unknown>, context?: LogContext): void {
     if (LEVEL_WEIGHT[level] < LEVEL_WEIGHT[this.minLevel]) return;
+
+    // 检查是否应该跳过连接日志（限流）
+    const isConnectionLog = message.includes("log-new-connection") || message.includes("log-handshake");
+    if (isConnectionLog && this.rateLimiter && context?.ip) {
+      if (!this.rateLimiter.shouldLogConnection(context.ip)) {
+        return; // 跳过此日志，既不输出到控制台也不写入文件
+      }
+    }
 
     const now = new Date();
     const dateKey = formatLocalDateKey(now);

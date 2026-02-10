@@ -83,7 +83,6 @@ jobs:
             PHIRA_MP_VERSION=${{ steps.meta.outputs.version }}
           pull: true
           no-cache: true
-          cleanup: true
 
       - name: 清理构建缓存
         if: always()

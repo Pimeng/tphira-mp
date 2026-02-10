@@ -1,0 +1,34 @@
+changelog:
+  exclude:
+    labels:
+      - ignore-for-release
+    authors:
+      - dependabot
+  categories:
+    - title: ✨ 新增
+      labels:
+        - feature
+        - enhancement
+      title_prefix: "feat"
+    - title: 🐛 修复
+      labels:
+        - bug
+        - fix
+      title_prefix: "fix"
+    - title: 🔄 改进
+      labels:
+        - improvement
+        - performance
+      title_prefix: "refactor|perf"
+    - title: 📚 文档
+      labels:
+        - documentation
+      title_prefix: "docs"
+    - title: 🧪 测试
+      labels:
+        - test
+      title_prefix: "test"
+    - title: 📦 其他更新
+      labels:
+        - chore
+      title_prefix: "chore"

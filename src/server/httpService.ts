@@ -716,6 +716,37 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           return;
         }
 
+        // IP黑名单管理接口
+        if (req.method === "GET" && url.pathname === "/admin/ip-blacklist") {
+          const blacklist = state.logger.getBlacklistedIps();
+          writeJson(200, { ok: true, blacklist });
+          return;
+        }
+
+        if (req.method === "POST" && url.pathname === "/admin/ip-blacklist/remove") {
+          const body = await readJson();
+          const ip = typeof (body as any)?.ip === "string" ? String((body as any).ip).trim() : "";
+          if (!ip) {
+            writeJson(400, { ok: false, error: "bad-ip" });
+            return;
+          }
+          state.logger.removeFromBlacklist(ip);
+          writeJson(200, { ok: true });
+          return;
+        }
+
+        if (req.method === "POST" && url.pathname === "/admin/ip-blacklist/clear") {
+          state.logger.clearBlacklist();
+          writeJson(200, { ok: true });
+          return;
+        }
+
+        if (req.method === "GET" && url.pathname === "/admin/log-rate") {
+          const rate = state.logger.getCurrentRate();
+          writeJson(200, { ok: true, rate });
+          return;
+        }
+
         writeJson(404, { ok: false, error: "not-found" });
         return;
       }

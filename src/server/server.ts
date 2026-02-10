@@ -201,7 +201,8 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
   const mergedCfg = mergeConfig(mergeConfig(fileCfg, envCfg), cliCfg);
   const logger = new Logger({
     logsDir: paths.logsDir,
-    testAccountIds: mergedCfg.test_account_ids ?? [1739989]
+    testAccountIds: mergedCfg.test_account_ids ?? [1739989],
+    enableRateLimiting: true
   });
   const serverName = mergedCfg.server_name || "Phira MP";
   const adminDataPath = mergedCfg.admin_data_path ?? paths.adminDataPath;
@@ -215,10 +216,11 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
 
   const server = net.createServer(async (socket) => {
     const id = newUuid();
-    logger.debug(tl(state.serverLang, "log-new-connection", {
+    const remoteIp = socket.remoteAddress ?? "unknown";
+    logger.log("DEBUG", tl(state.serverLang, "log-new-connection", {
       id,
-      remote: `${socket.remoteAddress ?? "unknown"}:${socket.remotePort ?? "unknown"}`
-    }));
+      remote: `${remoteIp}:${socket.remotePort ?? "unknown"}`
+    }), undefined, { ip: remoteIp });
     const session = new Session({ id, socket, state });
 
     try {
@@ -234,7 +236,7 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
 
       session.bindStream(stream);
       state.sessions.set(id, session);
-      logger.debug(tl(state.serverLang, "log-handshake-ok", { id, version: String(stream.version) }));
+      logger.log("DEBUG", tl(state.serverLang, "log-handshake-ok", { id, version: String(stream.version) }), undefined, { ip: remoteIp });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       const reason = (() => {
@@ -246,7 +248,7 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
           return msg;
         }
       })();
-      logger.warn(tl(state.serverLang, "log-handshake-failed", { id, reason }));
+      logger.log("WARN", tl(state.serverLang, "log-handshake-failed", { id, reason }), undefined, { ip: remoteIp });
       socket.destroy();
     }
   });

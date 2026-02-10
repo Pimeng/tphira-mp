@@ -143,12 +143,76 @@ jobs:
         with:
           path: artifacts
 
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 生成自定义 Release Notes
+        id: notes
+        shell: bash
+        run: |
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          
+          if [ -z "$PREVIOUS_TAG" ]; then
+            COMMITS=$(git log --pretty=format:"%s")
+          else
+            COMMITS=$(git log ${PREVIOUS_TAG}..HEAD --pretty=format:"%s")
+          fi
+          
+          # 初始化分类
+          FEATURES=""
+          FIXES=""
+          IMPROVEMENTS=""
+          OTHERS=""
+          
+          # 分类处理每个 commit
+          while IFS= read -r line; do
+            if [[ $line =~ ^feat(\(.*\))?:\ (.*) ]]; then
+              FEATURES+="* ${BASH_REMATCH[2]}"$'\n'
+            elif [[ $line =~ ^fix(\(.*\))?:\ (.*) ]]; then
+              FIXES+="* ${BASH_REMATCH[2]}"$'\n'
+            elif [[ $line =~ ^(perf|refactor|improvement)(\(.*\))?:\ (.*) ]]; then
+              IMPROVEMENTS+="* ${BASH_REMATCH[3]}"$'\n'
+            elif [[ ! $line =~ ^(chore|docs|test|ci)(\(.*\))?:\ (.*) ]]; then
+              OTHERS+="* $line"$'\n'
+            fi
+          done <<< "$COMMITS"
+          
+          # 生成 Release Notes
+          NOTES="## 更新"$'\n'
+          
+          if [ -n "$FEATURES" ]; then
+            NOTES+="### ✨ 新增"$'\n'
+            NOTES+="$FEATURES"
+          fi
+          
+          if [ -n "$FIXES" ]; then
+            NOTES+="### 🐛 修复"$'\n'
+            NOTES+="$FIXES"
+          fi
+          
+          if [ -n "$IMPROVEMENTS" ]; then
+            NOTES+="### 🔄 改进"$'\n'
+            NOTES+="$IMPROVEMENTS"
+          fi
+          
+          if [ -n "$OTHERS" ]; then
+            NOTES+="### 📝 其他"$'\n'
+            NOTES+="$OTHERS"
+          fi
+          
+          NOTES+="***"$'\n'
+          NOTES+="完整更新日志"
+          
+          echo "release_notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
       - name: 发布到 Release（并创建 tag）
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.check-version.outputs.version }}
           files: artifacts/**/*
-          generate_release_notes: true
+          body: ${{ steps.notes.outputs.release_notes }}
 
   docker:
     needs: [check-version, test]
@@ -196,7 +260,6 @@ jobs:
             PHIRA_MP_VERSION=${{ steps.meta.outputs.version }}
           pull: true
           no-cache: true
-          cleanup: true
 
       - name: 清理构建缓存
         if: always()
