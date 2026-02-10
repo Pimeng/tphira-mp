@@ -1,10 +1,10 @@
-name: 构建并推送 Docker 镜像
+name: 手动构建 Release 和 Docker
 
 on:
   workflow_dispatch:  # 仅手动触发，自动构建请改 package.json 版本号并 push 到 main
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 jobs:
@@ -30,12 +30,80 @@ jobs:
       - name: 运行测试
         run: pnpm test
 
-  docker:
+  build:
     needs: [test]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: 设置 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: "9.15.4"
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 构建可执行文件
+        run: pnpm run package:sea
+
+      - name: 制作压缩包（Win）
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $os = "${{ runner.os }}".ToLowerInvariant()
+          $arch = "${{ runner.arch }}".ToLowerInvariant()
+          $name = "phira-mp-$os-$arch.zip"
+          if (Test-Path $name) { Remove-Item $name -Force }
+          Compress-Archive -Path release\* -DestinationPath $name
+
+      - name: 制作压缩包（Linux/macOS）
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          os="$(printf "%s" "${{ runner.os }}" | tr '[:upper:]' '[:lower:]')"
+          arch="$(printf "%s" "${{ runner.arch }}" | tr '[:upper:]' '[:lower:]')"
+          name="phira-mp-${os}-${arch}.zip"
+          rm -f "$name"
+          (cd release && zip -r "../$name" .)
+
+      - name: 上传压缩包
+        uses: actions/upload-artifact@v4
+        with:
+          name: phira-mp-${{ runner.os }}-${{ runner.arch }}
+          path: |
+            phira-mp-*.zip
+
+  release-and-docker:
+    needs: [build]
     runs-on: ubuntu-latest
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
+
+      - name: 下载压缩包
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: 发布到 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 设置 Buildx
         uses: docker/setup-buildx-action@v3
@@ -51,8 +119,6 @@ jobs:
         id: meta
         shell: bash
         env:
-          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-          REF_NAME: ${{ github.ref_name }}
           REPOSITORY: ${{ github.repository }}
         run: |
           repo_lc="${REPOSITORY,,}"
@@ -72,7 +138,7 @@ jobs:
           printf "tags=%s\n" "$(IFS=, ; echo "${tags[*]}")" >> "$GITHUB_OUTPUT"
           printf "version=%s\n" "$version_tag" >> "$GITHUB_OUTPUT"
 
-      - name: 构建并推送
+      - name: 构建并推送 Docker 镜像
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -90,4 +156,3 @@ jobs:
         run: |
           docker builder prune -af || true
           docker system prune -af || true
-
