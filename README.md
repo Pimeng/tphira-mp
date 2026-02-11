@@ -121,6 +121,12 @@ pnpm run package:sea
 
 请参考 [此文档](api.md)
 
+## 🎮 服务器控制台命令
+
+服务器运行时支持在控制台输入命令进行管理，类似于 Minecraft 服务器
+
+详细命令列表和使用说明请参考 [命令文档](commands.md)
+
 ##  🌍 公共访问前端（需要自备API地址）
 
 https://admin.phira.link/

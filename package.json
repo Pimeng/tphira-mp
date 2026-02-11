@@ -2,7 +2,7 @@
   "name": "phira-mp-nodejs",
   "author": "Pimeng",
   "license": "AGPL-3.0",
-  "version": "0.8",
+  "version": "1.0",
   "type": "module",
   "engines": {
     "node": ">=22"

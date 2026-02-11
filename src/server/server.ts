@@ -17,6 +17,8 @@ import { startHttpService, type HttpService } from "./httpService.js";
 import { tl } from "./l10n.js";
 import { startReplayCleanup } from "./replayCleanup.js";
 import { parseProxyProtocol } from "./proxyProtocol.js";
+import { startCli } from "./cli.js";
+import type { RoomId } from "../common/roomId.js";
 
 export type StartServerOptions = { host?: string; port?: number; config?: Partial<ServerConfig> };
 
@@ -309,6 +311,23 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
   }
   logger.mark(tl(state.serverLang, "log-server-name", { name: serverName }));
 
+  // Helper functions for CLI
+  const broadcastRoomAll = async (roomId: RoomId, cmd: ServerCommand): Promise<void> => {
+    const room = state.rooms.get(roomId);
+    if (!room) return;
+    const ids = [...room.userIds(), ...room.monitorIds()];
+    const tasks: Promise<void>[] = [];
+    for (const id of ids) {
+      const u = state.users.get(id);
+      if (u) tasks.push(u.trySend(cmd));
+    }
+    await Promise.allSettled(tasks);
+  };
+  const pickRandomUserId = (ids: number[]): number | null => ids[0] ?? null;
+
+  // Start CLI
+  const stopCli = startCli({ state, logger, broadcastRoomAll, pickRandomUserId });
+
   return {
     server,
     http: httpService ?? undefined,
@@ -317,6 +336,7 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
     address: () => server.address() as net.AddressInfo,
     close: async () => {
       try {
+        stopCli();
         if (httpService) await httpService.close();
         await new Promise<void>((resolve, reject) => {
           server.close((err) => {
