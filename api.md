@@ -248,6 +248,44 @@ Body：
 
 - Body 缺少 `enabled`：`400 { "ok": false, "error": "bad-enabled" }`
 
+### 1.3) 房间创建开关（默认开启）
+
+查询当前状态：
+
+`GET /admin/room-creation/config`
+
+返回示例：
+
+```json
+{ "ok": true, "enabled": true }
+```
+
+开启/关闭：
+
+`POST /admin/room-creation/config`
+
+Body：
+
+```json
+{ "enabled": false }
+```
+
+成功：
+
+```json
+{ "ok": true, "enabled": false }
+```
+
+说明：
+
+- `enabled=false` 会禁止所有玩家创建新房间（已存在的房间不受影响）
+- `enabled=true` 恢复允许创建房间
+- 当房间创建被禁用时，玩家尝试创建房间会收到错误提示
+
+常见错误：
+
+- Body 缺少 `enabled`：`400 { "ok": false, "error": "bad-enabled" }`
+
 ### 2) 查询任意玩家在哪个房间
 
 `GET /admin/users/:id`
@@ -432,5 +470,8 @@ curl -H "X-Admin-Token: $ADMIN_TOKEN" -H "Content-Type: application/json" \
 curl -H "X-Admin-Token: $ADMIN_TOKEN" -H "Content-Type: application/json" \
   -d '{"message":"服务器将在10分钟后重启维护"}' \
   "$HOST/admin/broadcast"
-```
 
+curl -H "X-Admin-Token: $ADMIN_TOKEN" -H "Content-Type: application/json" \
+  -d '{"enabled":false}' \
+  "$HOST/admin/room-creation/config"
+```

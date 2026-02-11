@@ -45,6 +45,7 @@ auth-repeated-authenticate = Repeated authenticate
 auth-banned = You are banned from this server
 
 room-already-in-room = Already in a room
+room-creation-disabled = Room creation has been disabled by administrator
 room-not-found = Room not found
 room-no-room = Not in a room
 room-banned = You are banned from room { $id }

@@ -45,6 +45,7 @@ auth-repeated-authenticate = 重复认证
 auth-banned = 你已被封禁，无法进入服务器
 
 room-already-in-room = 已在房间中
+room-creation-disabled = 房间创建功能已被管理员禁用
 room-not-found = 房间不存在
 room-no-room = 你不在房间中
 room-banned = 你已被禁止进入房间 { $id }

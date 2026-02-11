@@ -417,6 +417,7 @@ export class Session {
       }
       case "CreateRoom":
         return { type: "CreateRoom", result: await errToStr(async () => {
+          if (!this.state.roomCreationEnabled) throw new Error(user.lang.format("room-creation-disabled"));
           if (user.room) throw new Error(user.lang.format("room-already-in-room"));
           const id = cmd.id;
           await this.state.mutex.runExclusive(async () => {

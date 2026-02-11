@@ -22,6 +22,7 @@ export class ServerState {
   readonly serverLang: Language;
   readonly adminDataPath: string;
   replayEnabled: boolean;
+  roomCreationEnabled: boolean;
 
   readonly sessions = new Map<string, Session>();
   readonly users = new Map<number, User>();
@@ -40,6 +41,7 @@ export class ServerState {
     this.serverLang = new Language(process.env.PHIRA_MP_LANG?.trim() || process.env.LANG?.trim() || "");
     this.adminDataPath = adminDataPath;
     this.replayEnabled = Boolean(config.replay_enabled);
+    this.roomCreationEnabled = true;
     this.replayRecorder = new ReplayRecorder(defaultReplayBaseDir());
   }
 

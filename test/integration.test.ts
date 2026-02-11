@@ -941,6 +941,67 @@ describe("端到端（mock 远端 HTTP）", () => {
     }
   }, 30000);
 
+  test("管理员 API：禁用房间创建功能", async () => {
+    const prev = process.env.ADMIN_TOKEN;
+    process.env.ADMIN_TOKEN = "test-token";
+
+    const running = await startServer({ port: 0, config: { monitors: [200], http_service: true, http_port: 0 } });
+    const port = running.address().port;
+    const httpPort = running.http!.address().port;
+
+    const alice = await Client.connect("127.0.0.1", port);
+
+    try {
+      await alice.authenticate("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+
+      // 默认应该可以创建房间
+      await alice.createRoom("room1");
+      await alice.leaveRoom();
+
+      // 查询当前状态（应该是启用的）
+      const getResp = await originalFetch(`http://127.0.0.1:${httpPort}/admin/room-creation/config`, {
+        headers: { "X-Admin-Token": "test-token" }
+      });
+      expect(getResp.ok).toBe(true);
+      const getJson = (await getResp.json()) as any;
+      expect(getJson.ok).toBe(true);
+      expect(getJson.enabled).toBe(true);
+
+      // 禁用房间创建
+      const disableResp = await originalFetch(`http://127.0.0.1:${httpPort}/admin/room-creation/config`, {
+        method: "POST",
+        headers: { "X-Admin-Token": "test-token", "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: false })
+      });
+      expect(disableResp.ok).toBe(true);
+      const disableJson = (await disableResp.json()) as any;
+      expect(disableJson.ok).toBe(true);
+      expect(disableJson.enabled).toBe(false);
+
+      // 尝试创建房间应该失败
+      await expect(alice.createRoom("room2")).rejects.toThrow();
+
+      // 重新启用房间创建
+      const enableResp = await originalFetch(`http://127.0.0.1:${httpPort}/admin/room-creation/config`, {
+        method: "POST",
+        headers: { "X-Admin-Token": "test-token", "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: true })
+      });
+      expect(enableResp.ok).toBe(true);
+      const enableJson = (await enableResp.json()) as any;
+      expect(enableJson.ok).toBe(true);
+      expect(enableJson.enabled).toBe(true);
+
+      // 现在应该可以创建房间了
+      await alice.createRoom("room3");
+    } finally {
+      await alice.close();
+      await running.close();
+      if (prev === undefined) delete process.env.ADMIN_TOKEN;
+      else process.env.ADMIN_TOKEN = prev;
+    }
+  });
+
   test("回放录制默认关闭：不落盘", async () => {
     await rm(join(process.cwd(), "record"), { recursive: true, force: true });
 

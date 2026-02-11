@@ -318,6 +318,27 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           return;
         }
 
+        if (req.method === "GET" && url.pathname === "/admin/room-creation/config") {
+          writeJson(200, { ok: true, enabled: state.roomCreationEnabled });
+          return;
+        }
+
+        if (req.method === "POST" && url.pathname === "/admin/room-creation/config") {
+          const body = await readJson();
+          const raw = (body ?? {}) as { enabled?: unknown };
+          if (raw.enabled === undefined) {
+            writeJson(400, { ok: false, error: "bad-enabled" });
+            return;
+          }
+          const enabled = Boolean(raw.enabled);
+          await state.mutex.runExclusive(async () => {
+            state.roomCreationEnabled = enabled;
+          });
+
+          writeJson(200, { ok: true, enabled });
+          return;
+        }
+
         if (req.method === "POST" && url.pathname === "/admin/replay/config") {
           const body = await readJson();
           const raw = (body ?? {}) as { enabled?: unknown };
