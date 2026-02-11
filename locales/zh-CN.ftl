@@ -146,3 +146,5 @@ log-room-game-start-monitors = ，观战者：{ $monitors }
 log-room-game-end = 房间 “{ $room }” 对局结束（已上传：{ $uploaded }，中止：{ $aborted }）
 log-contest-game-results = 比赛房间 “{ $room }” 成绩：chart={ $chart } results={ $results } aborted={ $aborted }
 log-room-host-changed-cycle = 房间 “{ $room }” 房主变更（轮转）：{ $old } -> { $next }
+
+log-admin-broadcast = 管理员全服广播：{ $message }（发送到 { $rooms } 个房间）

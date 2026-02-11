@@ -146,3 +146,5 @@ log-room-game-start-monitors = , monitors: { $monitors }
 log-room-game-end = Room "{ $room }" game end (uploaded={ $uploaded }, aborted={ $aborted })
 log-contest-game-results = Contest room "{ $room }" results: chart={ $chart } results={ $results } aborted={ $aborted }
 log-room-host-changed-cycle = Room "{ $room }" host changed (cycle): { $old } -> { $next }
+
+log-admin-broadcast = Admin broadcast: { $message } (sent to { $rooms } rooms)

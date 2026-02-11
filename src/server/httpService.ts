@@ -718,6 +718,35 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           return;
         }
 
+        // 全服广播接口
+        if (req.method === "POST" && url.pathname === "/admin/broadcast") {
+          const body = await readJson();
+          const raw = (body ?? {}) as { message?: unknown };
+          const message = typeof raw.message === "string" ? raw.message.trim() : "";
+          if (!message) {
+            writeJson(400, { ok: false, error: "bad-message" });
+            return;
+          }
+          if (message.length > 200) {
+            writeJson(400, { ok: false, error: "message-too-long" });
+            return;
+          }
+
+          const snapshot = await state.mutex.runExclusive(async () => {
+            return [...state.rooms.keys()];
+          });
+
+          const tasks: Promise<void>[] = [];
+          for (const roomId of snapshot) {
+            tasks.push(broadcastRoomAll(roomId, { type: "Message", message: { type: "Chat", user: 0, content: message } }));
+          }
+          await Promise.allSettled(tasks);
+
+          state.logger.info(tl(state.serverLang, "log-admin-broadcast", { message, rooms: String(snapshot.length) }));
+          writeJson(200, { ok: true, rooms: snapshot.length });
+          return;
+        }
+
         // IP黑名单管理接口
         if (req.method === "GET" && url.pathname === "/admin/ip-blacklist") {
           const blacklist = state.logger.getBlacklistedIps();

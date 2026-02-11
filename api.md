@@ -331,6 +331,33 @@ Body：
 
 成功：`200 { "ok": true }`
 
+### 7) 全服广播通知
+
+`POST /admin/broadcast`
+
+Body：
+
+```json
+{ "message": "服务器将在10分钟后重启维护" }
+```
+
+说明：
+
+- 向当前所有房间发送一条系统通知（以 user=0 的聊天消息形式）
+- 消息长度限制：1-200 字符
+- 返回发送的房间数量
+
+成功：
+
+```json
+{ "ok": true, "rooms": 5 }
+```
+
+常见错误：
+
+- 消息为空：`400 { "ok": false, "error": "bad-message" }`
+- 消息过长：`400 { "ok": false, "error": "message-too-long" }`
+
 ## 比赛房间（一次性房间）
 
 比赛房间用于“白名单限制 + 手动开始 + 结算后自动解散”。此模式仅影响被设置的房间，不影响其他房间。
@@ -401,5 +428,9 @@ curl -H "X-Admin-Token: $ADMIN_TOKEN" -H "Content-Type: application/json" \
 curl -H "X-Admin-Token: $ADMIN_TOKEN" -H "Content-Type: application/json" \
   -d '{"force":false}' \
   "$HOST/admin/contest/rooms/room1/start"
+
+curl -H "X-Admin-Token: $ADMIN_TOKEN" -H "Content-Type: application/json" \
+  -d '{"message":"服务器将在10分钟后重启维护"}' \
+  "$HOST/admin/broadcast"
 ```
 
