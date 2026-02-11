@@ -26,6 +26,12 @@ export async function startHttpService(opts: { state: ServerState; host: string;
   const REPLAY_SESSION_TTL_MS = 30 * 60 * 1000;
   const replaySessions = new Map<string, { userId: number; expiresAt: number }>();
 
+  // 临时管理员TOKEN管理
+  const TEMP_TOKEN_TTL_MS = 4 * 60 * 60 * 1000; // 4小时
+  const OTP_TTL_MS = 5 * 60 * 1000; // 验证码5分钟有效
+  const tempAdminTokens = new Map<string, { ip: string; expiresAt: number; banned: boolean }>();
+  const otpSessions = new Map<string, { otp: string; expiresAt: number }>();
+
   const server = http.createServer((req, res) => {
     void (async () => {
       const lang = req.headers["accept-language"] ? new Language(String(req.headers["accept-language"])) : state.serverLang;
@@ -90,12 +96,52 @@ export async function startHttpService(opts: { state: ServerState; host: string;
         (typeof req.headers["x-admin-token"] === "string" ? req.headers["x-admin-token"] : "") ||
         (typeof req.headers.authorization === "string" ? extractBearer(req.headers.authorization) : "") ||
         (url.searchParams.get("token") ?? "");
+      
+      // 清理过期的临时TOKEN和OTP
+      const cleanupExpired = () => {
+        const now = Date.now();
+        for (const [token, data] of tempAdminTokens) {
+          if (now > data.expiresAt) tempAdminTokens.delete(token);
+        }
+        for (const [ssid, data] of otpSessions) {
+          if (now > data.expiresAt) otpSessions.delete(ssid);
+        }
+      };
+
       const requireAdmin = () => {
         const ip = getClientIp();
         if (adminBannedIps.has(ip)) {
           writeJson(401, { ok: false, error: "unauthorized" });
           return false;
         }
+        
+        // 检查临时TOKEN
+        if (reqAdminToken) {
+          cleanupExpired();
+          const tempTokenData = tempAdminTokens.get(reqAdminToken);
+          if (tempTokenData) {
+            if (tempTokenData.banned) {
+              writeJson(401, { ok: false, error: "token-expired" });
+              return false;
+            }
+            if (Date.now() > tempTokenData.expiresAt) {
+              tempAdminTokens.delete(reqAdminToken);
+              writeJson(401, { ok: false, error: "token-expired" });
+              return false;
+            }
+            // 验证IP是否匹配
+            if (tempTokenData.ip !== ip) {
+              // IP不匹配，封禁该TOKEN但不显式告知
+              tempTokenData.banned = true;
+              writeJson(401, { ok: false, error: "token-expired" });
+              return false;
+            }
+            // 临时TOKEN验证通过
+            return true;
+          }
+        }
+        
+        // 检查永久管理员TOKEN
         if (!adminToken) {
           writeJson(403, { ok: false, error: "admin-disabled" });
           return false;
@@ -307,6 +353,73 @@ export async function startHttpService(opts: { state: ServerState; host: string;
         }
 
         writeJson(200, { ok: true });
+        return;
+      }
+
+      // OTP请求端点（仅当未配置管理员TOKEN时可用）
+      if (req.method === "POST" && url.pathname === "/admin/otp/request") {
+        const adminToken = state.config.admin_token?.trim() || "";
+        if (adminToken) {
+          writeJson(403, { ok: false, error: "otp-disabled-when-token-configured" });
+          return;
+        }
+
+        cleanupExpired();
+        const ssid = newUuid();
+        const otp = newUuid().slice(0, 8); // 8位验证码
+        const expiresAt = Date.now() + OTP_TTL_MS;
+        otpSessions.set(ssid, { otp, expiresAt });
+
+        // 输出到终端（INFO级别，强制输出，不写入文件）
+        const message = `[OTP Request] 您正在尝试请求验证码登录管理员后台/API，本次请求的验证码是 ${otp}，会话ID: ${ssid}, 5分钟内有效`;
+        process.stdout.write(`\x1b[32m[${new Date().toISOString()}] [INFO] ${message}\x1b[0m\n`);
+
+        writeJson(200, { ok: true, ssid, expiresIn: OTP_TTL_MS });
+        return;
+      }
+
+      // 验证OTP并获取临时TOKEN
+      if (req.method === "POST" && url.pathname === "/admin/otp/verify") {
+        const adminToken = state.config.admin_token?.trim() || "";
+        if (adminToken) {
+          writeJson(403, { ok: false, error: "otp-disabled-when-token-configured" });
+          return;
+        }
+
+        const body = await readJson();
+        const raw = (body ?? {}) as { ssid?: unknown; otp?: unknown };
+        const ssid = typeof raw.ssid === "string" ? raw.ssid.trim() : "";
+        const otp = typeof raw.otp === "string" ? raw.otp.trim() : "";
+
+        if (!ssid || !otp) {
+          writeJson(400, { ok: false, error: "bad-request" });
+          return;
+        }
+
+        cleanupExpired();
+        const otpData = otpSessions.get(ssid);
+        if (!otpData || Date.now() > otpData.expiresAt) {
+          writeJson(401, { ok: false, error: "invalid-or-expired-otp" });
+          return;
+        }
+
+        if (otpData.otp !== otp) {
+          writeJson(401, { ok: false, error: "invalid-or-expired-otp" });
+          return;
+        }
+
+        // 验证成功，生成临时TOKEN
+        const ip = getClientIp();
+        const tempToken = newUuid();
+        const expiresAt = Date.now() + TEMP_TOKEN_TTL_MS;
+        tempAdminTokens.set(tempToken, { ip, expiresAt, banned: false });
+        otpSessions.delete(ssid); // 删除已使用的OTP
+
+        // 输出到终端
+        const message = `[Temp Token Generated] IP: ${ip}, Token: ${tempToken.slice(0, 8)}..., Valid for 4 hours`;
+        process.stdout.write(`\x1b[32m[${new Date().toISOString()}] [INFO] ${message}\x1b[0m\n`);
+
+        writeJson(200, { ok: true, token: tempToken, expiresAt, expiresIn: TEMP_TOKEN_TTL_MS });
         return;
       }
 

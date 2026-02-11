@@ -46,6 +46,7 @@ Phira MP 的 Typescript 实现，目前正在逐步完善，还请多多包涵
 - ROOM_MAX_USERS(number): 单房间最大玩家数（默认 `8`，最大 `64`）
 - PHIRA_MP_LANG(string): 服务端默认语言（默认 `zh-CN`）
 - ADMIN_TOKEN(string): 管理员接口鉴权 Token（默认 `replace_me`）
+  - 未配置时可使用 OTP（一次性验证码）方式获取临时管理员权限，详见 [API文档](api.md)
 - ADMIN_DATA_PATH(string): 管理员数据持久化路径（JSON）（默认 `./admin_data.json`）
 - ROOM_LIST_TIP(string): 登录后展示可用房间列表后追加的提示文案（可用于群宣传/查房间等，纯文本）（默认空）
 
@@ -136,6 +137,19 @@ pnpm run package:sea
 ## 🔧 API接口
 
 请参考 [此文档](api.md)
+
+### 🔐 OTP临时管理员TOKEN
+
+当未配置永久 `ADMIN_TOKEN` 时，可以使用一次性验证码（OTP）方式获取临时管理员权限：
+
+- **有效期：** OTP 5分钟，临时TOKEN 4小时
+- **安全性：** TOKEN绑定IP，自动检测异常使用
+- **使用场景：** 临时管理、应急操作、避免泄露永久TOKEN
+
+详细说明和使用示例请参考：
+- [OTP功能完整文档](docs/OTP_ADMIN_TOKEN.md)
+- [Bash示例脚本](examples/otp-admin-example.sh)
+- [PowerShell示例脚本](examples/otp-admin-example.ps1)
 
 ##  🌍 公共访问前端（需要自备API地址）
 

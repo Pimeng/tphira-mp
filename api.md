@@ -31,6 +31,70 @@
 未配置 `ADMIN_TOKEN`：返回 `403 { "ok": false, "error": "admin-disabled" }`  
 token 错误/缺失：返回 `401 { "ok": false, "error": "unauthorized" }`
 
+### 临时管理员TOKEN（OTP方式）
+
+当未配置 `ADMIN_TOKEN` 时，可以使用一次性验证码（OTP）方式获取临时管理员TOKEN。
+
+#### 1) 请求一次性验证码
+
+`POST /admin/otp/request`
+
+说明：
+- 仅当未配置 `ADMIN_TOKEN` 时可用
+- 验证码有效期：5分钟
+- 验证码会输出到服务器终端（INFO级别），不写入日志文件
+
+返回示例：
+
+```json
+{
+  "ok": true,
+  "ssid": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+  "expiresIn": 300000
+}
+```
+
+终端输出示例：
+```
+[2026-02-11T10:30:00.000Z] [INFO] [OTP Request] SSID: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx, OTP: abcd1234, Expires in 5 minutes
+```
+
+#### 2) 验证OTP并获取临时TOKEN
+
+`POST /admin/otp/verify`
+
+Body：
+
+```json
+{
+  "ssid": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+  "otp": "abcd1234"
+}
+```
+
+说明：
+- 验证成功后返回临时TOKEN，有效期4小时
+- 临时TOKEN绑定请求IP，仅该IP可使用
+- 若检测到不同IP使用同一TOKEN，该TOKEN会被封禁（但返回错误仍为"token-expired"）
+- 临时TOKEN权限与永久管理员TOKEN完全一致
+
+返回示例：
+
+```json
+{
+  "ok": true,
+  "token": "yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy",
+  "expiresAt": 1707649800000,
+  "expiresIn": 14400000
+}
+```
+
+常见错误：
+- 已配置永久TOKEN时：`403 { "ok": false, "error": "otp-disabled-when-token-configured" }`
+- 参数不合法：`400 { "ok": false, "error": "bad-request" }`
+- OTP无效或过期：`401 { "ok": false, "error": "invalid-or-expired-otp" }`
+- TOKEN过期或IP不匹配：`401 { "ok": false, "error": "token-expired" }`
+
 ## 数据持久化（封禁相关）
 
 封禁（服务器封禁 / 房间禁入）会自动落盘到 JSON 文件，启动时自动加载。
@@ -447,6 +511,8 @@ Body：
 
 ## curl 示例
 
+### 使用永久ADMIN_TOKEN
+
 以 `room1` 为例：
 
 ```bash
@@ -474,4 +540,26 @@ curl -H "X-Admin-Token: $ADMIN_TOKEN" -H "Content-Type: application/json" \
 curl -H "X-Admin-Token: $ADMIN_TOKEN" -H "Content-Type: application/json" \
   -d '{"enabled":false}' \
   "$HOST/admin/room-creation/config"
+```
+
+### 使用临时TOKEN（OTP方式）
+
+当未配置永久ADMIN_TOKEN时：
+
+```bash
+export HOST=http://127.0.0.1:12347
+
+# 1. 请求OTP（查看服务器终端获取验证码）
+curl -X POST "$HOST/admin/otp/request"
+# 返回: {"ok":true,"ssid":"xxx-xxx-xxx","expiresIn":300000}
+
+# 2. 使用SSID和OTP获取临时TOKEN
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"ssid":"xxx-xxx-xxx","otp":"abcd1234"}' \
+  "$HOST/admin/otp/verify"
+# 返回: {"ok":true,"token":"yyy-yyy-yyy","expiresAt":1707649800000,"expiresIn":14400000}
+
+# 3. 使用临时TOKEN访问管理员API（与永久TOKEN用法相同）
+export TEMP_TOKEN=yyy-yyy-yyy
+curl -H "X-Admin-Token: $TEMP_TOKEN" "$HOST/admin/rooms"
 ```
