@@ -89,6 +89,7 @@ export class Session {
   readonly id: string;
   readonly socket: net.Socket;
   readonly state: ServerState;
+  readonly remoteIp: string;
 
   private stream: Stream<ServerCommand, ClientCommand> | null = null;
   private protocolVersion: number | null = null;
@@ -102,10 +103,11 @@ export class Session {
 
   user: User | null = null;
 
-  constructor(opts: { id: string; socket: net.Socket; state: ServerState }) {
+  constructor(opts: { id: string; socket: net.Socket; state: ServerState; remoteIp?: string }) {
     this.id = opts.id;
     this.socket = opts.socket;
     this.state = opts.state;
+    this.remoteIp = opts.remoteIp ?? opts.socket.remoteAddress ?? "unknown";
 
     this.socket.on("close", () => void this.markLost());
     this.socket.on("error", () => void this.markLost());
@@ -215,12 +217,12 @@ export class Session {
         user: user.name,
         monitorSuffix,
         version: String(this.protocolVersion ?? "?")
-      }), undefined, { userId: user.id });
+      }), undefined, { userId: user.id, isConnectionLog: true });
 
       this.state.logger.log("INFO", tl(this.state.serverLang, "log-player-join", {
         user: user.name,
         monitorSuffix
-      }), undefined, { userId: user.id });
+      }), undefined, { userId: user.id, isConnectionLog: true });
 
       await this.trySend({
         type: "Message",
@@ -234,7 +236,7 @@ export class Session {
       void this.sendWelcomeExtras(user).catch(() => {});
     } catch (e) {
       const localized = this.localizeError(this.state.serverLang, e instanceof Error ? e : new Error("auth-failed"));
-      this.state.logger.warn(tl(this.state.serverLang, "log-auth-failed", { id: this.id, reason: localized }));
+      this.state.logger.log("WARN", tl(this.state.serverLang, "log-auth-failed", { id: this.id, reason: localized }), undefined, { ip: this.remoteIp, isConnectionLog: true });
       await this.trySend({ type: "Authenticate", result: err(localized) });
       this.panicked = true;
       await this.markLost();
@@ -308,7 +310,7 @@ export class Session {
     });
 
     const who = user ? tl(this.state.serverLang, "log-disconnect-user", { user: user.name }) : "";
-    this.state.logger.log("DEBUG", tl(this.state.serverLang, "log-disconnect", { id: this.id, who }), undefined, { userId: user?.id });
+    this.state.logger.log("DEBUG", tl(this.state.serverLang, "log-disconnect", { id: this.id, who }), undefined, { userId: user?.id, isConnectionLog: true });
 
     if (user && detachedUserSession && !this.preserveRoomOnLost && user.session === null) await this.dangleUser(user);
   }

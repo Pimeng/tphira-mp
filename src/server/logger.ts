@@ -106,7 +106,7 @@ export class Logger {
   }
 
   /** 带上下文的日志：当 context.userId 为测试账号且全局非 DEBUG 时不写入文件；当启用限流且IP被限流时，连接日志不输出 */
-  log(level: LogLevel, message: string, meta?: Record<string, unknown>, context?: LogContext): void {
+  log(level: LogLevel, message: string, meta?: Record<string, unknown>, context?: LogContext & { isConnectionLog?: boolean }): void {
     this.write(level, message, meta, context);
   }
 
@@ -136,11 +136,13 @@ export class Logger {
     this.currentDateKey = null;
   }
 
-  private write(level: LogLevel, message: string, meta?: Record<string, unknown>, context?: LogContext): void {
+  private write(level: LogLevel, message: string, meta?: Record<string, unknown>, context?: LogContext & { isConnectionLog?: boolean }): void {
     if (LEVEL_WEIGHT[level] < LEVEL_WEIGHT[this.minLevel]) return;
 
     // 检查是否应该跳过连接日志（限流）
-    const isConnectionLog = message.includes("log-new-connection") || message.includes("log-handshake");
+    const isConnectionLog = context?.isConnectionLog === true || 
+                           message.includes("log-new-connection") || 
+                           message.includes("log-handshake");
     if (isConnectionLog && this.rateLimiter && context?.ip) {
       if (!this.rateLimiter.shouldLogConnection(context.ip)) {
         return; // 跳过此日志，既不输出到控制台也不写入文件

@@ -256,8 +256,8 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
     logger.log("DEBUG", tl(state.serverLang, "log-new-connection", {
       id,
       remote: `${remoteIp}:${remotePort}`
-    }), undefined, { ip: remoteIp });
-    const session = new Session({ id, socket, state });
+    }), undefined, { ip: remoteIp, isConnectionLog: true });
+    const session = new Session({ id, socket, state, remoteIp });
 
     try {
       const stream = await Stream.create<ServerCommand, ClientCommand>({
@@ -272,7 +272,7 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
 
       session.bindStream(stream);
       state.sessions.set(id, session);
-      logger.log("DEBUG", tl(state.serverLang, "log-handshake-ok", { id, version: String(stream.version) }), undefined, { ip: remoteIp });
+      logger.log("DEBUG", tl(state.serverLang, "log-handshake-ok", { id, version: String(stream.version) }), undefined, { ip: remoteIp, isConnectionLog: true });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       const reason = (() => {
@@ -284,7 +284,7 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
           return msg;
         }
       })();
-      logger.log("WARN", tl(state.serverLang, "log-handshake-failed", { id, reason }), undefined, { ip: remoteIp });
+      logger.log("WARN", tl(state.serverLang, "log-handshake-failed", { id, reason }), undefined, { ip: remoteIp, isConnectionLog: true });
       socket.destroy();
     }
   });
