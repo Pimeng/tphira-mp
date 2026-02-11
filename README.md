@@ -2,9 +2,9 @@
 
 Phira MP 的 Typescript 实现，目前正在逐步完善，还请多多包涵
 
-> [!TIP]
+> [!NOTE]
 > 本项目由各种AI工具开发，存在一定的问题，见谅，如有更好的实现欢迎 PR<br>
-> 不会写代码，轻喷（（（
+> 有好的提议欢迎提ISSUE！
 
 ## ☁️ 在雨云部署（推荐）
 
@@ -109,23 +109,6 @@ pnpm run package:sea
 - Node.js >= 22
 - pnpm >= 10.26.0
 
-<!-- ## 🖥️ 硬件要求
-
-经过测试，本服务端可以跑在 0.5核 128MB 5Mbps 非常极限的情况下经过压测仍然不死
-
-测试环境：
-- 服务器：Debian12 fnOS 64位
-- 服务端：Docker版本 0.1.2
-- 性能分配： 1024权重 0.5核 128MB 内存
-- 压测参数：单机器最大连接数2000，线程池2000，发包数 2000pps，10台机器同时压测
-
-压测后最大峰值带宽为 4Mbps，内存仅占用98MB，CPU占用率10%不到，CPU总计4.02 s
-
-![聊天截图](https://github.com/Pimeng/phira-mp-ts/raw/main/.github/resources/chat_.png)
-![phira](https://github.com/Pimeng/phira-mp-ts/raw/main/.github/resources/phira_.png)
-
--->
-
 ## 🔭 本项目长期远景
 
 - [x] 谱面录制功能
@@ -137,19 +120,6 @@ pnpm run package:sea
 ## 🔧 API接口
 
 请参考 [此文档](api.md)
-
-### 🔐 OTP临时管理员TOKEN
-
-当未配置永久 `ADMIN_TOKEN` 时，可以使用一次性验证码（OTP）方式获取临时管理员权限：
-
-- **有效期：** OTP 5分钟，临时TOKEN 4小时
-- **安全性：** TOKEN绑定IP，自动检测异常使用
-- **使用场景：** 临时管理、应急操作、避免泄露永久TOKEN
-
-详细说明和使用示例请参考：
-- [OTP功能完整文档](docs/OTP_ADMIN_TOKEN.md)
-- [Bash示例脚本](examples/otp-admin-example.sh)
-- [PowerShell示例脚本](examples/otp-admin-example.ps1)
 
 ##  🌍 公共访问前端（需要自备API地址）
 
