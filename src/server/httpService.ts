@@ -32,6 +32,13 @@ export async function startHttpService(opts: { state: ServerState; host: string;
   const tempAdminTokens = new Map<string, { ip: string; expiresAt: number; banned: boolean }>();
   const otpSessions = new Map<string, { otp: string; expiresAt: number }>();
 
+  // OTP验证尝试限制
+  const OTP_MAX_ATTEMPTS = 3;
+  const otpAttemptsByIp = new Map<string, number>();
+  const otpAttemptsBySsid = new Map<string, number>();
+  const otpBannedIps = new Set<string>();
+  const otpBannedSsids = new Set<string>();
+
   const server = http.createServer((req, res) => {
     void (async () => {
       const lang = req.headers["accept-language"] ? new Language(String(req.headers["accept-language"])) : state.serverLang;
@@ -396,6 +403,18 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           return;
         }
 
+        const ip = getClientIp();
+
+        // 检查IP和SSID是否已被封禁
+        if (otpBannedIps.has(ip)) {
+          writeJson(403, { ok: false, error: "ip-banned-too-many-attempts" });
+          return;
+        }
+        if (otpBannedSsids.has(ssid)) {
+          writeJson(403, { ok: false, error: "ssid-banned-too-many-attempts" });
+          return;
+        }
+
         cleanupExpired();
         const otpData = otpSessions.get(ssid);
         if (!otpData || Date.now() > otpData.expiresAt) {
@@ -404,19 +423,42 @@ export async function startHttpService(opts: { state: ServerState; host: string;
         }
 
         if (otpData.otp !== otp) {
+          // 记录失败尝试
+          const ipAttempts = (otpAttemptsByIp.get(ip) || 0) + 1;
+          const ssidAttempts = (otpAttemptsBySsid.get(ssid) || 0) + 1;
+          
+          otpAttemptsByIp.set(ip, ipAttempts);
+          otpAttemptsBySsid.set(ssid, ssidAttempts);
+
+          // 检查是否超过最大尝试次数
+          if (ipAttempts >= OTP_MAX_ATTEMPTS) {
+            otpBannedIps.add(ip);
+            const message = `[OTP] IP ${ip} 因OTP验证失败次数过多（${ipAttempts}次）已被封禁`;
+            process.stdout.write(`\x1b[31m[${new Date().toISOString()}] [WARN] ${message}\x1b[0m\n`);
+          }
+          if (ssidAttempts >= OTP_MAX_ATTEMPTS) {
+            otpBannedSsids.add(ssid);
+            otpSessions.delete(ssid); // 删除被封禁的会话
+            const message = `[OTP] 会话 ${ssid} 因OTP验证失败次数过多（${ssidAttempts}次）已被封禁`;
+            process.stdout.write(`\x1b[31m[${new Date().toISOString()}] [WARN] ${message}\x1b[0m\n`);
+          }
+
           writeJson(401, { ok: false, error: "invalid-or-expired-otp" });
           return;
         }
 
+        // 验证成功，清除尝试记录
+        otpAttemptsByIp.delete(ip);
+        otpAttemptsBySsid.delete(ssid);
+
         // 验证成功，生成临时TOKEN
-        const ip = getClientIp();
         const tempToken = newUuid();
         const expiresAt = Date.now() + TEMP_TOKEN_TTL_MS;
         tempAdminTokens.set(tempToken, { ip, expiresAt, banned: false });
         otpSessions.delete(ssid); // 删除已使用的OTP
 
         // 输出到终端
-        const message = `[Temp Token Generated] IP: ${ip}, Token: ${tempToken.slice(0, 8)}..., Valid for 4 hours`;
+        const message = `[OTP] 临时管理员TOKEN已生成，生成者/使用IP: ${ip}，临时Token: ${tempToken.slice(0, 8)}..., 此Token将在4小时内有效`;
         process.stdout.write(`\x1b[32m[${new Date().toISOString()}] [INFO] ${message}\x1b[0m\n`);
 
         writeJson(200, { ok: true, token: tempToken, expiresAt, expiresIn: TEMP_TOKEN_TTL_MS });
@@ -484,32 +526,84 @@ export async function startHttpService(opts: { state: ServerState; host: string;
               const roomid = roomIdToString(rid);
               const hostUser = state.users.get(room.hostId);
               const hostName = hostUser?.name ?? String(room.hostId);
+              const hostConnected = Boolean(hostUser?.session);
+              
+              // 状态详细信息
               const stateStr =
                 room.state.type === "Playing" ? "playing" : room.state.type === "WaitForReady" ? "waiting_for_ready" : "select_chart";
-              const chart = room.chart ? { name: room.chart.name, id: room.chart.id } : null;
+              
+              let stateDetails: any = { type: stateStr };
+              if (room.state.type === "WaitForReady") {
+                stateDetails.ready_users = Array.from(room.state.started);
+                stateDetails.ready_count = room.state.started.size;
+              } else if (room.state.type === "Playing") {
+                stateDetails.results_count = room.state.results.size;
+                stateDetails.aborted_count = room.state.aborted.size;
+                stateDetails.finished_users = Array.from(room.state.results.keys());
+                stateDetails.aborted_users = Array.from(room.state.aborted);
+              }
+              
+              // 谱面信息
+              const chart = room.chart ? { 
+                name: room.chart.name, 
+                id: room.chart.id
+              } : null;
+              
+              // 用户详细信息
               const users = room.userIds().map((id) => {
                 const u = state.users.get(id);
-                return { id, name: u?.name ?? String(id), connected: Boolean(u?.session) };
+                return { 
+                  id, 
+                  name: u?.name ?? String(id), 
+                  connected: Boolean(u?.session),
+                  is_host: id === room.hostId,
+                  game_time: u?.gameTime ?? Number.NEGATIVE_INFINITY,
+                  language: u?.lang.lang ?? "unknown"
+                };
               });
+              
+              // 观察者详细信息
               const monitors = room.monitorIds().map((id) => {
                 const u = state.users.get(id);
-                return { id, name: u?.name ?? String(id), connected: Boolean(u?.session) };
+                return { 
+                  id, 
+                  name: u?.name ?? String(id), 
+                  connected: Boolean(u?.session),
+                  language: u?.lang.lang ?? "unknown"
+                };
               });
+              
+              // 比赛模式信息
+              const contest = room.contest ? {
+                whitelist_count: room.contest.whitelist.size,
+                whitelist: Array.from(room.contest.whitelist),
+                manual_start: room.contest.manualStart,
+                auto_disband: room.contest.autoDisband
+              } : null;
+              
               return {
                 roomid,
                 max_users: room.maxUsers,
+                current_users: users.length,
+                current_monitors: monitors.length,
+                replay_eligible: room.replayEligible,
                 live: room.live,
                 locked: room.locked,
                 cycle: room.cycle,
-                host: { id: room.hostId, name: hostName },
-                state: stateStr,
+                host: { 
+                  id: room.hostId, 
+                  name: hostName,
+                  connected: hostConnected
+                },
+                state: stateDetails,
                 chart,
+                contest,
                 users,
                 monitors
               };
             });
             rooms.sort((a, b) => a.roomid.localeCompare(b.roomid));
-            return { ok: true, rooms };
+            return { ok: true, total_rooms: rooms.length, rooms };
           });
           writeJson(200, out);
           return;

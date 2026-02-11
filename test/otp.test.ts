@@ -55,6 +55,45 @@ describe("OTP临时TOKEN功能测试", () => {
     expect(data.error).toBe("invalid-or-expired-otp");
   });
 
+  test("OTP验证失败3次后应该封禁IP和SSID", async () => {
+    // 1. 请求OTP获取有效的SSID
+    const otpRes = await fetch(`${baseUrl}/admin/otp/request`, {
+      method: "POST"
+    });
+    const otpData = await otpRes.json() as any;
+    expect(otpData.ok).toBe(true);
+    const ssid = otpData.ssid;
+
+    // 2. 尝试3次错误的OTP
+    for (let i = 0; i < 3; i++) {
+      const res = await fetch(`${baseUrl}/admin/otp/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ssid: ssid,
+          otp: "wrong-otp"
+        })
+      });
+      const data = await res.json() as any;
+      expect(data.ok).toBe(false);
+    }
+
+    // 3. 第4次尝试应该返回封禁错误
+    const res4 = await fetch(`${baseUrl}/admin/otp/verify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ssid: ssid,
+        otp: "wrong-otp"
+      })
+    });
+    const data4 = await res4.json() as any;
+    
+    expect(res4.status).toBe(403);
+    expect(data4.ok).toBe(false);
+    expect(data4.error).toMatch(/banned/);
+  });
+
   test("完整OTP流程：请求->验证->使用临时TOKEN", async () => {
     // 1. 请求OTP
     const otpRes = await fetch(`${baseUrl}/admin/otp/request`, {
