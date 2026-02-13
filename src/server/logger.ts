@@ -22,6 +22,8 @@ export type LoggerOptions = {
   testAccountIds?: number[];
   /** 启用日志限流和IP黑名单 */
   enableRateLimiting?: boolean;
+  /** INFO 日志回调函数，用于实时推送 */
+  onInfoLog?: (message: string, timestamp: Date) => void;
 };
 
 export type LogContext = { userId?: number; ip?: string };
@@ -72,6 +74,7 @@ export class Logger {
   private readonly useColor: boolean;
   private readonly testAccountIds: ReadonlySet<number>;
   private readonly rateLimiter: RateLimiter | null;
+  private readonly onInfoLog?: (message: string, timestamp: Date) => void;
 
   private currentDateKey: string | null = null;
   private stream: WriteStream | null = null;
@@ -83,6 +86,7 @@ export class Logger {
     this.useColor = shouldUseColor();
     this.testAccountIds = new Set(options.testAccountIds ?? []);
     this.rateLimiter = options.enableRateLimiting ? new RateLimiter() : null;
+    this.onInfoLog = options.onInfoLog;
 
     mkdirSync(this.logsDir, { recursive: true });
   }
@@ -171,6 +175,11 @@ export class Logger {
       const consoleLine = this.formatConsoleLine(fileLine, level);
       if (level === "WARN" || level === "ERROR") process.stderr.write(consoleLine);
       else process.stdout.write(consoleLine);
+    }
+
+    // 如果是 INFO 级别的日志且有回调函数，调用回调
+    if (level === "INFO" && this.onInfoLog) {
+      this.onInfoLog(message, now);
     }
   }
 

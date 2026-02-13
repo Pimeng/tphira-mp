@@ -153,3 +153,6 @@ log-admin-room-message = Admin sent message to room "{ $room }": { $message }
 log-room-disbanded-by-admin = Room "{ $room }" disbanded by admin
 
 room-disbanded-by-admin = Room has been disbanded by administrator
+
+log-websocket-connected = WebSocket client connected, total connections: { $total }
+log-websocket-disconnected = WebSocket client disconnected, total connections: { $total }

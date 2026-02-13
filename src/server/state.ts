@@ -11,6 +11,7 @@ import type { Logger } from "./logger.js";
 import { Language } from "./l10n.js";
 import { ReplayRecorder } from "./replayRecorder.js";
 import { defaultReplayBaseDir } from "./replayStorage.js";
+import type { WebSocketService } from "./websocketService.js";
 
 type AdminDataFile = { version: 1; bannedUsers: number[]; bannedRoomUsers: Record<string, number[]> };
 
@@ -33,6 +34,12 @@ export class ServerState {
   readonly contestRooms = new Map<RoomId, { whitelist: Set<number> }>();
 
   readonly replayRecorder: ReplayRecorder;
+  
+  // WebSocket 服务引用（可选，仅在 HTTP 服务启用时存在）
+  wsService: WebSocketService | null = null;
+
+  // 临时管理员 TOKEN 管理
+  readonly tempAdminTokens = new Map<string, { ip: string; expiresAt: number; banned: boolean }>();
 
   constructor(config: ServerConfig, logger: Logger, serverName: string, adminDataPath: string) {
     this.config = config;

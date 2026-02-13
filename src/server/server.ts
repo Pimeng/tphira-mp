@@ -298,6 +298,28 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
 
   const httpService = mergedCfg.http_service === true ? await startHttpService({ state, host: listenHost, port: mergedCfg.http_port ?? 12347 }) : null;
 
+  // 设置 WebSocket 服务引用
+  if (httpService) {
+    state.wsService = httpService.ws;
+    
+    // 将 WebSocket 日志推送注册到 Logger
+    // 需要重新创建 Logger 以添加回调
+    const oldLogger = logger;
+    const newLogger = new Logger({
+      logsDir: paths.logsDir,
+      minLevel: mergedCfg.log_level as any,
+      testAccountIds: mergedCfg.test_account_ids ?? [1739989],
+      enableRateLimiting: true,
+      onInfoLog: (message, timestamp) => {
+        void httpService.ws.broadcastRoomLog(message, timestamp).catch(() => {});
+      }
+    });
+    
+    // 替换 state 中的 logger
+    (state as any).logger = newLogger;
+    oldLogger.close();
+  }
+
   const addr = server.address() as net.AddressInfo;
   logger.mark(tl(state.serverLang, "log-server-version", { version }));
   logger.mark(tl(state.serverLang, "log-runtime-env", {

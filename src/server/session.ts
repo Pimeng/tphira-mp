@@ -385,6 +385,7 @@ export class Session {
       pickRandomUserId: (ids) => pickRandom(ids),
       lang: this.state.serverLang,
       logger: this.state.logger,
+      wsService: this.state.wsService,
       onEnterPlaying: async (r) => {
         if (!r.chart) return;
         if (this.state.replayEnabled && r.replayEligible) await this.state.replayRecorder.startRoom(r.id, r.chart.id, r.userIds());
@@ -544,6 +545,7 @@ export class Session {
             lang: this.state.serverLang,
             logger: this.state.logger,
             disbandRoom: (r) => this.disbandRoom(r),
+            wsService: this.state.wsService,
             onEnterPlaying: async (r) => {
               if (!r.chart) return;
               if (this.state.replayEnabled && r.replayEligible) await this.state.replayRecorder.startRoom(r.id, r.chart.id, r.userIds());
@@ -587,6 +589,7 @@ export class Session {
           this.state.logger.log("MARK", tl(this.state.serverLang, "log-room-select-chart", { user: user.name, userId: String(user.id), room: room.id, chart: chart.name }), undefined, { userId: user.id });
           await room.send((c) => this.broadcastRoom(room, c), { type: "SelectChart", user: user.id, name: chart.name, id: chart.id });
           await room.onStateChange((c) => this.broadcastRoom(room, c));
+          await room.notifyWebSocket(this.state);
           return {};
         }) };
       case "RequestStart":
@@ -598,6 +601,7 @@ export class Session {
           await room.send((c) => this.broadcastRoom(room, c), { type: "GameStart", user: user.id });
           room.state = { type: "WaitForReady", started: new Set([user.id]) };
           await room.onStateChange((c) => this.broadcastRoom(room, c));
+          await room.notifyWebSocket(this.state);
           await room.checkAllReady({
             usersById: (id) => this.state.users.get(id),
             broadcast: (c) => this.broadcastRoom(room, c),
@@ -606,6 +610,7 @@ export class Session {
             lang: this.state.serverLang,
             logger: this.state.logger,
             disbandRoom: (r) => this.disbandRoom(r),
+            wsService: this.state.wsService,
             onEnterPlaying: async (r) => {
               if (!r.chart) return;
               if (this.state.replayEnabled && r.replayEligible) await this.state.replayRecorder.startRoom(r.id, r.chart.id, r.userIds());
@@ -624,6 +629,7 @@ export class Session {
             room.state.started.add(user.id);
             this.state.logger.log("INFO", tl(this.state.serverLang, "log-room-ready", { user: user.name, room: room.id }), undefined, { userId: user.id });
             await room.send((c) => this.broadcastRoom(room, c), { type: "Ready", user: user.id });
+            await room.notifyWebSocket(this.state);
             await room.checkAllReady({
               usersById: (id) => this.state.users.get(id),
               broadcast: (c) => this.broadcastRoom(room, c),
@@ -632,6 +638,7 @@ export class Session {
               lang: this.state.serverLang,
               logger: this.state.logger,
               disbandRoom: (r) => this.disbandRoom(r),
+              wsService: this.state.wsService,
               onEnterPlaying: async (r) => {
                 if (!r.chart) return;
                 if (this.state.replayEnabled && r.replayEligible) await this.state.replayRecorder.startRoom(r.id, r.chart.id, r.userIds());
@@ -653,9 +660,11 @@ export class Session {
               await room.send((c) => this.broadcastRoom(room, c), { type: "CancelGame", user: user.id });
               room.state = { type: "SelectChart" };
               await room.onStateChange((c) => this.broadcastRoom(room, c));
+              await room.notifyWebSocket(this.state);
             } else {
               this.state.logger.log("INFO", tl(this.state.serverLang, "log-room-cancel-ready", { user: user.name, room: room.id }), undefined, { userId: user.id });
               await room.send((c) => this.broadcastRoom(room, c), { type: "CancelReady", user: user.id });
+              await room.notifyWebSocket(this.state);
             }
           }
           return {};
@@ -678,6 +687,7 @@ export class Session {
             if (room.state.results.has(user.id)) throw new Error(user.lang.format("record-already-uploaded"));
             room.state.results.set(user.id, record);
             if (this.state.replayEnabled && room.replayEligible) this.state.replayRecorder.setRecordId(room.id, user.id, record.id);
+            await room.notifyWebSocket(this.state);
             await room.checkAllReady({
               usersById: (id) => this.state.users.get(id),
               broadcast: (c) => this.broadcastRoom(room, c),
@@ -686,6 +696,7 @@ export class Session {
               lang: this.state.serverLang,
               logger: this.state.logger,
               disbandRoom: (r) => this.disbandRoom(r),
+              wsService: this.state.wsService,
               onEnterPlaying: async (r) => {
                 if (!r.chart) return;
                 if (this.state.replayEnabled && r.replayEligible) await this.state.replayRecorder.startRoom(r.id, r.chart.id, r.userIds());
@@ -706,6 +717,7 @@ export class Session {
             room.state.aborted.add(user.id);
             this.state.logger.log("MARK", tl(this.state.serverLang, "log-room-abort", { user: user.name, room: room.id }), undefined, { userId: user.id });
             await room.send((c) => this.broadcastRoom(room, c), { type: "Abort", user: user.id });
+            await room.notifyWebSocket(this.state);
             await room.checkAllReady({
               usersById: (id) => this.state.users.get(id),
               broadcast: (c) => this.broadcastRoom(room, c),
@@ -714,6 +726,7 @@ export class Session {
               lang: this.state.serverLang,
               logger: this.state.logger,
               disbandRoom: (r) => this.disbandRoom(r),
+              wsService: this.state.wsService,
               onEnterPlaying: async (r) => {
                 if (!r.chart) return;
                 if (this.state.replayEnabled && r.replayEligible) await this.state.replayRecorder.startRoom(r.id, r.chart.id, r.userIds());
@@ -769,6 +782,7 @@ export class Session {
         pickRandomUserId: (arr) => pickRandom(arr),
         lang: this.state.serverLang,
         logger: this.state.logger,
+        wsService: this.state.wsService,
         onEnterPlaying: async (r) => {
           if (!r.chart) return;
           if (this.state.replayEnabled && r.replayEligible) await this.state.replayRecorder.startRoom(r.id, r.chart.id, r.userIds());

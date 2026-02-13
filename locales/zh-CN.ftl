@@ -153,3 +153,6 @@ log-admin-room-message = 管理员向房间 "{ $room }" 发送消息：{ $messag
 log-room-disbanded-by-admin = 房间 "{ $room }" 已被管理员解散
 
 room-disbanded-by-admin = 房间已被管理员解散
+
+log-websocket-connected = WebSocket 客户端已连接，当前连接数：{ $total }
+log-websocket-disconnected = WebSocket 客户端已断开，当前连接数：{ $total }

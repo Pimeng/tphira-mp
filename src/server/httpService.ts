@@ -9,9 +9,11 @@ import type { ServerState } from "./state.js";
 import { Language, tl } from "./l10n.js";
 import type { ServerCommand } from "../common/commands.js";
 import { defaultReplayBaseDir, deleteReplayForUser, listReplaysForUser, readReplayHeader, replayFilePath } from "./replayStorage.js";
+import { startWebSocketService, type WebSocketService } from "./websocketService.js";
 
 export type HttpService = {
   server: http.Server;
+  ws: WebSocketService;
   address: () => net.AddressInfo;
   close: () => Promise<void>;
 };
@@ -26,10 +28,9 @@ export async function startHttpService(opts: { state: ServerState; host: string;
   const REPLAY_SESSION_TTL_MS = 30 * 60 * 1000;
   const replaySessions = new Map<string, { userId: number; expiresAt: number }>();
 
-  // 临时管理员TOKEN管理
+  // 临时管理员TOKEN管理常量
   const TEMP_TOKEN_TTL_MS = 4 * 60 * 60 * 1000; // 4小时
   const OTP_TTL_MS = 5 * 60 * 1000; // 验证码5分钟有效
-  const tempAdminTokens = new Map<string, { ip: string; expiresAt: number; banned: boolean }>();
   const otpSessions = new Map<string, { otp: string; expiresAt: number }>();
 
   // OTP验证尝试限制
@@ -107,8 +108,8 @@ export async function startHttpService(opts: { state: ServerState; host: string;
       // 清理过期的临时TOKEN和OTP
       const cleanupExpired = () => {
         const now = Date.now();
-        for (const [token, data] of tempAdminTokens) {
-          if (now > data.expiresAt) tempAdminTokens.delete(token);
+        for (const [token, data] of state.tempAdminTokens) {
+          if (now > data.expiresAt) state.tempAdminTokens.delete(token);
         }
         for (const [ssid, data] of otpSessions) {
           if (now > data.expiresAt) otpSessions.delete(ssid);
@@ -123,8 +124,8 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           ip,
           reqAdminToken: reqAdminToken ? `${reqAdminToken.slice(0, 8)}...` : '(empty)',
           adminToken: adminToken ? `${adminToken.slice(0, 8)}...` : '(empty)',
-          tempTokensCount: tempAdminTokens.size,
-          hasTempToken: reqAdminToken ? tempAdminTokens.has(reqAdminToken) : false
+          tempTokensCount: state.tempAdminTokens.size,
+          hasTempToken: reqAdminToken ? state.tempAdminTokens.has(reqAdminToken) : false
         };
         process.stdout.write(`\x1b[33m[${new Date().toISOString()}] [DEBUG] requireAdmin called: ${JSON.stringify(debugInfo)}\x1b[0m\n`);
         
@@ -136,7 +137,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
         // 检查临时TOKEN
         cleanupExpired();
         if (reqAdminToken) {
-          const tempTokenData = tempAdminTokens.get(reqAdminToken);
+          const tempTokenData = state.tempAdminTokens.get(reqAdminToken);
           if (tempTokenData) {
             process.stdout.write(`\x1b[33m[${new Date().toISOString()}] [DEBUG] Found temp token, checking validity\x1b[0m\n`);
             if (tempTokenData.banned) {
@@ -146,7 +147,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
             }
             if (Date.now() > tempTokenData.expiresAt) {
               process.stdout.write(`\x1b[33m[${new Date().toISOString()}] [DEBUG] Temp token expired\x1b[0m\n`);
-              tempAdminTokens.delete(reqAdminToken);
+              state.tempAdminTokens.delete(reqAdminToken);
               writeJson(401, { ok: false, error: "token-expired" });
               return false;
             }
@@ -474,7 +475,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
         // 验证成功，生成临时TOKEN
         const tempToken = newUuid();
         const expiresAt = Date.now() + TEMP_TOKEN_TTL_MS;
-        tempAdminTokens.set(tempToken, { ip, expiresAt, banned: false });
+        state.tempAdminTokens.set(tempToken, { ip, expiresAt, banned: false });
         otpSessions.delete(ssid); // 删除已使用的OTP
 
         // 输出到终端
@@ -773,7 +774,8 @@ export async function startHttpService(opts: { state: ServerState; host: string;
                   broadcastToMonitors: (cmd) => broadcastRoomAll(roomId, cmd),
                   pickRandomUserId,
                   lang: state.serverLang,
-                  logger: state.logger
+                  logger: state.logger,
+                  wsService: state.wsService
                 });
               }
               await sessionToDisconnect.adminDisconnect({ preserveRoom: true });
@@ -833,7 +835,8 @@ export async function startHttpService(opts: { state: ServerState; host: string;
               broadcastToMonitors: (cmd) => broadcastRoomAll(roomId, cmd),
               pickRandomUserId,
               lang: state.serverLang,
-              logger: state.logger
+              logger: state.logger,
+              wsService: state.wsService
             });
           }
           await target.adminDisconnect({ preserveRoom: false });
@@ -901,7 +904,8 @@ export async function startHttpService(opts: { state: ServerState; host: string;
             broadcastToMonitors: (cmd) => broadcastRoomAll(from.id, cmd),
             pickRandomUserId,
             lang: state.serverLang,
-            logger: state.logger
+            logger: state.logger,
+            wsService: state.wsService
           });
           if (shouldDrop) {
             await state.mutex.runExclusive(async () => {
@@ -1023,6 +1027,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           if (state.replayEnabled && room.replayEligible) await state.replayRecorder.startRoom(room.id, room.chart!.id, room.userIds());
           room.state = { type: "Playing", results: new Map(), aborted: new Set() };
           await room.onStateChange((c) => broadcastRoomAll(room.id, c));
+          await room.notifyWebSocket(state);
           writeJson(200, { ok: true });
           return;
         }
@@ -1150,10 +1155,15 @@ export async function startHttpService(opts: { state: ServerState; host: string;
     server.listen({ host: opts.host, port: opts.port }, () => resolve());
   });
 
+  // 启动 WebSocket 服务
+  const ws = startWebSocketService({ httpServer: server, state });
+
   return {
     server,
+    ws,
     address: () => server.address() as net.AddressInfo,
     close: async () => {
+      await ws.close();
       await new Promise<void>((resolve, reject) => {
         server.close((err) => {
           if (err) reject(err);
