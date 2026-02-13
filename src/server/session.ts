@@ -207,6 +207,13 @@ export class Session {
 
       this.user = user;
       if (staleSession) void staleSession.adminDisconnect({ preserveRoom: true });
+      
+      // Check if user is banned - if so, remove them from any room before sending auth response
+      const isBanned = await this.state.mutex.runExclusive(async () => this.state.bannedUsers.has(user.id));
+      if (isBanned && user.room) {
+        await this.handleUserLeaveRoom(user, user.room);
+      }
+      
       const roomState: ClientRoomState | null = user.room ? user.room.clientState(user, (id) => this.state.users.get(id)) : null;
       await this.trySend({ type: "Authenticate", result: ok([user.toInfo(), roomState]) });
       this.waitingForAuthenticate = false;
