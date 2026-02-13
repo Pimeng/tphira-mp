@@ -20,7 +20,6 @@ cli-invalid-monitors = Invalid MONITORS
 label-monitor-suffix = (monitor)
 
 chat-welcome = Hello "{ $userName }"! Welcome to { $serverName }!
-chat-separator = ==================
 chat-hitokoto = { $quote } — { $from }
 chat-hitokoto-from-unknown = Unknown
 chat-hitokoto-unavailable = Failed to fetch quote
@@ -106,7 +105,7 @@ log-heartbeat-timeout-disconnect = Heartbeat timeout. Disconnecting (id={ $id })
 log-auth-ok = Auth OK. id={ $id }, user="{ $user }"{ $monitorSuffix }, proto="{ $version }"
 log-auth-failed = Auth failed. id={ $id }, reason={ $reason }
 
-log-player-join = Player { $who }
+log-player-join = Player { $who }({ $id })
 
 log-disconnect = Disconnected. id={ $id }{ $who }
 log-disconnect-user = , user="{ $user }"

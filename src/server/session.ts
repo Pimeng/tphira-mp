@@ -221,17 +221,9 @@ export class Session {
 
       this.state.logger.log("INFO", tl(this.state.serverLang, "log-player-join", {
         user: user.name,
+        id: String(user.id),
         monitorSuffix
       }), undefined, { userId: user.id, isConnectionLog: true });
-
-      await this.trySend({
-        type: "Message",
-        message: {
-          type: "Chat",
-          user: 0,
-          content: user.lang.format("chat-welcome", { userName: user.name, serverName: this.state.serverName })
-        }
-      });
 
       void this.sendWelcomeExtras(user).catch(() => {});
     } catch (e) {
@@ -279,23 +271,30 @@ export class Session {
   }
 
   private async sendWelcomeExtras(user: User): Promise<void> {
-    const lang = user.lang;
+    try {
+      const lang = user.lang;
+      const tip = this.state.config.room_list_tip;
+      const hitokoto = await getHitokotoCached();
 
-    await this.sendSystemChat(lang.format("chat-separator"));
-    await this.sendSystemChat(lang.format("chat-roomlist-title"));
-    await this.sendSystemChat(await this.getAvailableRoomsText(lang));
+      // 感谢出走大大提供的清屏思路
+      let message = "\n".repeat(30)
 
-    const tip = this.state.config.room_list_tip?.trim();
-    if (tip) await this.sendSystemChat(tip);
-
-    await this.sendSystemChat(lang.format("chat-separator"));
-
-    const hitokoto = await getHitokotoCached();
-    if (hitokoto) {
-      const fromText = hitokoto.from ? hitokoto.from : lang.format("chat-hitokoto-from-unknown");
-      await this.sendSystemChat(lang.format("chat-hitokoto", { quote: hitokoto.quote, from: fromText }));
-    } else {
-      await this.sendSystemChat(lang.format("chat-hitokoto-unavailable"));
+      message += lang.format("chat-welcome", { userName: user.name, serverName: this.state.serverName }) + "\n"
+      message += "=".repeat(73) + "\n"
+      message += lang.format("chat-roomlist-title") + "\n"
+      message += await this.getAvailableRoomsText(lang) + "\n"
+      message += "=".repeat(73) + "\n"
+      if (tip) message += tip + "\n"
+      if (hitokoto) {
+        const fromText = hitokoto.from ? hitokoto.from : lang.format("chat-hitokoto-from-unknown");
+        message += `${hitokoto.quote} —— ${fromText}`
+      } else {
+        message += lang.format("chat-hitokoto-unavailable")
+      }
+      await this.sendSystemChat(message)
+    } catch(e) {
+      const errorMsg = e instanceof Error ? e.message : String(e);
+      this.state.logger.log("ERROR", errorMsg)
     }
   }
 

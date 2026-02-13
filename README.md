@@ -74,14 +74,14 @@ pnpm run build
 开发模式（从源代码运行）：
 
 ```bash
-pnpm run dev:server -- --port 12346
+pnpm run dev:server --port 12346
 ```
 
 生产模式（先编译再运行）：
 
 ```bash
 pnpm run build
-pnpm start -- --port 12346
+pnpm start --port 12346
 ```
 
 ## 🔍 测试

@@ -60,6 +60,7 @@ function colorForLevel(level: LogLevel): string | null {
   if (level === "DEBUG") return "\x1b[34m";
   if (level === "INFO") return "\x1b[32m";
   if (level === "MARK") return "\x1b[90m";
+  if (level === "ERROR") return "\x1b[31m";
   return null;
 }
 

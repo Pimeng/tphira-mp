@@ -20,7 +20,6 @@ cli-invalid-monitors = MONITORS 不合法
 label-monitor-suffix = （观战者）
 
 chat-welcome = "{ $userName }"你好！欢迎来到 { $serverName } 服务器！
-chat-separator = =======================================================================
 chat-hitokoto = { $quote } —— { $from }
 chat-hitokoto-from-unknown = 佚名
 chat-hitokoto-unavailable = 一言获取失败
@@ -106,7 +105,7 @@ log-heartbeat-timeout-disconnect = 心跳超时，准备断开连接（连接ID�
 log-auth-ok = 连接ID：{ $id }，“ { $user } ” { $monitorSuffix } 认证成功，协议版本：“{ $version }”
 log-auth-failed = 连接ID：{ $id } 认证失败：{ $reason }
 
-log-player-join = “{ $user }”{ $monitorSuffix } 加入了服务器
+log-player-join = “{ $user }({ $id })”{ $monitorSuffix } 加入了服务器
 
 log-disconnect = 连接断开，连接ID：{ $id } { $who }
 log-disconnect-user = ，“{ $user }”
