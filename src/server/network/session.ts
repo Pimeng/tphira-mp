@@ -464,7 +464,7 @@ export class Session {
         if (!canRecord && !canForward) return null;
         const last = cmd.frames.at(-1);
         if (last) user.gameTime = last.time;
-        this.state.logger.log("INFO", tl(this.state.serverLang, "log-user-touches", { user: user.name, room: room.id, count: String(cmd.frames.length) }), undefined, { userId: user.id });
+        this.state.logger.log("DEBUG", tl(this.state.serverLang, "log-user-touches", { user: user.name, room: room.id, count: String(cmd.frames.length) }), undefined, { userId: user.id });
         if (canRecord) this.state.replayRecorder.appendTouches(room.id, user.id, cmd.frames);
         if (canForward) void this.broadcastRoomMonitors(room, { type: "Touches", player: user.id, frames: cmd.frames });
         return null;
@@ -476,7 +476,7 @@ export class Session {
         const canRecord = this.state.replayEnabled && room.replayEligible;
         const canForward = room.isLive();
         if (!canRecord && !canForward) return null;
-        this.state.logger.log("INFO", tl(this.state.serverLang, "log-user-judges", { user: user.name, room: room.id, count: String(cmd.judges.length) }), undefined, { userId: user.id });
+        this.state.logger.log("DEBUG", tl(this.state.serverLang, "log-user-judges", { user: user.name, room: room.id, count: String(cmd.judges.length) }), undefined, { userId: user.id });
         if (canRecord) this.state.replayRecorder.appendJudges(room.id, user.id, cmd.judges);
         if (canForward) void this.broadcastRoomMonitors(room, { type: "Judges", player: user.id, judges: cmd.judges });
         return null;
