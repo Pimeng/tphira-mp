@@ -22,7 +22,7 @@ jobs:
     - name: 设置 pnpm
       uses: pnpm/action-setup@v4
       with:
-        version: 9.15.4
+        version: 10.29.3
 
     - name: 安装依赖
       run: pnpm install
