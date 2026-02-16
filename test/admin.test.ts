@@ -400,7 +400,18 @@ describe("管理员API", () => {
       await alice.close();
       await bob.close();
       await running.close();
-      await rm(join(process.cwd(), "record"), { recursive: true, force: true });
+      // 等待文件系统操作完成
+      await new Promise(resolve => setTimeout(resolve, 100));
+      // 多次尝试删除,处理 Windows 文件锁定问题
+      for (let i = 0; i < 3; i++) {
+        try {
+          await rm(join(process.cwd(), "record"), { recursive: true, force: true });
+          break;
+        } catch (e) {
+          if (i === 2) throw e;
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
     }
   }, 20000);
 });

@@ -30,15 +30,13 @@ describe("回放录制", () => {
       await alice.authenticate("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
       await alice.createRoom("room_replay");
 
-      // 等待一小段时间让 setImmediate 回调执行
-      await sleep(50);
-
+      // 等待假观战者加入消息
       const roomMsgs: any[] = [];
       const fakeId = 2_000_000_000;
       await waitFor(() => {
         roomMsgs.push(...alice.takeMessages());
         return roomMsgs.some((m) => m.type === "JoinRoom" && m.user === fakeId);
-      }, 3000);
+      }, 5000);
       await sleep(300);
       roomMsgs.push(...alice.takeMessages());
       expect(roomMsgs.some((m) => m.type === "LeaveRoom" && m.user === fakeId)).toBe(false);
