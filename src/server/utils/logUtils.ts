@@ -1,11 +1,11 @@
 // 日志记录辅助函数
 
-import type { Logger } from "./logger.js";
-import type { Language } from "./l10n.js";
-import { tl } from "./l10n.js";
+import type { Logger } from "../utils/logger.js";
+import type { Language } from "../utils/l10n.js";
+import { tl } from "../utils/l10n.js";
 
 // 导出通用终端日志函数（已迁移到 common）
-export { debugLog, infoLog, warnLog, errorLog } from "../common/console.js";
+export { debugLog, infoLog, warnLog, errorLog } from "../../common/console.js";
 
 /**
  * 日志上下文信息

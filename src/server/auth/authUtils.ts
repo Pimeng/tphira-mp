@@ -1,9 +1,9 @@
 // 认证和授权相关的工具函数
 
-import { newUuid } from "../common/uuid.js";
-import { cleanupExpiredSessions } from "../common/utils.js";
-import type { ServerState } from "./state.js";
-import { debugLog, infoLog, warnLog } from "./logUtils.js";
+import { newUuid } from "../../common/uuid.js";
+import { cleanupExpiredSessions } from "../../common/utils.js";
+import type { ServerState } from "../core/state.js";
+import { debugLog, infoLog, warnLog } from "../utils/logUtils.js";
 
 /**
  * 临时管理员 Token 数据

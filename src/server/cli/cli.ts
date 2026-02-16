@@ -1,9 +1,9 @@
 import * as readline from "node:readline";
-import type { ServerState } from "./state.js";
-import type { Logger } from "./logger.js";
-import { parseRoomId, roomIdToString, type RoomId } from "../common/roomId.js";
-import type { ServerCommand } from "../common/commands.js";
-import { tl } from "./l10n.js";
+import type { ServerState } from "../core/state.js";
+import type { Logger } from "../utils/logger.js";
+import { parseRoomId, roomIdToString, type RoomId } from "../../common/roomId.js";
+import type { ServerCommand } from "../../common/commands.js";
+import { tl } from "../utils/l10n.js";
 
 export type CliContext = {
   state: ServerState;

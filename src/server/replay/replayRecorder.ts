@@ -1,9 +1,9 @@
 import { createWriteStream, type WriteStream } from "node:fs";
 import { open } from "node:fs/promises";
-import { encodePacket } from "../common/binary.js";
-import { encodeClientCommand, type ClientCommand, type JudgeEvent, type TouchFrame, type UserInfo } from "../common/commands.js";
-import { roomIdToString, type RoomId } from "../common/roomId.js";
-import { ensureReplayDir, replayFilePath } from "./replayStorage.js";
+import { encodePacket } from "../../common/binary.js";
+import { encodeClientCommand, type ClientCommand, type JudgeEvent, type TouchFrame, type UserInfo } from "../../common/commands.js";
+import { roomIdToString, type RoomId } from "../../common/roomId.js";
+import { ensureReplayDir, replayFilePath } from "../replay/replayStorage.js";
 
 type InFlight = {
   roomKey: string;

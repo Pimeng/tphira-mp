@@ -2,7 +2,7 @@ import { FluentBundle, FluentResource, type FluentVariable } from "@fluent/bundl
 import { negotiateLanguages } from "@fluent/langneg";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { getAppPaths } from "./appPaths.js";
+import { getAppPaths } from "../utils/appPaths.js";
 
 export const SUPPORTED_LANGS = ["en-US", "zh-CN"] as const;
 export type SupportedLang = (typeof SUPPORTED_LANGS)[number];

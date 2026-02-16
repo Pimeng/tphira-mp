@@ -1,8 +1,8 @@
 // 房间相关的通用工具函数
 
-import type { User } from "./user.js";
-import type { Room } from "./room.js";
-import { tl } from "./l10n.js";
+import type { User } from "../game/user.js";
+import type { Room } from "../game/room.js";
+import { tl } from "../utils/l10n.js";
 
 /**
  * 要求用户必须在房间中，否则抛出错误

@@ -532,6 +532,10 @@ View current IP blacklist.
 ipblacklist list
 ```
 
+**显示信息 / Information shown:**
+- IP 地址 / IP address
+- 剩余封禁时间（分钟）/ Remaining ban time (minutes)
+
 ---
 
 #### remove
@@ -543,6 +547,9 @@ Remove a specific IP from blacklist.
 ```
 ipblacklist remove <ip>
 ```
+
+**参数 / Parameters:**
+- `ip`: IP地址（IPv4或IPv6）/ IP address (IPv4 or IPv6)
 
 **示例 / Examples:**
 ```
@@ -561,6 +568,14 @@ Clear all IP blacklist entries.
 ```
 ipblacklist clear
 ```
+
+**注意 / Notes:**
+- IP黑名单用于防止日志洪水攻击
+- IP blacklist is used to prevent log flooding attacks
+- 被封禁的IP无法连接到服务器
+- Banned IPs cannot connect to the server
+- 封禁会在一定时间后自动过期
+- Bans automatically expire after a certain time
 
 ---
 

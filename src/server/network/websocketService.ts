@@ -1,10 +1,10 @@
 import type http from "node:http";
 import { WebSocketServer, WebSocket } from "ws";
-import type { ServerState } from "./state.js";
-import type { RoomId } from "../common/roomId.js";
-import { roomIdToString, parseRoomId } from "../common/roomId.js";
-import { getClientIp } from "../common/http.js";
-import { tl } from "./l10n.js";
+import type { ServerState } from "../core/state.js";
+import type { RoomId } from "../../common/roomId.js";
+import { roomIdToString, parseRoomId } from "../../common/roomId.js";
+import { getClientIp } from "../../common/http.js";
+import { tl } from "../utils/l10n.js";
 
 export type WebSocketClient = {
   ws: WebSocket;

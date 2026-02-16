@@ -39,12 +39,19 @@ Phira MP 的 Typescript 实现，目前正在逐步完善，还请多多包涵
 
 - SERVER_NAME(string): 当前服务器名字，会显示在欢迎信息中（默认 `Phira MP`）
 - MONITORS(array): 观战用户ID列表（默认 `2`）
+- TEST_ACCOUNT_IDS(array): 测试账号ID列表，这些账号的日志不写入文件（除非LOG_LEVEL=DEBUG）（默认 `[1739989]`）
 - HOST(string): 服务监听地址（默认 `::`）
 - PORT(number): 游戏监听端口（默认 `12346`）
 - HTTP_SERVICE(boolean): 是否启动 HTTP 服务（默认 `false`）
 - HTTP_PORT(number): HTTP 服务监听端口（默认 `12347`）
 - ROOM_MAX_USERS(number): 单房间最大玩家数（默认 `8`，最大 `64`）
 - PHIRA_MP_LANG(string): 服务端默认语言（默认 `zh-CN`）
+- LOG_LEVEL(string): 日志等级，可选值：DEBUG, INFO, MARK, WARN, ERROR（默认 `INFO`）
+- REAL_IP_HEADER(string): 真实IP头名称，用于反向代理场景（默认 `X-Forwarded-For`）
+  - 可选值：X-Forwarded-For, X-Real-IP, CF-Connecting-IP 等
+  - 注：此配置仅对HTTP服务生效
+- HAPROXY_PROTOCOL(boolean): 是否启用 HAProxy PROXY Protocol 支持（默认 `false`）
+  - 用于TCP代理时正常获取真实IP
 - ADMIN_TOKEN(string): 管理员接口鉴权 Token（默认 `replace_me`）
   - 未配置时可使用 OTP（一次性验证码）方式获取临时管理员权限，详见 [API文档](docs/api.md)
 - ADMIN_DATA_PATH(string): 管理员数据持久化路径（JSON）（默认 `./admin_data.json`）
@@ -117,17 +124,9 @@ pnpm run package:sea
 - [ ] 完善服务端，添加更多功能
 - [ ] 等待~~画饼~~添加
 
-## 🔧 API接口
+## 📚 文档 / Documentation
 
-请参考 [此文档](docs/api.md)
-
-有关 Websocket 请查阅 [此文档](docs/websocket.md)
-
-## 🎮 服务器控制台命令
-
-服务器运行时支持在控制台输入命令进行管理，类似于 Minecraft 服务器
-
-详细命令列表和使用说明请参考 [命令文档](commands.md)
+完整的文档请访问 [文档中心](docs/index.md)
 
 ##  🌍 公共访问前端（需要自备API地址）
 
@@ -136,6 +135,7 @@ https://admin.phira.link/
 ## 🙏 致谢
 
 - [Michaelwucoc](https://github.com/Michaelwucoc)：赞助了本项目，为本项目大力推动了进度
+- [RENaa_FD](https://github.com/lRENyaaa)：赞助了本项目，为本项目大力推动了进度，并且和他交流了很多的代码经验！特别鸣谢！！
 
 还有帮助我测试的朋友们：
 

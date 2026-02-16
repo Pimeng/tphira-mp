@@ -1,6 +1,6 @@
 import { parseArgs } from "node:util";
-import { startServer } from "./server.js";
-import { Language, tl } from "./l10n.js";
+import { startServer } from "./core/server.js";
+import { Language, tl } from "./utils/l10n.js";
 
 function parseBool(value: string): boolean | null {
   const v = value.trim().toLowerCase();

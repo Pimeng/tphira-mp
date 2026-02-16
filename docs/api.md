@@ -108,6 +108,62 @@ Body：
 
 比赛房间（白名单/手动开始 + 结算后自动解散）是仅内存状态，重启失效。
 
+## IP黑名单管理
+
+服务器会自动对日志限流触发的IP进行封禁，防止日志洪水攻击。管理员可以通过API或CLI命令管理IP黑名单。
+
+### 查看IP黑名单
+
+`GET /admin/ip-blacklist`
+
+返回示例：
+
+```json
+{
+  "ok": true,
+  "blacklist": [
+    {
+      "ip": "192.168.1.100",
+      "expiresIn": 3600000
+    }
+  ]
+}
+```
+
+### 移除IP黑名单
+
+`POST /admin/ip-blacklist/remove`
+
+Body：
+
+```json
+{ "ip": "192.168.1.100" }
+```
+
+成功：`200 { "ok": true }`
+
+### 清空IP黑名单
+
+`POST /admin/ip-blacklist/clear`
+
+成功：`200 { "ok": true }`
+
+### 查看当前日志速率
+
+`GET /admin/log-rate`
+
+返回示例：
+
+```json
+{
+  "ok": true,
+  "rate": {
+    "logsPerSecond": 10.5,
+    "threshold": 100
+  }
+}
+```
+
 ## 公共接口
 
 ### 获取房间列表（无需鉴权）

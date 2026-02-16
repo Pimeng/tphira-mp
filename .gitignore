@@ -6,3 +6,8 @@ dist-sea/
 release/
 .trae/
 package-lock.json
+
+# 用户插件（保留示例插件）
+plugins/*
+!plugins/README.md
+!plugins/virtualRoom.js

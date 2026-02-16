@@ -1,8 +1,8 @@
-import { Language } from "./l10n.js";
-import type { ServerState } from "./state.js";
-import type { Room } from "./room.ts";
-import type { Session } from "./session.ts";
-import type { ServerCommand, UserInfo } from "../common/commands.js";
+import { Language } from "../utils/l10n.js";
+import type { ServerState } from "../core/state.js";
+import type { Room } from "../game/room.js";
+import type { Session } from "../network/session.js";
+import type { ServerCommand, UserInfo } from "../../common/commands.js";
 
 export class User {
   readonly id: number;

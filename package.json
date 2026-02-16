@@ -2,7 +2,7 @@
   "name": "phira-mp-nodejs",
   "author": "Pimeng",
   "license": "AGPL-3.0",
-  "version": "1.5.2",
+  "version": "1.6",
   "type": "module",
   "engines": {
     "node": ">=22"
@@ -16,7 +16,7 @@
     "test": "vitest run",
     "test:watch": "vitest"
   },
-  "packageManager": "pnpm@9.15.4",
+  "packageManager": "pnpm@10.29.3",
   "dependencies": {
     "@fluent/bundle": "^0.18.0",
     "@fluent/langneg": "^0.7.0",

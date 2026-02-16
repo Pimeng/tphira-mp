@@ -1,16 +1,16 @@
 import type net from "node:net";
-import { err, ok, type StringResult } from "../common/binary.js";
-import type { ClientCommand, ClientRoomState, JoinRoomResponse, ServerCommand } from "../common/commands.js";
-import { HEARTBEAT_DISCONNECT_TIMEOUT_MS } from "../common/commands.js";
-import { parseRoomId } from "../common/roomId.js";
-import type { Stream } from "../common/stream.js";
-import { fetchWithTimeout } from "../common/http.js";
-import type { Room } from "./room.ts";
-import { Room as RoomClass } from "./room.js";
-import type { ServerState } from "./state.js";
-import type { Chart, RecordData } from "./types.js";
-import { User } from "./user.js";
-import { tl, type Language } from "./l10n.js";
+import { err, ok, type StringResult } from "../../common/binary.js";
+import type { ClientCommand, ClientRoomState, JoinRoomResponse, ServerCommand } from "../../common/commands.js";
+import { HEARTBEAT_DISCONNECT_TIMEOUT_MS } from "../../common/commands.js";
+import { parseRoomId } from "../../common/roomId.js";
+import type { Stream } from "../../common/stream.js";
+import { fetchWithTimeout } from "../../common/http.js";
+import type { Room } from "../game/room.js";
+import { Room as RoomClass } from "../game/room.js";
+import type { ServerState } from "../core/state.js";
+import type { Chart, RecordData } from "../core/types.js";
+import { User } from "../game/user.js";
+import { tl, type Language } from "../utils/l10n.js";
 
 const HOST = "https://phira.5wyxi.com";
 const FETCH_TIMEOUT_MS = 8000;

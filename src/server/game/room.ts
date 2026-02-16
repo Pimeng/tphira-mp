@@ -1,9 +1,9 @@
-import type { ClientRoomState, Message, RoomState, ServerCommand } from "../common/commands.js";
-import type { RoomId } from "../common/roomId.js";
-import { tl, type Language } from "./l10n.js";
-import type { Chart, RecordData } from "./types.js";
-import type { User } from "./user.js";
-import type { Logger } from "./logger.js";
+import type { ClientRoomState, Message, RoomState, ServerCommand } from "../../common/commands.js";
+import type { RoomId } from "../../common/roomId.js";
+import { tl, type Language } from "../utils/l10n.js";
+import type { Chart, RecordData } from "../core/types.js";
+import type { User } from "../game/user.js";
+import type { Logger } from "../utils/logger.js";
 
 export type InternalRoomState =
   | { type: "SelectChart" }

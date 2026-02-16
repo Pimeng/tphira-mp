@@ -3,8 +3,8 @@ import type net from "node:net";
 import { once } from "node:events";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
-import { parseRoomId, roomIdToString, type RoomId } from "../common/roomId.js";
-import { newUuid } from "../common/uuid.js";
+import { parseRoomId, roomIdToString, type RoomId } from "../../common/roomId.js";
+import { newUuid } from "../../common/uuid.js";
 import { 
   getClientIp, 
   applyCors, 
@@ -13,13 +13,13 @@ import {
   extractAdminToken,
   handleOptionsRequest,
   fetchWithTimeout 
-} from "../common/http.js";
-import { cleanupExpiredSessions } from "../common/utils.js";
-import type { ServerState } from "./state.js";
-import { Language, tl } from "./l10n.js";
-import type { ServerCommand } from "../common/commands.js";
-import { defaultReplayBaseDir, deleteReplayForUser, listReplaysForUser, readReplayHeader, replayFilePath } from "./replayStorage.js";
-import { startWebSocketService, type WebSocketService } from "./websocketService.js";
+} from "../../common/http.js";
+import { cleanupExpiredSessions } from "../../common/utils.js";
+import type { ServerState } from "../core/state.js";
+import { Language, tl } from "../utils/l10n.js";
+import type { ServerCommand } from "../../common/commands.js";
+import { defaultReplayBaseDir, deleteReplayForUser, listReplaysForUser, readReplayHeader, replayFilePath } from "../replay/replayStorage.js";
+import { startWebSocketService, type WebSocketService } from "../network/websocketService.js";
 
 export type HttpService = {
   server: http.Server;

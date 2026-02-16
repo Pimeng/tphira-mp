@@ -1,6 +1,6 @@
 import { mkdirSync, createWriteStream, type WriteStream } from "node:fs";
 import { join } from "node:path";
-import { RateLimiter } from "./rateLimiter.js";
+import { RateLimiter } from "../utils/rateLimiter.js";
 
 export type LogLevel = "DEBUG" | "INFO" | "MARK" | "WARN" | "ERROR";
 

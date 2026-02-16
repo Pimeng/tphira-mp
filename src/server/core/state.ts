@@ -1,17 +1,17 @@
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { Mutex } from "./mutex.js";
-import type { RoomId } from "../common/roomId.js";
-import { parseRoomId, roomIdToString } from "../common/roomId.js";
-import type { ServerConfig } from "./types.js";
-import type { Room } from "./room.js";
-import type { Session } from "./session.js";
-import type { User } from "./user.js";
-import type { Logger } from "./logger.js";
-import { Language } from "./l10n.js";
-import { ReplayRecorder } from "./replayRecorder.js";
-import { defaultReplayBaseDir } from "./replayStorage.js";
-import type { WebSocketService } from "./websocketService.js";
+import { Mutex } from "../utils/mutex.js";
+import type { RoomId } from "../../common/roomId.js";
+import { parseRoomId, roomIdToString } from "../../common/roomId.js";
+import type { ServerConfig } from "../core/types.js";
+import type { Room } from "../game/room.js";
+import type { Session } from "../network/session.js";
+import type { User } from "../game/user.js";
+import type { Logger } from "../utils/logger.js";
+import { Language } from "../utils/l10n.js";
+import { ReplayRecorder } from "../replay/replayRecorder.js";
+import { defaultReplayBaseDir } from "../replay/replayStorage.js";
+import type { WebSocketService } from "../network/websocketService.js";
 
 type AdminDataFile = { version: 1; bannedUsers: number[]; bannedRoomUsers: Record<string, number[]> };
 

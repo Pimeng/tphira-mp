@@ -1,24 +1,26 @@
 import net from "node:net";
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import yaml from "js-yaml";
-import { newUuid } from "../common/uuid.js";
-import { decodePacket, encodePacket } from "../common/binary.js";
-import { decodeClientCommand, encodeServerCommand } from "../common/commands.js";
-import { Stream } from "../common/stream.js";
-import type { StreamCodec } from "../common/stream.js";
-import type { ClientCommand, ServerCommand } from "../common/commands.js";
-import { ServerState } from "./state.js";
-import type { ServerConfig } from "./types.js";
-import { Session } from "./session.js";
-import { Logger } from "./logger.js";
-import { getAppPaths } from "./appPaths.js";
-import { readAppVersion } from "./version.js";
-import { startHttpService, type HttpService } from "./httpService.js";
-import { tl } from "./l10n.js";
-import { startReplayCleanup } from "./replayCleanup.js";
-import { parseProxyProtocol } from "./proxyProtocol.js";
-import { startCli } from "./cli.js";
-import type { RoomId } from "../common/roomId.js";
+import { newUuid } from "../../common/uuid.js";
+import { decodePacket, encodePacket } from "../../common/binary.js";
+import { decodeClientCommand, encodeServerCommand } from "../../common/commands.js";
+import { Stream } from "../../common/stream.js";
+import type { StreamCodec } from "../../common/stream.js";
+import type { ClientCommand, ServerCommand } from "../../common/commands.js";
+import { ServerState } from "../core/state.js";
+import type { ServerConfig } from "../core/types.js";
+import { Session } from "../network/session.js";
+import { Logger } from "../utils/logger.js";
+import { getAppPaths } from "../utils/appPaths.js";
+import { readAppVersion } from "../core/version.js";
+import { startHttpService, type HttpService } from "../network/httpService.js";
+import { tl } from "../utils/l10n.js";
+import { startReplayCleanup } from "../replay/replayCleanup.js";
+import { parseProxyProtocol } from "../network/proxyProtocol.js";
+import { startCli } from "../cli/cli.js";
+import type { RoomId } from "../../common/roomId.js";
+import { PluginManager } from "../plugins/PluginManager.js";
 
 export type StartServerOptions = { host?: string; port?: number; config?: Partial<ServerConfig> };
 
@@ -27,6 +29,7 @@ export type RunningServer = {
   http?: HttpService;
   state: ServerState;
   logger: Logger;
+  pluginManager: PluginManager;
   close: () => Promise<void>;
   address: () => net.AddressInfo;
 };
@@ -232,6 +235,11 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
   await state.loadAdminData();
   const replayCleanup = startReplayCleanup({ ttlDays: 4, logger });
 
+  // 初始化插件系统
+  const pluginManager = new PluginManager(state, logger, paths.pluginsDir);
+  await pluginManager.loadPlugins();
+  await pluginManager.triggerHook("onServerStart");
+
   const version = readAppVersion();
   const listenHost = mergedCfg.host ?? "::";
   const listenPort = mergedCfg.port ?? 12346;
@@ -355,9 +363,11 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
     http: httpService ?? undefined,
     state,
     logger,
+    pluginManager,
     address: () => server.address() as net.AddressInfo,
     close: async () => {
       try {
+        await pluginManager.unloadPlugins();
         stopCli();
         if (httpService) await httpService.close();
         await new Promise<void>((resolve, reject) => {
