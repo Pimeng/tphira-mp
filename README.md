@@ -46,7 +46,7 @@ Phira MP 的 Typescript 实现，目前正在逐步完善，还请多多包涵
 - ROOM_MAX_USERS(number): 单房间最大玩家数（默认 `8`，最大 `64`）
 - PHIRA_MP_LANG(string): 服务端默认语言（默认 `zh-CN`）
 - ADMIN_TOKEN(string): 管理员接口鉴权 Token（默认 `replace_me`）
-  - 未配置时可使用 OTP（一次性验证码）方式获取临时管理员权限，详见 [API文档](api.md)
+  - 未配置时可使用 OTP（一次性验证码）方式获取临时管理员权限，详见 [API文档](docs/api.md)
 - ADMIN_DATA_PATH(string): 管理员数据持久化路径（JSON）（默认 `./admin_data.json`）
 - ROOM_LIST_TIP(string): 登录后展示可用房间列表后追加的提示文案（可用于群宣传/查房间等，纯文本）（默认空）
 
@@ -119,9 +119,9 @@ pnpm run package:sea
 
 ## 🔧 API接口
 
-请参考 [此文档](api.md)
+请参考 [此文档](docs/api.md)
 
-有关 Websocket 请查阅 [此文档](websocket.md)
+有关 Websocket 请查阅 [此文档](docs/websocket.md)
 
 ## 🎮 服务器控制台命令
 
