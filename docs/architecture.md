@@ -86,7 +86,7 @@ SelectChart → WaitForReady → Playing → SelectChart
 **房间属性：**
 - `maxUsers`: 最大玩家数（1-64）
 - `live`: 是否为直播房间
-- `locked`: 是否锁定（仅房主可操作）
+- `locked`: 是否锁定（房间禁止新成员进入）
 - `cycle`: 是否循环模式（游戏结束后轮换房主）
 - `replayEligible`: 是否 eligible for replay recording
 
