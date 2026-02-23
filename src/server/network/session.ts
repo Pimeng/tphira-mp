@@ -11,28 +11,11 @@ import type { ServerState } from "../core/state.js";
 import type { Chart, RecordData } from "../core/types.js";
 import { User } from "../game/user.js";
 import { tl, type Language } from "../utils/l10n.js";
+import { chartCache } from "../utils/cache.js";
+import { getHitokotoCached, type HitokotoValue } from "../utils/hitokotoCache.js";
 
 const HOST = "https://phira.5wyxi.com";
 const FETCH_TIMEOUT_MS = 8000;
-
-const HITOKOTO_URL = "https://v1.hitokoto.cn/";
-const HITOKOTO_FETCH_TIMEOUT_MS = 3000;
-const HITOKOTO_CACHE_TTL_MS = 60_000;
-const HITOKOTO_MIN_INTERVAL_MS = 600;
-
-type HitokotoValue = { quote: string; from: string };
-
-let hitokotoCache: { 
-  value: HitokotoValue | null; 
-  fetchedAt: number; 
-  lastAttemptAt: number; 
-  inFlight: Promise<HitokotoValue | null> | null;
-} = {
-  value: null,
-  fetchedAt: 0,
-  lastAttemptAt: 0,
-  inFlight: null
-};
 
 // 房间列表缓存
 type RoomListCache = {
@@ -51,44 +34,6 @@ function pickRandom<T>(arr: readonly T[]): T | null {
   if (arr.length === 0) return null;
   const idx = Math.floor(Math.random() * arr.length);
   return arr[idx] ?? null;
-}
-
-async function fetchHitokoto(): Promise<HitokotoValue | null> {
-  const res = await fetchWithTimeout(HITOKOTO_URL, {}, HITOKOTO_FETCH_TIMEOUT_MS);
-  if (!res.ok) return null;
-  const json = (await res.json()) as { hitokoto?: unknown; from?: unknown; from_who?: unknown };
-  const quote = typeof json.hitokoto === "string" ? json.hitokoto.trim() : "";
-  if (!quote) return null;
-  const fromWho = typeof json.from_who === "string" ? json.from_who.trim() : "";
-  const from = typeof json.from === "string" ? json.from.trim() : "";
-  const displayFrom = fromWho || from;
-  return { quote, from: displayFrom };
-}
-
-async function getHitokotoCached(): Promise<HitokotoValue | null> {
-  const now = Date.now();
-  if (hitokotoCache.value && now - hitokotoCache.fetchedAt <= HITOKOTO_CACHE_TTL_MS) return hitokotoCache.value;
-  if (hitokotoCache.inFlight) return await hitokotoCache.inFlight;
-  if (hitokotoCache.value && now - hitokotoCache.lastAttemptAt < HITOKOTO_MIN_INTERVAL_MS) return hitokotoCache.value;
-
-  hitokotoCache.lastAttemptAt = now;
-  hitokotoCache.inFlight = (async () => {
-    try {
-      const v = await fetchHitokoto();
-      if (v) {
-        hitokotoCache.value = v;
-        hitokotoCache.fetchedAt = Date.now();
-        return v;
-      }
-      return hitokotoCache.value;
-    } catch {
-      return hitokotoCache.value;
-    } finally {
-      hitokotoCache.inFlight = null;
-    }
-  })();
-
-  return await hitokotoCache.inFlight;
 }
 
 export class Session {
@@ -848,11 +793,24 @@ export class Session {
   }
 
   private async fetchChart(user: User, id: number): Promise<Chart> {
+    // 先尝试从缓存获取
+    const cached = await chartCache.get(id);
+    if (cached) {
+      return cached;
+    }
+
+    // 缓存未命中，从远程获取
     const res = await fetchWithRetry(`${HOST}/chart/${id}`, {}, FETCH_TIMEOUT_MS).then(async (r) => {
       if (!r.ok) throw new Error(user.lang.format("chart-fetch-failed"));
       return (await r.json()) as Chart;
     });
-    return { id: res.id, name: res.name };
+    
+    const chart = { id: res.id, name: res.name };
+    
+    // 保存到缓存
+    await chartCache.set(id, chart);
+    
+    return chart;
   }
 
   private async fetchRecord(user: User, id: number): Promise<RecordData> {
