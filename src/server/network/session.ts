@@ -4,7 +4,7 @@ import type { ClientCommand, ClientRoomState, JoinRoomResponse, ServerCommand } 
 import { HEARTBEAT_DISCONNECT_TIMEOUT_MS } from "../../common/commands.js";
 import { parseRoomId } from "../../common/roomId.js";
 import type { Stream } from "../../common/stream.js";
-import { fetchWithTimeout } from "../../common/http.js";
+import { fetchWithTimeout, fetchWithRetry } from "../../common/http.js";
 import type { Room } from "../game/room.js";
 import { Room as RoomClass } from "../game/room.js";
 import type { ServerState } from "../core/state.js";
@@ -179,7 +179,7 @@ export class Session {
 
   private async handleAuthenticate(token: string): Promise<void> {
     try {
-      const me = await fetchWithTimeout(`${HOST}/me`, {
+      const me = await fetchWithRetry(`${HOST}/me`, {
         headers: { Authorization: `Bearer ${token}` }
       }, FETCH_TIMEOUT_MS).then(async (r) => {
         if (!r.ok) throw new Error("auth-fetch-me-failed");
@@ -848,7 +848,7 @@ export class Session {
   }
 
   private async fetchChart(user: User, id: number): Promise<Chart> {
-    const res = await fetchWithTimeout(`${HOST}/chart/${id}`, {}, FETCH_TIMEOUT_MS).then(async (r) => {
+    const res = await fetchWithRetry(`${HOST}/chart/${id}`, {}, FETCH_TIMEOUT_MS).then(async (r) => {
       if (!r.ok) throw new Error(user.lang.format("chart-fetch-failed"));
       return (await r.json()) as Chart;
     });
@@ -856,7 +856,7 @@ export class Session {
   }
 
   private async fetchRecord(user: User, id: number): Promise<RecordData> {
-    return await fetchWithTimeout(`${HOST}/record/${id}`, {}, FETCH_TIMEOUT_MS).then(async (r) => {
+    return await fetchWithRetry(`${HOST}/record/${id}`, {}, FETCH_TIMEOUT_MS).then(async (r) => {
       if (!r.ok) throw new Error(user.lang.format("record-fetch-failed"));
       return (await r.json()) as RecordData;
     });

@@ -12,7 +12,8 @@ import {
   readJson, 
   extractAdminToken,
   handleOptionsRequest,
-  fetchWithTimeout 
+  fetchWithTimeout,
+  fetchWithRetry
 } from "../../common/http.js";
 import { cleanupExpiredSessions } from "../../common/utils.js";
 import type { ServerState } from "../core/state.js";
@@ -218,7 +219,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           if (Date.now() > v.expiresAt) replaySessions.delete(k);
         }
 
-        const me = await fetchWithTimeout("https://phira.5wyxi.com/me", {
+        const me = await fetchWithRetry("https://phira.5wyxi.com/me", {
           headers: { Authorization: `Bearer ${token}` }
         }, 8000).then(async (r) => {
           if (!r.ok) throw new Error("auth-failed");

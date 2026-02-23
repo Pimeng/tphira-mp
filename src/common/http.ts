@@ -126,3 +126,33 @@ export async function fetchWithTimeout(
     clearTimeout(timer);
   }
 }
+
+/**
+ * 带重试机制的 fetch 请求（最多重试2次）
+ */
+export async function fetchWithRetry(
+  input: string | URL,
+  init: RequestInit,
+  timeoutMs: number,
+  maxRetries: number = 2
+): Promise<Response> {
+  let lastError: Error | null = null;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fetchWithTimeout(input, init, timeoutMs);
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      
+      // 如果还有重试次数，继续重试
+      if (attempt < maxRetries) {
+        // 添加延迟，避免立即重试（指数退避）
+        await new Promise(resolve => setTimeout(resolve, 100 * (attempt + 1)));
+        continue;
+      }
+    }
+  }
+  
+  // 所有重试都失败，抛出最后一个错误
+  throw lastError ?? new Error("fetch failed");
+}
