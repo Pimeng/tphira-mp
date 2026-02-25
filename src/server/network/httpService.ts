@@ -219,7 +219,8 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           if (Date.now() > v.expiresAt) replaySessions.delete(k);
         }
 
-        const me = await fetchWithRetry("https://phira.5wyxi.com/me", {
+        const phiraApiEndpoint = state.config.phira_api_endpoint || "https://phira.5wyxi.com";
+        const me = await fetchWithRetry(`${phiraApiEndpoint}/me`, {
           headers: { Authorization: `Bearer ${token}` }
         }, 8000).then(async (r) => {
           if (!r.ok) throw new Error("auth-failed");

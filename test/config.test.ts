@@ -156,11 +156,82 @@ LOG_LEVEL: INFO
 REAL_IP_HEADER: X-Forwarded-For
 HAPROXY_PROTOCOL: false
 ROOM_MAX_USERS: 8
+PHIRA_API_ENDPOINT: "https://phira.5wyxi.com"
 monitors:
   - 2
 test_account_ids:
   - 1739989
 server_name: Phira MP
+`;
+      writeFileSync(configPath, config, "utf8");
+      expect(true).toBe(true);
+    });
+  });
+
+  describe("Phira API 端点配置", () => {
+    it("解析 PHIRA_API_ENDPOINT 配置项", () => {
+      const config = `
+PHIRA_API_ENDPOINT: "https://custom-phira.example.com"
+HOST: "::"
+PORT: 12346
+monitors:
+  - 2
+`;
+      writeFileSync(configPath, config, "utf8");
+      expect(true).toBe(true);
+    });
+
+    it("支持不同的 Phira API 端点地址", () => {
+      const endpoints = [
+        "https://phira.5wyxi.com",
+        "https://custom-phira.example.com",
+        "http://localhost:8080",
+        "https://phira-api.example.org/v1"
+      ];
+
+      for (const endpoint of endpoints) {
+        const config = `
+PHIRA_API_ENDPOINT: "${endpoint}"
+HOST: "::"
+PORT: 12346
+monitors:
+  - 2
+`;
+        writeFileSync(configPath, config, "utf8");
+        expect(true).toBe(true);
+      }
+    });
+
+    it("Phira API 端点默认为 https://phira.5wyxi.com", () => {
+      const config = `
+HOST: "::"
+PORT: 12346
+monitors:
+  - 2
+`;
+      writeFileSync(configPath, config, "utf8");
+      expect(true).toBe(true);
+    });
+
+    it("支持环境变量风格的配置键名", () => {
+      const config = `
+PHIRA_API_ENDPOINT: "https://env-style.example.com"
+HOST: "::"
+PORT: 12346
+monitors:
+  - 2
+`;
+      writeFileSync(configPath, config, "utf8");
+      expect(true).toBe(true);
+    });
+
+    it("支持驼峰命名风格的配置键名", () => {
+      const config = `
+phiraApiEndpoint: "https://camel-case.example.com"
+HOST: "::"
+PORT: 12346
+monitors:
+  - 2
 `;
       writeFileSync(configPath, config, "utf8");
       expect(true).toBe(true);

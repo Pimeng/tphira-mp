@@ -81,6 +81,7 @@ function loadEnvConfig(): Partial<ServerConfig> {
   const log_level = process.env.LOG_LEVEL?.trim() || undefined;
   const real_ip_header = process.env.REAL_IP_HEADER?.trim() || undefined;
   const haproxy_protocol = parseBoolEnv(process.env.HAPROXY_PROTOCOL);
+  const phira_api_endpoint = process.env.PHIRA_API_ENDPOINT?.trim() || undefined;
 
   const out: Partial<ServerConfig> = {};
   if (monitors) out.monitors = monitors;
@@ -97,6 +98,7 @@ function loadEnvConfig(): Partial<ServerConfig> {
   if (log_level) out.log_level = log_level;
   if (real_ip_header) out.real_ip_header = real_ip_header;
   if (haproxy_protocol !== undefined) out.haproxy_protocol = haproxy_protocol;
+  if (phira_api_endpoint) out.phira_api_endpoint = phira_api_endpoint;
   return out;
 }
 
@@ -116,7 +118,8 @@ function mergeConfig(base: ServerConfig, override: Partial<ServerConfig>): Serve
     room_list_tip: override.room_list_tip ?? base.room_list_tip,
     log_level: override.log_level ?? base.log_level,
     real_ip_header: override.real_ip_header ?? base.real_ip_header,
-    haproxy_protocol: override.haproxy_protocol ?? base.haproxy_protocol
+    haproxy_protocol: override.haproxy_protocol ?? base.haproxy_protocol,
+    phira_api_endpoint: override.phira_api_endpoint ?? base.phira_api_endpoint
   };
 }
 
@@ -193,7 +196,10 @@ function loadConfig(): ServerConfig {
     const haproxyProtocolRaw = read<unknown>(["haproxy_protocol", "HAPROXY_PROTOCOL", "haproxyProtocol"]);
     const haproxy_protocol = typeof haproxyProtocolRaw === "boolean" ? haproxyProtocolRaw : undefined;
 
-    return { monitors, test_account_ids, server_name, host, port: safePort, http_service, http_port: safeHttpPort, room_max_users, replay_enabled, admin_token, admin_data_path, room_list_tip, log_level, real_ip_header, haproxy_protocol };
+    const phiraApiEndpointRaw = read<unknown>(["phira_api_endpoint", "PHIRA_API_ENDPOINT", "phiraApiEndpoint"]);
+    const phira_api_endpoint = typeof phiraApiEndpointRaw === "string" && phiraApiEndpointRaw.trim().length > 0 ? phiraApiEndpointRaw.trim() : undefined;
+
+    return { monitors, test_account_ids, server_name, host, port: safePort, http_service, http_port: safeHttpPort, room_max_users, replay_enabled, admin_token, admin_data_path, room_list_tip, log_level, real_ip_header, haproxy_protocol, phira_api_endpoint };
   } catch {
     return { monitors: [2] };
   }

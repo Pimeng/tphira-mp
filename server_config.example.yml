@@ -43,3 +43,7 @@ server_name: Phira MP
 # 登录后展示可用房间列表后追加的提示文案（可用于群宣传/查房间等，纯文本）
 # ROOM_LIST_TIP: "欢迎加入交流群：123456；查房间：example.com"
 
+# Phira API 端点地址（用于用户认证、获取谱面信息、获取成绩记录等）
+# 默认: https://phira.5wyxi.com
+PHIRA_API_ENDPOINT: "https://phira.5wyxi.com"
+

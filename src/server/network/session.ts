@@ -14,7 +14,7 @@ import { tl, type Language } from "../utils/l10n.js";
 import { chartCache } from "../utils/cache.js";
 import { getHitokotoCached, type HitokotoValue } from "../utils/hitokotoCache.js";
 
-const HOST = "https://phira.5wyxi.com";
+const DEFAULT_PHIRA_API_ENDPOINT = "https://phira.5wyxi.com";
 const FETCH_TIMEOUT_MS = 8000;
 
 // 房间列表缓存
@@ -122,9 +122,13 @@ export class Session {
     if (resp) await this.trySend(resp);
   }
 
+  private getPhiraApiEndpoint(): string {
+    return this.state.config.phira_api_endpoint || DEFAULT_PHIRA_API_ENDPOINT;
+  }
+
   private async handleAuthenticate(token: string): Promise<void> {
     try {
-      const me = await fetchWithRetry(`${HOST}/me`, {
+      const me = await fetchWithRetry(`${this.getPhiraApiEndpoint()}/me`, {
         headers: { Authorization: `Bearer ${token}` }
       }, FETCH_TIMEOUT_MS).then(async (r) => {
         if (!r.ok) throw new Error("auth-fetch-me-failed");
@@ -800,21 +804,21 @@ export class Session {
     }
 
     // 缓存未命中，从远程获取
-    const res = await fetchWithRetry(`${HOST}/chart/${id}`, {}, FETCH_TIMEOUT_MS).then(async (r) => {
+    const res = await fetchWithRetry(`${this.getPhiraApiEndpoint()}/chart/${id}`, {}, FETCH_TIMEOUT_MS).then(async (r) => {
       if (!r.ok) throw new Error(user.lang.format("chart-fetch-failed"));
       return (await r.json()) as Chart;
     });
-    
+
     const chart = { id: res.id, name: res.name };
-    
+
     // 保存到缓存
     await chartCache.set(id, chart);
-    
+
     return chart;
   }
 
   private async fetchRecord(user: User, id: number): Promise<RecordData> {
-    return await fetchWithRetry(`${HOST}/record/${id}`, {}, FETCH_TIMEOUT_MS).then(async (r) => {
+    return await fetchWithRetry(`${this.getPhiraApiEndpoint()}/record/${id}`, {}, FETCH_TIMEOUT_MS).then(async (r) => {
       if (!r.ok) throw new Error(user.lang.format("record-fetch-failed"));
       return (await r.json()) as RecordData;
     });

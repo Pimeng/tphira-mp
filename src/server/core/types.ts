@@ -18,6 +18,8 @@ export type ServerConfig = {
   real_ip_header?: string;
   /** 是否启用 HAProxy PROXY Protocol 支持 */
   haproxy_protocol?: boolean;
+  /** Phira API 端点地址，默认 https://phira.5wyxi.com */
+  phira_api_endpoint?: string;
 };
 
 export type Chart = {
