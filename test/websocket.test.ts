@@ -1,8 +1,8 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest";
 import WebSocket from "ws";
-import { startServer, type RunningServer } from "../src/server/server.js";
+import { startServer, type RunningServer } from "../src/server/core/server.js";
 import { Client } from "../src/client/client.js";
-import type { ServerConfig } from "../src/server/types.js";
+import type { ServerConfig } from "../src/server/core/types.js";
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));

@@ -3,7 +3,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi 
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { Client } from "../src/client/client.js";
-import { startServer } from "../src/server/server.js";
+import { startServer } from "../src/server/core/server.js";
 import { sleep, waitFor } from "./helpers.js";
 
 describe("Phira API 端点配置", () => {

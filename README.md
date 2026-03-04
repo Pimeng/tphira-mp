@@ -56,6 +56,10 @@ Phira MP 的 Typescript 实现，目前正在逐步完善，还请多多包涵
   - 未配置时可使用 OTP（一次性验证码）方式获取临时管理员权限，详见 [API文档](docs/api.md)
 - ADMIN_DATA_PATH(string): 管理员数据持久化路径（JSON）（默认 `./admin_data.json`）
 - ROOM_LIST_TIP(string): 登录后展示可用房间列表后追加的提示文案（可用于群宣传/查房间等，纯文本）（默认空）
+- PHIRA_API_ENDPOINT(string): Phira API 端点地址（默认 `https://phira.5wyxi.com`）
+- SHARE_STATION(object): Phira Replay 分享站配置
+  - `url`(string): 分享站地址（例如 `http://127.0.0.1:40004`）
+  - `token`(string): 服务器认证 token（用于自动上传等内部接口）
 
 
 ## 🔨 安装与构建

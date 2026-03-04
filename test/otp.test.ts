@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
-import { startServer, type RunningServer } from "../src/server/server.js";
+import { startServer, type RunningServer } from "../src/server/core/server.js";
 
 describe("OTP临时TOKEN功能测试", () => {
   let server: RunningServer;

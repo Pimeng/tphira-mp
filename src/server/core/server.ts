@@ -315,6 +315,7 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
   // 设置 WebSocket 服务引用
   if (httpService) {
     state.wsService = httpService.ws;
+    state.autoUploadCallback = httpService.handleGameEndAutoUpload;
     
     // 将 WebSocket 日志推送注册到 Logger
     // 需要重新创建 Logger 以添加回调

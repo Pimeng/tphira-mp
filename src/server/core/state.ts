@@ -3,7 +3,7 @@ import { dirname } from "node:path";
 import { Mutex } from "../utils/mutex.js";
 import type { RoomId } from "../../common/roomId.js";
 import { parseRoomId, roomIdToString } from "../../common/roomId.js";
-import type { ServerConfig } from "../core/types.js";
+import type { ServerConfig, ShareStationConfig } from "../core/types.js";
 import type { Room } from "../game/room.js";
 import type { Session } from "../network/session.js";
 import type { User } from "../game/user.js";
@@ -15,6 +15,18 @@ import type { WebSocketService } from "../network/websocketService.js";
 
 type AdminDataFile = { version: 1; bannedUsers: number[]; bannedRoomUsers: Record<string, number[]> };
 
+/** 用户自动上传配置 */
+export type AutoUploadConfig = {
+  enabled: boolean;
+  show: boolean;
+};
+
+/** 自动上传数据文件格式 */
+type AutoUploadDataFile = { 
+  version: 1; 
+  configs: Record<string, AutoUploadConfig>; // key: userId.toString()
+};
+
 export class ServerState {
   readonly mutex = new Mutex();
   readonly config: ServerConfig;
@@ -24,6 +36,17 @@ export class ServerState {
   readonly adminDataPath: string;
   replayEnabled: boolean;
   roomCreationEnabled: boolean;
+  
+  /** 分享站配置 */
+  get shareStation(): ShareStationConfig | undefined {
+    return this.config.share_station;
+  }
+  
+  /** 检查分享站是否已配置 */
+  get shareStationConfigured(): boolean {
+    const cfg = this.config.share_station;
+    return Boolean(cfg?.url && cfg?.token);
+  }
 
   readonly sessions = new Map<string, Session>();
   readonly users = new Map<number, User>();
@@ -37,9 +60,17 @@ export class ServerState {
   
   // WebSocket 服务引用（可选，仅在 HTTP 服务启用时存在）
   wsService: WebSocketService | null = null;
+  
+  // 自动上传回调（由 HttpService 设置）
+  autoUploadCallback: ((userId: number, chartId: number, timestamp: number, recordId: number) => void) | null = null;
 
   // 临时管理员 TOKEN 管理
   readonly tempAdminTokens = new Map<string, { ip: string; expiresAt: number; banned: boolean }>();
+  
+  // 用户自动上传配置（仅内存存储，在/replay/auth时关联）
+  readonly autoUploadConfigs = new Map<number, AutoUploadConfig>();
+  // 待处理的自动上传任务（用户ID -> 任务列表）
+  readonly pendingAutoUploads = new Map<number, Array<{ chartId: number; timestamp: number; recordId: number }>>();
 
   constructor(config: ServerConfig, logger: Logger, serverName: string, adminDataPath: string) {
     this.config = config;

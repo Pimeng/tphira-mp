@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { mkdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Logger, formatLocalDateKey } from "../src/server/logger.js";
+import { Logger, formatLocalDateKey } from "../src/server/utils/logger.js";
 
 function makeTempDir(name: string): string {
   const dir = join(tmpdir(), "phira-mp-nodejs-logger-tests", name);

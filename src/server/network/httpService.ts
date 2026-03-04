@@ -1,8 +1,10 @@
 import http from "node:http";
 import type net from "node:net";
 import { once } from "node:events";
-import { createReadStream } from "node:fs";
-import { stat } from "node:fs/promises";
+import { createReadStream, createWriteStream } from "node:fs";
+import { stat, readFile, unlink, mkdir } from "node:fs/promises";
+import { pipeline } from "node:stream/promises";
+import { dirname, join } from "node:path";
 import { parseRoomId, roomIdToString, type RoomId } from "../../common/roomId.js";
 import { newUuid } from "../../common/uuid.js";
 import { 
@@ -20,6 +22,7 @@ import type { ServerState } from "../core/state.js";
 import { Language, tl } from "../utils/l10n.js";
 import type { ServerCommand } from "../../common/commands.js";
 import { defaultReplayBaseDir, deleteReplayForUser, listReplaysForUser, readReplayHeader, replayFilePath } from "../replay/replayStorage.js";
+import type { AutoUploadConfig } from "../core/state.js";
 import { startWebSocketService, type WebSocketService } from "../network/websocketService.js";
 
 export type HttpService = {
@@ -27,6 +30,8 @@ export type HttpService = {
   ws: WebSocketService;
   address: () => net.AddressInfo;
   close: () => Promise<void>;
+  /** 处理游戏结束时的自动上传任务 */
+  handleGameEndAutoUpload: (userId: number, chartId: number, timestamp: number, recordId: number) => void;
 };
 
 export async function startHttpService(opts: { state: ServerState; host: string; port: number }): Promise<HttpService> {
@@ -49,6 +54,152 @@ export async function startHttpService(opts: { state: ServerState; host: string;
   const otpAttemptsByIp = new Map<string, number>();
   const otpAttemptsBySsid = new Map<string, number>();
   const otpBannedIps = new Set<string>();
+
+  /**
+   * 验证用户TOKEN并获取用户ID
+   */
+  const verifyUserToken = async (token: string): Promise<number | null> => {
+    const phiraApiEndpoint = state.config.phira_api_endpoint || "https://phira.5wyxi.com";
+    try {
+      const resp = await fetchWithRetry(`${phiraApiEndpoint}/me`, {
+        headers: { Authorization: `Bearer ${token}` }
+      }, 8000);
+      if (!resp.ok) return null;
+      const data = await resp.json() as { id: number };
+      return Number.isInteger(data.id) ? data.id : null;
+    } catch {
+      return null;
+    }
+  };
+
+  /**
+   * 上传文件到分享站（内部函数）
+   */
+  const uploadToShareStation = async (
+    fileBuffer: Buffer,
+    filename: string,
+    options?: { chartName?: string; username?: string; illustration?: string; chartLink?: string }
+  ): Promise<{ success: boolean; replayId?: string; scoreId?: number; message?: string }> => {
+    if (!state.shareStationConfigured) {
+      return { success: false, message: "share-station-not-configured" };
+    }
+
+    const shareStation = state.shareStation!;
+    const uploadUrl = `${shareStation.url}/upload_direct`;
+
+    try {
+      // 创建 multipart/form-data
+      const boundary = `----FormBoundary${Date.now()}`;
+      const chunks: Buffer[] = [];
+
+      // 添加 file 字段
+      const fileHeader = Buffer.from(
+        `--${boundary}\r\n` +
+        `Content-Disposition: form-data; name="file"; filename="${filename}"\r\n` +
+        `Content-Type: application/octet-stream\r\n\r\n`,
+        'utf-8'
+      );
+      chunks.push(fileHeader);
+      chunks.push(fileBuffer);
+      chunks.push(Buffer.from('\r\n', 'utf-8'));
+
+      // 添加可选字段
+      if (options?.chartName) {
+        chunks.push(Buffer.from(
+          `--${boundary}\r\n` +
+          `Content-Disposition: form-data; name="chart_name"\r\n\r\n` +
+          `${options.chartName}\r\n`,
+          'utf-8'
+        ));
+      }
+      if (options?.username) {
+        chunks.push(Buffer.from(
+          `--${boundary}\r\n` +
+          `Content-Disposition: form-data; name="username"\r\n\r\n` +
+          `${options.username}\r\n`,
+          'utf-8'
+        ));
+      }
+      if (options?.illustration) {
+        chunks.push(Buffer.from(
+          `--${boundary}\r\n` +
+          `Content-Disposition: form-data; name="illustration"\r\n\r\n` +
+          `${options.illustration}\r\n`,
+          'utf-8'
+        ));
+      }
+      if (options?.chartLink) {
+        chunks.push(Buffer.from(
+          `--${boundary}\r\n` +
+          `Content-Disposition: form-data; name="chart_link"\r\n\r\n` +
+          `${options.chartLink}\r\n`,
+          'utf-8'
+        ));
+      }
+
+      // 结束 boundary
+      chunks.push(Buffer.from(`--${boundary}--\r\n`, 'utf-8'));
+
+      const body = Buffer.concat(chunks);
+
+      const response = await fetchWithTimeout(uploadUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${shareStation.token}`,
+          'Content-Type': `multipart/form-data; boundary=${boundary}`,
+          'Content-Length': body.length.toString()
+        },
+        body
+      }, 60000);
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => 'unknown error');
+        return { success: false, message: `upload-failed: ${errorText}` };
+      }
+
+      const result = await response.json() as { success?: boolean; replay_id?: string; message?: string };
+      
+      // 解析 replay_id 获取 score_id
+      // replay_id 格式通常是 "{user_id}_{chart_id}_{score_id}.phirarec"
+      const replayId = result.replay_id || '';
+      const scoreIdMatch = /_(\d+)\.phirarec$/.exec(replayId);
+      const scoreId = scoreIdMatch ? parseInt(scoreIdMatch[1]!, 10) : undefined;
+
+      return {
+        success: result.success ?? true,
+        replayId,
+        scoreId,
+        message: result.message
+      };
+    } catch (error) {
+      state.logger.error(`Upload to share station failed: ${error instanceof Error ? error.message : String(error)}`);
+      return { success: false, message: "upload-failed" };
+    }
+  };
+
+  /**
+   * 设置回放在分享站的显示状态
+   */
+  const setReplayVisibility = async (scoreId: number, visible: boolean): Promise<boolean> => {
+    if (!state.shareStationConfigured) return false;
+
+    const shareStation = state.shareStation!;
+    const endpoint = visible ? `/show/${scoreId}` : `/hide/${scoreId}`;
+    const url = `${shareStation.url}${endpoint}`;
+
+    try {
+      const response = await fetchWithTimeout(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${shareStation.token}`
+        }
+      }, 10000);
+
+      return response.ok;
+    } catch {
+      return false;
+    }
+  };
   const otpBannedSsids = new Set<string>();
 
   const server = http.createServer((req, res) => {
@@ -339,6 +490,169 @@ export async function startHttpService(opts: { state: ServerState; host: string;
         }
 
         write(200, { ok: true });
+        return;
+      }
+
+      // 4) 上传回放到分享站（使用用户TOKEN鉴权）
+      if (req.method === "POST" && url.pathname === "/replay/upload") {
+        const body = await read();
+        const token = typeof (body as any)?.token === "string" ? String((body as any).token).trim() : "";
+        const chartId = Number((body as any)?.chartId ?? "");
+        const timestamp = Number((body as any)?.timestamp ?? "");
+
+        if (!token || !Number.isInteger(chartId) || !Number.isInteger(timestamp) || chartId < 0 || timestamp <= 0) {
+          write(400, { ok: false, error: "bad-request" });
+          return;
+        }
+
+        // 验证用户TOKEN
+        const userId = await verifyUserToken(token);
+        if (userId === null) {
+          write(401, { ok: false, error: "unauthorized" });
+          return;
+        }
+
+        // 检查分享站是否配置
+        if (!state.shareStationConfigured) {
+          write(503, { ok: false, error: "share-station-not-configured" });
+          return;
+        }
+
+        // 获取回放文件路径
+        const baseDir = defaultReplayBaseDir();
+        const filePath = replayFilePath(baseDir, userId, chartId, timestamp);
+
+        // 验证文件头和权限
+        const header = await readReplayHeader(filePath).catch(() => null);
+        if (!header || header.userId !== userId || header.chartId !== chartId) {
+          write(404, { ok: false, error: "not-found" });
+          return;
+        }
+
+        // 检查文件是否存在
+        const fileInfo = await stat(filePath).catch(() => null);
+        if (!fileInfo || !fileInfo.isFile()) {
+          write(404, { ok: false, error: "not-found" });
+          return;
+        }
+
+        // 读取文件内容
+        let fileBuffer: Buffer;
+        try {
+          fileBuffer = await readFile(filePath);
+        } catch {
+          write(500, { ok: false, error: "upload-failed" });
+          return;
+        }
+
+        // 上传到分享站
+        const uploadResult = await uploadToShareStation(
+          fileBuffer,
+          `${timestamp}.phirarec`,
+          { chartName: undefined, username: undefined }
+        );
+
+        if (!uploadResult.success) {
+          write(500, { ok: false, error: uploadResult.message || "upload-failed" });
+          return;
+        }
+
+        // 手动上传默认设置为显示
+        if (uploadResult.scoreId) {
+          await setReplayVisibility(uploadResult.scoreId, true);
+        }
+
+        write(200, {
+          ok: true,
+          userId,
+          chartId,
+          recordId: header.recordId || 0,
+          scoreId: uploadResult.scoreId,
+          message: "upload-success"
+        });
+        return;
+      }
+
+      // 5) 自动上传配置接口（使用用户TOKEN鉴权）
+
+      // 查询自动上传配置
+      if (req.method === "GET" && url.pathname === "/replay/auto-upload/config") {
+        const token = (url.searchParams.get("token") ?? "").trim();
+        if (!token) {
+          write(400, { ok: false, error: "bad-token" });
+          return;
+        }
+
+        // 验证用户TOKEN
+        const userId = await verifyUserToken(token);
+        if (userId === null) {
+          write(401, { ok: false, error: "unauthorized" });
+          return;
+        }
+
+        // 获取或创建用户配置
+        let config = state.autoUploadConfigs.get(userId);
+        if (!config) {
+          config = { enabled: false, show: false };
+          state.autoUploadConfigs.set(userId, config);
+        }
+
+        write(200, {
+          ok: true,
+          userId,
+          enabled: config.enabled,
+          show: config.show,
+          shareStationConfigured: state.shareStationConfigured
+        });
+        return;
+      }
+
+      // 修改自动上传配置
+      if (req.method === "POST" && url.pathname === "/replay/auto-upload/config") {
+        const body = await read();
+        const token = typeof (body as any)?.token === "string" ? String((body as any).token).trim() : "";
+        const enabled = (body as any)?.enabled;
+        const show = (body as any)?.show;
+
+        if (!token) {
+          write(400, { ok: false, error: "bad-token" });
+          return;
+        }
+
+        // 验证用户TOKEN
+        const userId = await verifyUserToken(token);
+        if (userId === null) {
+          write(401, { ok: false, error: "unauthorized" });
+          return;
+        }
+
+        // 获取或创建用户配置
+        let config = state.autoUploadConfigs.get(userId);
+        if (!config) {
+          config = { enabled: false, show: false };
+        }
+
+        // 更新配置
+        if (typeof enabled === 'boolean') {
+          config.enabled = enabled;
+          
+          // 如果禁用自动上传，清除待处理的任务
+          if (!enabled) {
+            state.pendingAutoUploads.delete(userId);
+          }
+        }
+        if (typeof show === 'boolean') {
+          config.show = show;
+        }
+
+        state.autoUploadConfigs.set(userId, config);
+
+        write(200, {
+          ok: true,
+          userId,
+          enabled: config.enabled,
+          show: config.show
+        });
         return;
       }
 
@@ -1107,6 +1421,86 @@ export async function startHttpService(opts: { state: ServerState; host: string;
   // 启动 WebSocket 服务
   const ws = startWebSocketService({ httpServer: server, state });
 
+  /**
+   * 处理游戏结束时的自动上传任务
+   * 延迟30秒后执行上传
+   */
+  const handleGameEndAutoUpload = (userId: number, chartId: number, timestamp: number, recordId: number): void => {
+    // 检查用户是否启用了自动上传
+    const config = state.autoUploadConfigs.get(userId);
+    if (!config?.enabled) return;
+    
+    // 检查分享站是否配置
+    if (!state.shareStationConfigured) {
+      state.logger.debug(`Auto upload skipped for user ${userId}: share station not configured`);
+      return;
+    }
+
+    // 添加到待处理任务（用于可能的取消操作）
+    const pendingTasks = state.pendingAutoUploads.get(userId) ?? [];
+    pendingTasks.push({ chartId, timestamp, recordId });
+    state.pendingAutoUploads.set(userId, pendingTasks);
+
+    // 延迟30秒后执行上传
+    setTimeout(async () => {
+      // 再次检查配置（可能在此期间被禁用）
+      const currentConfig = state.autoUploadConfigs.get(userId);
+      if (!currentConfig?.enabled) {
+        // 从待处理列表中移除
+        const tasks = state.pendingAutoUploads.get(userId) ?? [];
+        const filtered = tasks.filter(t => t.timestamp !== timestamp);
+        if (filtered.length === 0) state.pendingAutoUploads.delete(userId);
+        else state.pendingAutoUploads.set(userId, filtered);
+        return;
+      }
+
+      const baseDir = defaultReplayBaseDir();
+      const filePath = replayFilePath(baseDir, userId, chartId, timestamp);
+
+      // 验证文件存在
+      const header = await readReplayHeader(filePath).catch(() => null);
+      if (!header || header.userId !== userId || header.chartId !== chartId) {
+        state.logger.warn(`Auto upload failed for user ${userId}: replay file not found or invalid`);
+        return;
+      }
+
+      // 读取文件内容
+      let fileBuffer: Buffer;
+      try {
+        fileBuffer = await readFile(filePath);
+      } catch (err) {
+        state.logger.error(`Auto upload failed for user ${userId}: failed to read file - ${err instanceof Error ? err.message : String(err)}`);
+        return;
+      }
+
+      // 上传到分享站
+      const uploadResult = await uploadToShareStation(
+        fileBuffer,
+        `${timestamp}.phirarec`,
+        { chartName: undefined, username: undefined }
+      );
+
+      if (!uploadResult.success) {
+        state.logger.error(`Auto upload failed for user ${userId}: ${uploadResult.message}`);
+        return;
+      }
+
+      // 根据用户配置设置显示状态
+      // 自动上传默认不显示（show=false），除非用户明确设置为 true
+      if (uploadResult.scoreId && currentConfig.show) {
+        await setReplayVisibility(uploadResult.scoreId, true);
+      }
+
+      state.logger.info(`Auto upload completed for user ${userId}, chart ${chartId}, scoreId: ${uploadResult.scoreId}`);
+
+      // 从待处理列表中移除
+      const tasks = state.pendingAutoUploads.get(userId) ?? [];
+      const filtered = tasks.filter(t => t.timestamp !== timestamp);
+      if (filtered.length === 0) state.pendingAutoUploads.delete(userId);
+      else state.pendingAutoUploads.set(userId, filtered);
+    }, 30000); // 30秒延迟
+  };
+
   return {
     server,
     ws,
@@ -1119,7 +1513,8 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           else resolve();
         });
       });
-    }
+    },
+    handleGameEndAutoUpload
   };
 }
 

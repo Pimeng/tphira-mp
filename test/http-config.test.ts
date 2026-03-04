@@ -1,7 +1,7 @@
 // HTTP和配置测试
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { Client } from "../src/client/client.js";
-import { startServer } from "../src/server/server.js";
+import { startServer } from "../src/server/core/server.js";
 import { setupMockFetch } from "./helpers.js";
 
 describe("HTTP和配置", () => {

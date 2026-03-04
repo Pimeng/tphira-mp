@@ -4,7 +4,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { readdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { Client } from "../src/client/client.js";
-import { startServer } from "../src/server/server.js";
+import { startServer } from "../src/server/core/server.js";
 import { sleep, waitFor, setupMockFetch, parsePhiraRec } from "./helpers.js";
 import type { JudgeEvent, TouchFrame } from "../src/common/commands.js";
 

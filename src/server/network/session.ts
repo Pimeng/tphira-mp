@@ -289,6 +289,32 @@ export class Session {
     }
   }
 
+  /**
+   * 处理游戏结束，触发回放录制结束和自动上传
+   */
+  private async handleGameEnd(room: Room): Promise<void> {
+    // 结束回放录制
+    await this.state.replayRecorder.endRoom(room.id);
+    
+    // 触发自动上传（如果启用）
+    if (this.state.autoUploadCallback && room.chart && room.state.type === "Playing") {
+      const chartId = room.chart.id;
+      const results = room.state.results;
+      
+      // 获取房间的文件信息
+      const roomFiles = this.state.replayRecorder.listRoomFiles(room.id);
+      
+      for (const [userId, recordData] of results.entries()) {
+        // 查找该用户的回放文件
+        const userFile = roomFiles.find(f => f.userId === userId);
+        if (userFile) {
+          // 触发自动上传（延迟30秒由回调内部处理）
+          this.state.autoUploadCallback(userId, chartId, userFile.timestamp, recordData.id);
+        }
+      }
+    }
+  }
+
   private async markLost(): Promise<void> {
     if (this.lost) return;
     this.lost = true;
@@ -376,7 +402,7 @@ export class Session {
         if (this.state.replayEnabled && r.replayEligible) await this.state.replayRecorder.startRoom(r.id, r.chart.id, r.userIds());
       },
       onGameEnd: async (r) => {
-        await this.state.replayRecorder.endRoom(r.id);
+        await this.handleGameEnd(r);
       }
     });
     if (shouldDrop) {
@@ -537,7 +563,7 @@ export class Session {
               if (this.state.replayEnabled && r.replayEligible) await this.state.replayRecorder.startRoom(r.id, r.chart.id, r.userIds());
             },
             onGameEnd: async (r) => {
-              await this.state.replayRecorder.endRoom(r.id);
+              await this.handleGameEnd(r);
             }
           });
           if (shouldDrop) {
@@ -602,7 +628,7 @@ export class Session {
               if (this.state.replayEnabled && r.replayEligible) await this.state.replayRecorder.startRoom(r.id, r.chart.id, r.userIds());
             },
             onGameEnd: async (r) => {
-              await this.state.replayRecorder.endRoom(r.id);
+              await this.handleGameEnd(r);
             }
           });
           return {};
@@ -630,7 +656,7 @@ export class Session {
                 if (this.state.replayEnabled && r.replayEligible) await this.state.replayRecorder.startRoom(r.id, r.chart.id, r.userIds());
               },
               onGameEnd: async (r) => {
-                await this.state.replayRecorder.endRoom(r.id);
+                await this.handleGameEnd(r);
               }
             });
           }
@@ -688,7 +714,7 @@ export class Session {
                 if (this.state.replayEnabled && r.replayEligible) await this.state.replayRecorder.startRoom(r.id, r.chart.id, r.userIds());
               },
               onGameEnd: async (r) => {
-                await this.state.replayRecorder.endRoom(r.id);
+                await this.handleGameEnd(r);
               }
             });
           }
@@ -718,7 +744,7 @@ export class Session {
                 if (this.state.replayEnabled && r.replayEligible) await this.state.replayRecorder.startRoom(r.id, r.chart.id, r.userIds());
               },
               onGameEnd: async (r) => {
-                await this.state.replayRecorder.endRoom(r.id);
+                await this.handleGameEnd(r);
               }
             });
           }
@@ -786,7 +812,7 @@ export class Session {
           if (this.state.replayEnabled && r.replayEligible) await this.state.replayRecorder.startRoom(r.id, r.chart.id, r.userIds());
         },
         onGameEnd: async (r) => {
-          await this.state.replayRecorder.endRoom(r.id);
+          await this.handleGameEnd(r);
         }
       });
     }

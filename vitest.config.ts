@@ -4,7 +4,7 @@ export default defineConfig({
   resolve: {
     alias: {
       // 将 .js 导入解析为 .ts 文件
-      "../src/server/server.js": "../src/server/core/server.ts",
+      "../src/server/core/server.js": "../src/server/core/server.ts",
       "../src/server/state.js": "../src/server/core/state.ts",
       "../src/server/logger.js": "../src/server/utils/logger.ts",
       "../src/server/rateLimiter.js": "../src/server/utils/rateLimiter.ts",

@@ -4,7 +4,7 @@ import net from "node:net";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { Client } from "../src/client/client.js";
-import { startServer } from "../src/server/server.js";
+import { startServer } from "../src/server/core/server.js";
 import { sleep, waitFor, setupMockFetch } from "./helpers.js";
 import type { TouchFrame } from "../src/common/commands.js";
 

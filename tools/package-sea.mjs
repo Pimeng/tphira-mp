@@ -89,7 +89,5 @@ if (existsSync(configExample)) {
   copyFileSync(configExample, join("release", "server_config.yml"));
 }
 
-if (existsSync("README.md")) copyFileSync("README.md", join("release", "README.md"));
-
 console.log(`打包完成：${outBin}`);
 

@@ -1,3 +1,10 @@
+export type ShareStationConfig = {
+  /** 分享站地址 */
+  url: string;
+  /** 服务器认证token（用于自动上传等内部接口） */
+  token: string;
+};
+
 export type ServerConfig = {
   monitors: number[];
   /** 测试账号 ID 列表：配置后，这些账号的日志不写入文件（仅当全局日志等级非 DEBUG 时）；不配置或为空数组则所有人日志都写入文件。默认 [1739989] */
@@ -20,6 +27,8 @@ export type ServerConfig = {
   haproxy_protocol?: boolean;
   /** Phira API 端点地址，默认 https://phira.5wyxi.com */
   phira_api_endpoint?: string;
+  /** Phira Replay 分享站配置 */
+  share_station?: ShareStationConfig;
 };
 
 export type Chart = {

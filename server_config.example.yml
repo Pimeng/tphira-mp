@@ -47,3 +47,10 @@ server_name: Phira MP
 # 默认: https://phira.5wyxi.com
 PHIRA_API_ENDPOINT: "https://phira.5wyxi.com"
 
+# Phira Replay 分享站配置（用于上传回放到分享站）
+# share_station:
+#   # 分享站地址
+#   url: "http://127.0.0.1:40004"
+#   # 服务器认证 token（用于自动上传等内部接口）
+#   token: "your_share_station_token_here"
+

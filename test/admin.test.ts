@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { unlink, rm } from "node:fs/promises";
 import { Client } from "../src/client/client.js";
-import { startServer } from "../src/server/server.js";
+import { startServer } from "../src/server/core/server.js";
 import { setupMockFetch } from "./helpers.js";
 
 describe("管理员API", () => {
