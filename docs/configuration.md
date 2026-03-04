@@ -426,6 +426,46 @@ ROOM_LIST_TIP: "欢迎加入交流群：123456；查房间：example.com"
 - 服务器公告
 - Server announcements
 
+#### PHIRA_API_ENDPOINT
+
+Phira API 端点地址，用于用户认证、获取谱面信息等。
+
+Phira API endpoint for user authentication and chart info retrieval.
+
+- 类型 / Type: `string`
+- 默认值 / Default: `"https://phira.5wyxi.com"`
+- 环境变量 / Environment: `PHIRA_API_ENDPOINT`
+
+示例 / Example:
+```yaml
+PHIRA_API_ENDPOINT: "https://phira.5wyxi.com"
+```
+
+#### SHARE_STATION
+
+Phira Replay 分享站配置，用于上传回放到分享站。
+
+Phira Replay share station configuration for uploading replays.
+
+- 类型 / Type: `object`
+- 默认值 / Default: `undefined`（未配置）
+- 环境变量 / Environment: 不支持直接配置，需使用配置文件
+
+子配置项 / Sub-options:
+- `url` (string): 分享站地址，例如 `"http://127.0.0.1:40004"`
+- `token` (string): 服务器认证 token，用于自动上传等内部接口
+
+示例 / Example:
+```yaml
+share_station:
+  url: "http://127.0.0.1:40004"
+  token: "your_share_station_token_here"
+```
+
+注意 / Note:
+- 需要同时配置 `url` 和 `token` 才能正常工作
+- Both `url` and `token` must be configured to work properly
+
 ## 环境变量配置 / Environment Variable Configuration
 
 所有配置项都可以通过环境变量设置，环境变量名与配置文件键名相同（推荐使用大写）。

@@ -274,6 +274,190 @@ Body：
 
 后续为原生数据流（服务端收到的 Touches/Judges 等命令会按现有协议编码写入）。
 
+#### 4) 上传回放到分享站（使用用户TOKEN鉴权）
+
+`POST /replay/upload`
+
+将服务器上已存在的回放文件上传到Phira Replay分享站。
+
+Body：
+
+```json
+{
+  "token": "your_phira_user_token",
+  "chartId": 1,
+  "timestamp": 1730000000000
+}
+```
+
+- `token`：Phira用户TOKEN，用于鉴权
+- `chartId`：谱面ID
+- `timestamp`：要上传的回放文件时间戳（来自 `/replay/auth` 返回的回放列表）
+
+curl示例：
+
+```bash
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"token":"your_phira_user_token","chartId":1,"timestamp":1730000000000}' \
+  http://127.0.0.1:12347/replay/upload
+```
+
+返回示例：
+
+```json
+{
+  "ok": true,
+  "userId": 100,
+  "chartId": 1,
+  "recordId": 123,
+  "scoreId": 456,
+  "message": "upload-success"
+}
+```
+
+说明：
+
+- 使用**用户TOKEN**鉴权（与 `/replay/auth` 相同），而非管理员TOKEN
+- 只能上传该用户自己拥有的回放文件
+- 接口会复用原有的文件读取逻辑（与下载接口相同），包括：
+  - 使用 `replayFilePath` 构建安全路径，防止路径穿透攻击
+  - 使用 `readReplayHeader` 验证文件头和用户权限
+  - 验证文件实际存在且是有效文件
+- 上传流程：
+  1. 调用分享站 `POST /upload_direct` 接口上传文件
+  2. 调用 `POST /show/{score_id}` 设置为显示（用户手动上传默认显示）
+- **手动上传的 `show` 属性默认为 `true`（显示）**
+- 原服务器上的文件不会被删除或修改
+
+常见错误：
+
+- 参数不合法：`400 { "ok": false, "error": "bad-request" }`
+- TOKEN无效：`401 { "ok": false, "error": "unauthorized" }`
+- 路径不合法（路径穿透）：`403 { "ok": false, "error": "path-not-allowed" }`
+- 回放不存在或无权访问：`404 { "ok": false, "error": "not-found" }`
+- 分享站未配置：`503 { "ok": false, "error": "share-station-not-configured" }`
+- 上传失败：`500 { "ok": false, "error": "upload-failed" }`
+
+#### 5) 自动上传配置接口（使用用户TOKEN鉴权）
+
+允许用户配置游戏结束后是否自动将回放上传到分享站。
+
+**注意**：需要服务器配置了 `share_station` 才能正常工作。详见 [分享站配置](#分享站配置)。
+
+##### 查询自动上传配置
+
+`GET /replay/auto-upload/config?token=your_phira_user_token`
+
+返回示例：
+
+```json
+{
+  "ok": true,
+  "userId": 100,
+  "enabled": true,
+  "show": false,
+  "shareStationConfigured": true
+}
+```
+
+- `enabled`：是否启用自动上传
+- `show`：自动上传的文件是否显示（`false` 表示不显示，`true` 表示显示）
+- `shareStationConfigured`：服务器是否配置了分享站（如果为 `false`，自动上传不会生效）
+
+##### 修改自动上传配置
+
+`POST /replay/auto-upload/config`
+
+Body：
+
+```json
+{
+  "token": "your_phira_user_token",
+  "enabled": true,
+  "show": false
+}
+```
+
+- `token`：Phira用户TOKEN，用于鉴权（**必需**）
+- `enabled`：是否启用自动上传（**可选**，不传递则保持原值）
+- `show`：自动上传的文件是否显示（**可选**，不传递则保持原值）
+  - `false`（默认）：自动上传的文件在分享站不显示
+  - `true`：自动上传的文件在分享站显示
+
+curl示例：
+
+```bash
+# 启用自动上传，上传的文件不显示
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"token":"your_phira_user_token","enabled":true,"show":false}' \
+  http://127.0.0.1:12347/replay/auto-upload/config
+
+# 只修改显示设置
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"token":"your_phira_user_token","show":true}' \
+  http://127.0.0.1:12347/replay/auto-upload/config
+```
+
+返回示例：
+
+```json
+{
+  "ok": true,
+  "userId": 100,
+  "enabled": true,
+  "show": false
+}
+```
+
+说明：
+
+- 使用**用户TOKEN**鉴权（与 `/replay/auth` 相同），而非管理员TOKEN
+- 自动上传会在游戏结束后**延迟30秒**执行
+- 自动上传的文件 `show` 属性默认为 `false`（不显示），与手动上传不同
+- 如果用户禁用了自动上传，所有待处理的自动上传任务会被取消
+- 需要服务器配置了 `share_station` 才能正常工作
+
+##### 调用的Phira Replay API
+
+自动上传功能会调用以下Phira Replay & Chart API：
+
+1. **上传回放文件（内部接口）**
+   - 端点：`POST /upload_direct`
+   - 功能：供其他服务器自动上传 `.phirarec` 文件，自动从外部API拉取对应谱面文件和曲绘
+   - 认证：使用服务器配置的 `share_station.token` (Bearer Token)
+   - 特点：通过此接口上传的记录 `is_visible` 默认为 0，不会在主页列表显示
+
+2. **设置回放可见性**
+   - 显示端点：`POST /show/{score_id}` (将 `is_visible` 设为 1)
+   - 隐藏端点：`POST /hide/{score_id}` (将 `is_visible` 设为 0)
+   - 功能：控制回放是否在主页列表中显示
+
+根据用户 `show` 配置：
+- `show: false`（默认）：使用 `/upload_direct` 上传，回放默认隐藏
+- `show: true`：使用 `/upload_direct` 上传后，再调用 `/show/{score_id}` 设置为显示
+
+常见错误：
+
+- 缺少token：`400 { "ok": false, "error": "bad-token" }`
+- 缺少参数：`400 { "ok": false, "error": "bad-request" }`
+- TOKEN无效：`401 { "ok": false, "error": "unauthorized" }`
+
+### 分享站配置
+
+要启用分享站功能，需要在 `server_config.yml` 中配置：
+
+```yaml
+share_station:
+  # 分享站地址
+  url: "http://183.66.27.19:40004"
+  # 服务器认证 token（用于自动上传等内部接口）
+  token: "your_share_station_token_here"
+```
+
+或使用环境变量：
+- `SHARE_STATION_URL`
+- `SHARE_STATION_TOKEN`
+
 ## 管理员接口
 
 下面所有接口都需要 `ADMIN_TOKEN` 鉴权。

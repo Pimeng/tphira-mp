@@ -26,40 +26,16 @@ Phira MP 的 Typescript 实现，目前正在逐步完善，还请多多包涵
 
 建议优先使用镜像源而并非 ghcr.io
 
-- 可选环境变量：
-  - `LOG_LEVEL`：控制写入日志文件的最小等级（默认 `INFO`）
-  - `CONSOLE_LOG_LEVEL`：控制输出到终端的最小等级（默认 `INFO`）
+> [!WARNING]
+> 如果容器内运行时工作目录不是项目根目录，请设置 `PHIRA_MP_HOME=/app`（指向包含 `locales/` 与 `server_config.yml` 的目录），避免本地化与配置读取失败。
 
-注意事项：
-- 如果容器内运行时工作目录不是项目根目录，请设置 `PHIRA_MP_HOME=/app`（指向包含 `locales/` 与 `server_config.yml` 的目录），避免本地化与配置读取失败。
+## 🔧 服务端配置
 
-## 🔧 服务端配置（server_config.yml）
+配置文件为 `server_config.yml`，支持大写/小写两种键名，支持使用环境变量配置。
 
-支持大写/小写两种键名（例如 `HOST` / `host`），支持使用环境变量配置，优先级：命令行>环境变量>配置文件
+**优先级：** 命令行 > 环境变量 > 配置文件
 
-- SERVER_NAME(string): 当前服务器名字，会显示在欢迎信息中（默认 `Phira MP`）
-- MONITORS(array): 观战用户ID列表（默认 `2`）
-- TEST_ACCOUNT_IDS(array): 测试账号ID列表，这些账号的日志不写入文件（除非LOG_LEVEL=DEBUG）（默认 `[1739989]`）
-- HOST(string): 服务监听地址（默认 `::`）
-- PORT(number): 游戏监听端口（默认 `12346`）
-- HTTP_SERVICE(boolean): 是否启动 HTTP 服务（默认 `false`）
-- HTTP_PORT(number): HTTP 服务监听端口（默认 `12347`）
-- ROOM_MAX_USERS(number): 单房间最大玩家数（默认 `8`，最大 `64`）
-- PHIRA_MP_LANG(string): 服务端默认语言（默认 `zh-CN`）
-- LOG_LEVEL(string): 日志等级，可选值：DEBUG, INFO, MARK, WARN, ERROR（默认 `INFO`）
-- REAL_IP_HEADER(string): 真实IP头名称，用于反向代理场景（默认 `X-Forwarded-For`）
-  - 可选值：X-Forwarded-For, X-Real-IP, CF-Connecting-IP 等
-  - 注：此配置仅对HTTP服务生效
-- HAPROXY_PROTOCOL(boolean): 是否启用 HAProxy PROXY Protocol 支持（默认 `false`）
-  - 用于TCP代理时正常获取真实IP
-- ADMIN_TOKEN(string): 管理员接口鉴权 Token（默认 `replace_me`）
-  - 未配置时可使用 OTP（一次性验证码）方式获取临时管理员权限，详见 [API文档](docs/api.md)
-- ADMIN_DATA_PATH(string): 管理员数据持久化路径（JSON）（默认 `./admin_data.json`）
-- ROOM_LIST_TIP(string): 登录后展示可用房间列表后追加的提示文案（可用于群宣传/查房间等，纯文本）（默认空）
-- PHIRA_API_ENDPOINT(string): Phira API 端点地址（默认 `https://phira.5wyxi.com`）
-- SHARE_STATION(object): Phira Replay 分享站配置
-  - `url`(string): 分享站地址（例如 `http://127.0.0.1:40004`）
-  - `token`(string): 服务器认证 token（用于自动上传等内部接口）
+**完整配置文档请参考**：[这里](docs/configuration.md)
 
 
 ## 🔨 安装与构建
