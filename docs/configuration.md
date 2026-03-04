@@ -27,48 +27,68 @@ Configuration file uses YAML format and supports both uppercase and lowercase ke
 示例配置文件 / Example configuration file:
 
 ```yaml
-# 服务器基本配置 / Basic Server Configuration
-SERVER_NAME: "Phira MP"
+# 监听地址
 HOST: "::"
+# 监听端口
 PORT: 12346
 
-# HTTP 服务配置 / HTTP Service Configuration
-HTTP_SERVICE: true
+# 是否启用 HTTP 服务
+HTTP_SERVICE: false
+# HTTP 服务监听端口
 HTTP_PORT: 12347
 
-# 日志配置 / Logging Configuration
+# 日志等级（DEBUG, INFO, MARK, WARN, ERROR），默认 INFO
 LOG_LEVEL: INFO
-CONSOLE_LOG_LEVEL: INFO
 
-# 网络配置 / Network Configuration
-REAL_IP_HEADER: "X-Forwarded-For"
+# 真实 IP 头名称（用于反向代理场景），默认 X-Forwarded-For
+# 可选值：X-Forwarded-For, X-Real-IP, CF-Connecting-IP 等
+# 注：此处仅HTTP服务生效
+REAL_IP_HEADER: X-Forwarded-For
+
+# 是否启用 HAProxy PROXY Protocol 支持
+# 注：用于 TCP 代理时正常获取真实 IP
 HAPROXY_PROTOCOL: false
 
-# 游戏配置 / Game Configuration
+# 单间最大用户数
 ROOM_MAX_USERS: 8
-PHIRA_MP_LANG: "zh-CN"
 
-# 观战配置 / Monitor Configuration
+# 观战用户ID
 monitors:
   - 2
 
-# 测试账号配置 / Test Account Configuration
+# 测试账号 ID 列表：配置后，这些账号的日志不写入文件（除非 LOG_LEVEL=DEBUG）；不配置或留空则所有人日志都写入文件。默认 [1739989]
 test_account_ids:
   - 1739989
 
-# 管理员配置 / Admin Configuration
-ADMIN_TOKEN: "replace_me"
-ADMIN_DATA_PATH: "./admin_data.json"
+# 服务器名称（欢迎信息会使用）
+server_name: Phira MP
 
-# 其他配置 / Other Configuration
-ROOM_LIST_TIP: ""
+# 管理员接口鉴权 token（HTTP /admin/*）
+# ADMIN_TOKEN: "replace_me"
+
+# 管理员数据持久化路径（JSON）
+# ADMIN_DATA_PATH: "./admin_data.json"
+
+# 登录后展示可用房间列表后追加的提示文案（可用于群宣传/查房间等，纯文本）
+# ROOM_LIST_TIP: "欢迎加入交流群：123456；查房间：example.com"
+
+# Phira API 端点地址（用于用户认证、获取谱面信息、获取成绩记录等）
+# 默认: https://phira.5wyxi.com
+PHIRA_API_ENDPOINT: "https://phira.5wyxi.com"
+
+# Phira Replay 分享站配置（用于上传回放到分享站）
+# share_station:
+#   # 分享站地址
+#   url: "http://127.0.0.1:40004"
+#   # 服务器认证 token（用于自动上传等内部接口）
+#   token: "your_share_station_token_here"
 ```
 
 ## 配置选项详解 / Configuration Options
 
 ### 服务器基本配置 / Basic Server Configuration
 
-#### SERVER_NAME
+#### server_name
 
 服务器名称，显示在欢迎消息中。
 
@@ -81,7 +101,7 @@ Server name displayed in welcome messages.
 
 示例 / Example:
 ```yaml
-SERVER_NAME: "My Phira Server"
+server_name: "Phira MP"
 ```
 
 #### HOST
@@ -197,10 +217,11 @@ Console output log level, controls the minimum level output to terminal.
 - 默认值 / Default: `"INFO"`
 - 可选值 / Options: `"DEBUG"`, `"INFO"`, `"MARK"`, `"WARN"`, `"ERROR"`
 - 环境变量 / Environment: `CONSOLE_LOG_LEVEL`
+- **注意 / Note: 仅支持环境变量，不支持配置文件 / Only supports environment variables, not configuration file**
 
 示例 / Example:
-```yaml
-CONSOLE_LOG_LEVEL: WARN
+```bash
+export CONSOLE_LOG_LEVEL=WARN
 ```
 
 ### 网络配置 / Network Configuration
@@ -284,13 +305,14 @@ ROOM_MAX_USERS: 16
 Server default language.
 
 - 类型 / Type: `string`
-- 默认值 / Default: `"zh-CN"`
+- 默认值 / Default: `"zh-CN"`（自动检测系统语言 / Auto-detect system language）
 - 可选值 / Options: `"zh-CN"`, `"en-US"`
-- 环境变量 / Environment: `PHIRA_MP_LANG`
+- 环境变量 / Environment: `PHIRA_MP_LANG` 或 `LANG`
+- **注意 / Note: 仅支持环境变量，不支持配置文件 / Only supports environment variables, not configuration file**
 
 示例 / Example:
-```yaml
-PHIRA_MP_LANG: "en-US"
+```bash
+export PHIRA_MP_LANG=en-US
 ```
 
 ### 观战配置 / Monitor Configuration
@@ -441,7 +463,7 @@ Phira API endpoint for user authentication and chart info retrieval.
 PHIRA_API_ENDPOINT: "https://phira.5wyxi.com"
 ```
 
-#### SHARE_STATION
+#### share_station
 
 Phira Replay 分享站配置，用于上传回放到分享站。
 
@@ -468,9 +490,9 @@ share_station:
 
 ## 环境变量配置 / Environment Variable Configuration
 
-所有配置项都可以通过环境变量设置，环境变量名与配置文件键名相同（推荐使用大写）。
+大部分配置项可以通过环境变量设置，环境变量名与配置文件键名相同（推荐使用大写）。以下配置项**仅支持环境变量**，不支持配置文件：`CONSOLE_LOG_LEVEL`、`PHIRA_MP_LANG`。
 
-All configuration options can be set via environment variables with the same name as config file keys (uppercase recommended).
+Most configuration options can be set via environment variables with the same name as config file keys (uppercase recommended). The following options **only support environment variables**, not configuration file: `CONSOLE_LOG_LEVEL`, `PHIRA_MP_LANG`.
 
 示例 / Example:
 
@@ -480,6 +502,7 @@ export SERVER_NAME="My Server"
 export PORT=12346
 export HTTP_SERVICE=true
 export ADMIN_TOKEN="your_token"
+export CONSOLE_LOG_LEVEL=INFO
 
 # Windows (PowerShell)
 $env:SERVER_NAME="My Server"
@@ -617,61 +640,82 @@ Enable HTTP service for monitoring, configure appropriate log level, and regular
 
 ### 开发环境 / Development Environment
 
+配置文件 / Configuration file:
 ```yaml
-SERVER_NAME: "Dev Server"
+server_name: "Dev Server"
 HOST: "127.0.0.1"
 PORT: 12346
 HTTP_SERVICE: true
 HTTP_PORT: 12347
 LOG_LEVEL: DEBUG
-CONSOLE_LOG_LEVEL: DEBUG
 ROOM_MAX_USERS: 4
 ADMIN_TOKEN: "dev_token_not_secure"
 ```
 
+环境变量 / Environment variables:
+```bash
+export CONSOLE_LOG_LEVEL=DEBUG
+export PHIRA_MP_LANG=en-US
+```
+
 ### 生产环境 / Production Environment
 
+配置文件 / Configuration file:
 ```yaml
-SERVER_NAME: "Phira MP Production"
+server_name: "Phira MP Production"
 HOST: "::"
 PORT: 12346
 HTTP_SERVICE: true
 HTTP_PORT: 12347
 LOG_LEVEL: INFO
-CONSOLE_LOG_LEVEL: INFO
 REAL_IP_HEADER: "X-Forwarded-For"
 ROOM_MAX_USERS: 8
-ADMIN_TOKEN: "use_environment_variable"
 ADMIN_DATA_PATH: "/data/admin_data.json"
 ROOM_LIST_TIP: "欢迎！加入群：123456"
 ```
 
+环境变量 / Environment variables:
+```bash
+export ADMIN_TOKEN="your_secure_token_here"
+export CONSOLE_LOG_LEVEL=INFO
+```
+
 ### 高性能环境 / High-Performance Environment
 
+配置文件 / Configuration file:
 ```yaml
-SERVER_NAME: "Phira MP High Performance"
+server_name: "Phira MP High Performance"
 HOST: "::"
 PORT: 12346
 HTTP_SERVICE: true
 HTTP_PORT: 12347
 LOG_LEVEL: WARN
-CONSOLE_LOG_LEVEL: WARN
 ROOM_MAX_USERS: 16
 test_account_ids:
   - 1739989
 ```
 
+环境变量 / Environment variables:
+```bash
+export CONSOLE_LOG_LEVEL=WARN
+```
+
 ### Docker 环境 / Docker Environment
 
+配置文件 / Configuration file:
 ```yaml
-SERVER_NAME: "Phira MP Docker"
+server_name: "Phira MP Docker"
 HOST: "0.0.0.0"
 PORT: 12346
 HTTP_SERVICE: true
 HTTP_PORT: 12347
 LOG_LEVEL: INFO
-CONSOLE_LOG_LEVEL: INFO
 ADMIN_DATA_PATH: "/data/admin_data.json"
+```
+
+环境变量 / Environment variables:
+```bash
+export CONSOLE_LOG_LEVEL=INFO
 ```
 
 配合 Docker Compose:

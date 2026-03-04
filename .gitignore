@@ -13,4 +13,4 @@ plugins/*
 !plugins/virtualRoom.js
 
 # 临时文件
-data/tmp/
+data/tmp/*
