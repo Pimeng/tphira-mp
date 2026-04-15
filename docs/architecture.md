@@ -25,7 +25,6 @@ src/
     ├── core/        # 核心模块（服务器状态、配置）
     ├── game/        # 游戏逻辑（房间、用户）
     ├── network/     # 网络服务（TCP、HTTP、WebSocket）
-    ├── plugins/     # 插件系统
     ├── replay/      # 回放录制
     └── utils/       # 服务端工具（日志、限流、本地化）
 ```
@@ -131,32 +130,7 @@ SelectChart → WaitForReady → Playing → SelectChart
 数据流：原生 Touches/Judges 命令编码
 ```
 
-### 6. 插件系统 (Plugin System)
-
-**功能：**
-- 插件加载/卸载
-- 生命周期管理
-- 钩子触发机制
-
-**可用钩子：**
-- `onInit`: 插件初始化
-- `onDestroy`: 插件销毁
-- `onServerStart`: 服务器启动后
-- `onUserJoinRoom`: 用户加入房间
-- `onUserLeaveRoom`: 用户离开房间
-- `onGameEnd`: 游戏结束
-- `onBeforeCommand`: 命令执行前（可拦截）
-
-**插件目录结构：**
-```
-plugins/
-├── plugin-name/
-│   ├── main.js       # 插件入口
-│   ├── module1.js    # 功能模块1（可选）
-│   └── utils.js      # 工具函数（可选）
-```
-
-### 7. 命令行接口 (CLI)
+### 6. 命令行接口 (CLI)
 
 支持房间管理、用户管理、封禁管理等命令。
 
@@ -171,7 +145,7 @@ plugins/
 - `replay on/off/status`: 回放录制开关
 - `contest <roomId> enable/disable/whitelist/start`: 比赛房间管理
 
-### 8. 日志系统 (Logging System)
+### 7. 日志系统 (Logging System)
 
 **功能：**
 - 多级别日志（DEBUG, INFO, MARK, WARN, ERROR）
@@ -186,7 +160,7 @@ plugins/
 [2026-02-16 10:30:00.000] [INFO] 用户 "xxx" 加入房间 "room1"
 ```
 
-### 9. 本地化 (Localization)
+### 8. 本地化 (Localization)
 
 支持多语言（zh-CN, en-US）。
 
@@ -290,6 +264,5 @@ plugins/
 
 - [API 文档](./api.md) - HTTP API 接口
 - [命令文档](./commands.md) - CLI 命令参考
-- [插件文档](./plugins.md) - 插件开发指南
 - [WebSocket 文档](./websocket.md) - WebSocket API
 - [配置参考](./configuration.md) - 配置选项

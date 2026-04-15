@@ -20,7 +20,6 @@ Welcome to the Phira MP server documentation hub! Here you'll find everything yo
 ### 管理文档 / Administration
 
 - [命令文档](./commands.md) - 服务器控制台命令 / Server console commands
-- [插件文档](./plugins.md) - 插件开发指南 / Plugin development guide
 
 ## 🎯 按使用场景查找 / Find by Use Case
 
@@ -37,13 +36,6 @@ Welcome to the Phira MP server documentation hub! Here you'll find everything yo
 1. 学习 [命令文档](./commands.md) 中的 CLI 命令
 2. 阅读 [HTTP API](./api.md) 中的管理员接口
 3. 使用 [WebSocket API](./websocket.md) 实时监控服务器状态
-
-### 我想开发插件 / I Want to Develop Plugins
-
-1. 阅读 [插件文档](./plugins.md) 了解插件系统
-2. 查看 [架构文档](./architecture.md) 了解核心组件
-3. 参考 `example-plugins/virtualRoom.js` 示例
-4. 编写并测试你的插件
 
 ### 我想集成到我的应用 / I Want to Integrate with My Application
 
@@ -77,14 +69,14 @@ Configuration reference documentation including all config options, configuratio
 ### [architecture.md](./architecture.md)
 系统架构文档，包含：
 - 项目结构说明
-- 核心组件介绍（9大核心组件）
+- 核心组件介绍（8大核心组件）
 - 数据流程图
 - 并发控制机制
 - 安全机制
 - 性能优化策略
 - 故障排查指南
 
-System architecture documentation including project structure, core components (9 major components), data flow, concurrency control, security mechanisms, performance optimization, and troubleshooting.
+System architecture documentation including project structure, core components (8 major components), data flow, concurrency control, security mechanisms, performance optimization, and troubleshooting.
 
 ### [api.md](./api.md)
 HTTP API 文档，包含：
@@ -116,17 +108,6 @@ WebSocket API documentation including connection, authentication, message format
 - 常见场景的命令组合
 
 Server commands documentation including all available CLI commands, parameter descriptions, usage examples, and common scenario command combinations.
-
-### [plugins.md](./plugins.md)
-插件开发文档，包含：
-- 插件系统概述
-- 插件结构和生命周期
-- 可用的钩子接口
-- 插件上下文 API
-- 虚拟房间插件示例
-- 开发建议和最佳实践
-
-Plugin development documentation including plugin system overview, plugin structure, available hooks, plugin context API, virtual room example, and best practices.
 
 ## 🔍 常见问题 / FAQ
 
@@ -201,14 +182,6 @@ curl -H "X-Admin-Token: your_token" \
 ```
 
 详见 [WebSocket 文档](./websocket.md#管理员-websocket-api)
-
-### 如何开发自定义插件？
-1. 在 `plugins/` 目录创建插件文件夹
-2. 创建 `main.js` 入口文件
-3. 实现插件钩子（参考 [插件文档](./plugins.md)）
-4. 重启服务器加载插件
-
-详细步骤请参考 [插件文档](./plugins.md)。
 
 ## 🤝 贡献文档 / Contributing to Documentation
 

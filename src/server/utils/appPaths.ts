@@ -8,7 +8,6 @@ export type AppPaths = {
   logsDir: string;
   adminDataPath: string;
   dataDir: string;
-  pluginsDir: string;
 };
 
 let cached: AppPaths | null = null;
@@ -26,8 +25,7 @@ export function getAppPaths(): AppPaths {
       localesDir: join(envHome, "locales"),
       logsDir: join(envHome, "logs"),
       adminDataPath: join(envHome, "admin_data.json"),
-      dataDir: join(envHome, "data"),
-      pluginsDir: join(envHome, "plugins")
+      dataDir: join(envHome, "data")
     };
     return cached;
   }
@@ -39,8 +37,7 @@ export function getAppPaths(): AppPaths {
       localesDir: join(cwd, "locales"),
       logsDir: join(cwd, "logs"),
       adminDataPath: join(cwd, "admin_data.json"),
-      dataDir: join(cwd, "data"),
-      pluginsDir: join(cwd, "plugins")
+      dataDir: join(cwd, "data")
     };
     return cached;
   }
@@ -57,8 +54,7 @@ export function getAppPaths(): AppPaths {
         localesDir: join(rootDir, "locales"),
         logsDir: join(rootDir, "logs"),
         adminDataPath: join(rootDir, "admin_data.json"),
-        dataDir: join(rootDir, "data"),
-        pluginsDir: join(rootDir, "plugins")
+      dataDir: join(rootDir, "data")
       };
       return cached;
     }
@@ -72,8 +68,7 @@ export function getAppPaths(): AppPaths {
     localesDir: join(rootDir, "locales"),
     logsDir: join(rootDir, "logs"),
     adminDataPath: join(rootDir, "admin_data.json"),
-    dataDir: join(rootDir, "data"),
-    pluginsDir: join(rootDir, "plugins")
+    dataDir: join(rootDir, "data")
   };
 
   return cached;

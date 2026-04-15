@@ -20,7 +20,6 @@ import { startReplayCleanup } from "../replay/replayCleanup.js";
 import { parseProxyProtocol } from "../network/proxyProtocol.js";
 import { startCli } from "../cli/cli.js";
 import type { RoomId } from "../../common/roomId.js";
-import { PluginManager } from "../plugins/PluginManager.js";
 
 export type StartServerOptions = { host?: string; port?: number; config?: Partial<ServerConfig> };
 
@@ -29,7 +28,6 @@ export type RunningServer = {
   http?: HttpService;
   state: ServerState;
   logger: Logger;
-  pluginManager: PluginManager;
   close: () => Promise<void>;
   address: () => net.AddressInfo;
 };
@@ -241,11 +239,6 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
   await state.loadAdminData();
   const replayCleanup = startReplayCleanup({ ttlDays: 4, logger });
 
-  // 初始化插件系统
-  const pluginManager = new PluginManager(state, logger, paths.pluginsDir);
-  await pluginManager.loadPlugins();
-  await pluginManager.triggerHook("onServerStart");
-
   const version = readAppVersion();
   const listenHost = mergedCfg.host ?? "::";
   const listenPort = mergedCfg.port ?? 12346;
@@ -370,11 +363,9 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
     http: httpService ?? undefined,
     state,
     logger,
-    pluginManager,
     address: () => server.address() as net.AddressInfo,
     close: async () => {
       try {
-        await pluginManager.unloadPlugins();
         stopCli();
         if (httpService) await httpService.close();
         await new Promise<void>((resolve, reject) => {
