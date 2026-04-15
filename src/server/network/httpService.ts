@@ -385,7 +385,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           return;
         }
 
-        const baseDir = defaultReplayBaseDir();
+        const baseDir = state.replayRecorder.baseDir;
         const listed = await listReplaysForUser(baseDir, me.id);
         const charts = [...listed.entries()].map(([chartId, replays]) => ({
           chartId,
@@ -420,7 +420,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           return;
         }
 
-        const baseDir = defaultReplayBaseDir();
+        const baseDir = state.replayRecorder.baseDir;
         const filePath = replayFilePath(baseDir, sess.userId, chartId, timestamp);
         const header = await readReplayHeader(filePath).catch(() => null);
         if (!header || header.userId !== sess.userId || header.chartId !== chartId) {
@@ -477,7 +477,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           return;
         }
 
-        const baseDir = defaultReplayBaseDir();
+        const baseDir = state.replayRecorder.baseDir;
         const filePath = replayFilePath(baseDir, sess.userId, chartId, timestamp);
         const header = await readReplayHeader(filePath).catch(() => null);
         if (!header || header.userId !== sess.userId || header.chartId !== chartId) {
@@ -521,7 +521,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
         }
 
         // 获取回放文件路径
-        const baseDir = defaultReplayBaseDir();
+        const baseDir = state.replayRecorder.baseDir;
         const filePath = replayFilePath(baseDir, userId, chartId, timestamp);
 
         // 验证文件头和权限
@@ -1469,7 +1469,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
         return;
       }
 
-      const baseDir = defaultReplayBaseDir();
+      const baseDir = state.replayRecorder.baseDir;
       const filePath = replayFilePath(baseDir, userId, chartId, timestamp);
 
       // 验证文件存在

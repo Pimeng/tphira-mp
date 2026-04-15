@@ -16,6 +16,8 @@ export type ServerConfig = {
   http_port?: number;
   room_max_users?: number;
   replay_enabled?: boolean;
+  /** 回放录制基础目录，默认使用 process.cwd()/record */
+  replay_base_dir?: string;
   admin_token?: string;
   admin_data_path?: string;
   room_list_tip?: string;

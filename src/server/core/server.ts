@@ -111,6 +111,7 @@ function mergeConfig(base: ServerConfig, override: Partial<ServerConfig>): Serve
     http_port: override.http_port ?? base.http_port,
     room_max_users: override.room_max_users ?? base.room_max_users,
     replay_enabled: override.replay_enabled ?? base.replay_enabled,
+    replay_base_dir: override.replay_base_dir ?? base.replay_base_dir,
     admin_token: override.admin_token ?? base.admin_token,
     admin_data_path: override.admin_data_path ?? base.admin_data_path,
     room_list_tip: override.room_list_tip ?? base.room_list_tip,

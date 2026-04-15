@@ -1,9 +1,29 @@
 // 共享的测试工具函数
 import { decodePacket } from "../src/common/binary.js";
 import { decodeClientCommand, type ClientCommand } from "../src/common/commands.js";
+import { mkdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 export function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+let tempDirCounter = 0;
+
+/** 为测试创建唯一的临时目录 */
+export async function createTempDir(prefix = "phira-mp-test"): Promise<string> {
+  const timestamp = Date.now();
+  const random = Math.random().toString(36).slice(2, 8);
+  const counter = tempDirCounter++;
+  const dir = join(tmpdir(), `${prefix}-${timestamp}-${random}-${counter}`);
+  await mkdir(dir, { recursive: true });
+  return dir;
+}
+
+/** 清理临时目录 */
+export async function cleanupTempDir(dir: string): Promise<void> {
+  await rm(dir, { recursive: true, force: true });
 }
 
 export async function waitFor(cond: () => boolean, timeoutMs = 1000): Promise<void> {

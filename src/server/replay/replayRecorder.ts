@@ -18,15 +18,19 @@ type InFlight = {
 };
 
 export class ReplayRecorder {
-  private readonly baseDir: string;
+  private readonly _baseDir: string;
   private readonly inflightByKey = new Map<string, InFlight>();
   private readonly keysByRoom = new Map<string, Set<string>>();
   private readonly magicU16 = 0x504d;
   private readonly logger: Logger | null;
 
   constructor(baseDir: string, logger?: Logger) {
-    this.baseDir = baseDir;
+    this._baseDir = baseDir;
     this.logger = logger ?? null;
+  }
+
+  get baseDir(): string {
+    return this._baseDir;
   }
 
   private log(level: "DEBUG" | "INFO" | "WARN" | "ERROR", message: string): void {
@@ -49,8 +53,8 @@ export class ReplayRecorder {
         continue;
       }
       const ts = Date.now();
-      await ensureReplayDir(this.baseDir, userId, chartId);
-      const path = replayFilePath(this.baseDir, userId, chartId, ts);
+      await ensureReplayDir(this._baseDir, userId, chartId);
+      const path = replayFilePath(this._baseDir, userId, chartId, ts);
       this.log("DEBUG", `Creating replay file: ${path}`);
       const handle = await open(path, "w");
       const header = this.buildHeader(chartId, userId, 0);

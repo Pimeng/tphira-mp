@@ -89,6 +89,7 @@ describe("Phira API 端点配置", () => {
     } finally {
       await client.close();
       await running.close();
+      await sleep(100);
       await rm(join(process.cwd(), "record"), { recursive: true, force: true });
     }
   });
@@ -122,6 +123,7 @@ describe("Phira API 端点配置", () => {
     } finally {
       await client.close();
       await running.close();
+      await sleep(100);
       await rm(join(process.cwd(), "record"), { recursive: true, force: true });
     }
   });
@@ -159,6 +161,7 @@ describe("Phira API 端点配置", () => {
     } finally {
       await client.close();
       await running.close();
+      await sleep(100); // Windows: 等待文件句柄释放
       await rm(join(process.cwd(), "record"), { recursive: true, force: true });
     }
   });
@@ -191,10 +194,12 @@ describe("Phira API 端点配置", () => {
       } finally {
         await client.close();
         await running.close();
+        await sleep(100);
       }
     } finally {
       // 恢复环境变量
       process.env.PHIRA_API_ENDPOINT = prevEndpoint;
+      await sleep(100);
       await rm(join(process.cwd(), "record"), { recursive: true, force: true });
     }
   });

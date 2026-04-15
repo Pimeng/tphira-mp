@@ -1,15 +1,16 @@
 // 回放录制测试
-import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { afterAll, beforeAll, afterEach, describe, expect, test } from "vitest";
 import { existsSync, readdirSync } from "node:fs";
-import { readdir, readFile, rm } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Client } from "../src/client/client.js";
 import { startServer } from "../src/server/core/server.js";
-import { sleep, waitFor, setupMockFetch, parsePhiraRec } from "./helpers.js";
+import { sleep, waitFor, setupMockFetch, parsePhiraRec, createTempDir, cleanupTempDir } from "./helpers.js";
 import type { JudgeEvent, TouchFrame } from "../src/common/commands.js";
 
 describe("回放录制", () => {
   const { originalFetch, mockFetch } = setupMockFetch();
+  let tempDir: string;
 
   beforeAll(() => {
     globalThis.fetch = mockFetch;
@@ -19,10 +20,16 @@ describe("回放录制", () => {
     globalThis.fetch = originalFetch;
   });
 
-  test("启用回放录制时，无观战者也能产生触控/判定录制数据", async () => {
-    await rm(join(process.cwd(), "record"), { recursive: true, force: true });
+  afterEach(async () => {
+    if (tempDir) {
+      await cleanupTempDir(tempDir);
+    }
+  });
 
-    const running = await startServer({ port: 0, config: { monitors: [], replay_enabled: true } });
+  test("启用回放录制时，无观战者也能产生触控/判定录制数据", async () => {
+    tempDir = await createTempDir("replay-test-1");
+
+    const running = await startServer({ port: 0, config: { monitors: [], replay_enabled: true, replay_base_dir: tempDir } });
     const port = running.address().port;
 
     const alice = await Client.connect("127.0.0.1", port);
@@ -54,7 +61,7 @@ describe("回放录制", () => {
       await alice.played(1);
       await waitFor(() => alice.roomState()?.type === "SelectChart");
 
-      const recordDir = join(process.cwd(), "record", "100", "1");
+      const recordDir = join(tempDir, "100", "1");
       await waitFor(() => existsSync(recordDir) && readdirSync(recordDir).some((f) => f.endsWith(".phirarec")), 2000);
       const file = readdirSync(recordDir).find((f) => f.endsWith(".phirarec"));
       expect(file).toBeTruthy();
@@ -69,18 +76,17 @@ describe("回放录制", () => {
     } finally {
       await alice.close();
       await running.close();
-      await rm(join(process.cwd(), "record"), { recursive: true, force: true });
     }
   });
 
   test("回放录制：落盘、列表、下载", async () => {
-    await rm(join(process.cwd(), "record"), { recursive: true, force: true });
+    tempDir = await createTempDir("replay-test-2");
 
     const prevAdmin = process.env.ADMIN_TOKEN;
     process.env.ADMIN_TOKEN = "test-token";
 
     // 先关闭录制，确保测试初始状态正确
-    const running0 = await startServer({ port: 0, config: { monitors: [200], http_service: true, http_port: 0 } });
+    const running0 = await startServer({ port: 0, config: { monitors: [200], http_service: true, http_port: 0, replay_base_dir: tempDir } });
     const httpPort0 = running0.http!.address().port;
     await originalFetch(`http://127.0.0.1:${httpPort0}/admin/replay/config`, {
       method: "POST",
@@ -89,7 +95,7 @@ describe("回放录制", () => {
     });
     await running0.close();
 
-    const running = await startServer({ port: 0, config: { monitors: [200], http_service: true, http_port: 0 } });
+    const running = await startServer({ port: 0, config: { monitors: [200], http_service: true, http_port: 0, replay_base_dir: tempDir } });
     const port = running.address().port;
     const httpPort = running.http!.address().port;
 
@@ -127,7 +133,7 @@ describe("回放录制", () => {
       await alice.played(1);
       await waitFor(() => alice.roomState()?.type === "SelectChart", 3000);
 
-      const dir = join(process.cwd(), "record", "100", "1");
+      const dir = join(tempDir, "100", "1");
       await waitFor(() => {
         if (!existsSync(dir)) return false;
         try {
@@ -186,18 +192,17 @@ describe("回放录制", () => {
       await alice.close();
       await bob.close();
       await running.close();
-      await rm(join(process.cwd(), "record"), { recursive: true, force: true });
     }
   }, 20000);
 
   test("回放录制开关：开启后不影响已存在房间", async () => {
-    await rm(join(process.cwd(), "record"), { recursive: true, force: true });
+    tempDir = await createTempDir("replay-test-3");
 
     const prevAdmin = process.env.ADMIN_TOKEN;
     process.env.ADMIN_TOKEN = "test-token";
 
     // 先关闭录制，确保测试初始状态正确
-    const running0 = await startServer({ port: 0, config: { monitors: [200], http_service: true, http_port: 0 } });
+    const running0 = await startServer({ port: 0, config: { monitors: [200], http_service: true, http_port: 0, replay_base_dir: tempDir } });
     const httpPort0 = running0.http!.address().port;
     await originalFetch(`http://127.0.0.1:${httpPort0}/admin/replay/config`, {
       method: "POST",
@@ -206,7 +211,7 @@ describe("回放录制", () => {
     });
     await running0.close();
 
-    const running = await startServer({ port: 0, config: { monitors: [200], http_service: true, http_port: 0 } });
+    const running = await startServer({ port: 0, config: { monitors: [200], http_service: true, http_port: 0, replay_base_dir: tempDir } });
     const port = running.address().port;
     const httpPort = running.http!.address().port;
 
@@ -241,24 +246,23 @@ describe("回放录制", () => {
       // 等待一下确保如果有录制也会完成
       await sleep(500);
 
-      const userDir = join(process.cwd(), "record", "100");
+      const userDir = join(tempDir, "100");
       expect(existsSync(userDir)).toBe(false);
     } finally {
       process.env.ADMIN_TOKEN = prevAdmin;
       await alice.close();
       await bob.close();
       await running.close();
-      await rm(join(process.cwd(), "record"), { recursive: true, force: true });
     }
   }, 20000);
 
   test("回放录制默认关闭：不落盘", async () => {
-    await rm(join(process.cwd(), "record"), { recursive: true, force: true });
+    tempDir = await createTempDir("replay-test-4");
 
     // 先关闭录制，确保测试初始状态正确
     const prevAdmin = process.env.ADMIN_TOKEN;
     process.env.ADMIN_TOKEN = "test-token";
-    const running0 = await startServer({ port: 0, config: { monitors: [200], http_service: true, http_port: 0 } });
+    const running0 = await startServer({ port: 0, config: { monitors: [200], http_service: true, http_port: 0, replay_base_dir: tempDir } });
     const httpPort0 = running0.http!.address().port;
     await originalFetch(`http://127.0.0.1:${httpPort0}/admin/replay/config`, {
       method: "POST",
@@ -268,7 +272,7 @@ describe("回放录制", () => {
     await running0.close();
     process.env.ADMIN_TOKEN = prevAdmin;
 
-    const running = await startServer({ port: 0, config: { monitors: [200] } });
+    const running = await startServer({ port: 0, config: { monitors: [200], replay_base_dir: tempDir } });
     const port = running.address().port;
 
     const alice = await Client.connect("127.0.0.1", port);
@@ -293,13 +297,14 @@ describe("回放录制", () => {
       await alice.played(1);
       await waitFor(() => alice.roomState()?.type === "SelectChart", 3000);
 
-      const recordDir = join(process.cwd(), "record");
-      expect(existsSync(recordDir)).toBe(false);
+      // 验证回放录制默认关闭时没有产生录制数据
+      // 检查用户录制目录不存在（tempDir 本身存在，但下面不应该有 100/1/ 这样的录制目录）
+      const userRecordDir = join(tempDir, "100");
+      expect(existsSync(userRecordDir)).toBe(false);
     } finally {
       await alice.close();
       await bob.close();
       await running.close();
-      await rm(join(process.cwd(), "record"), { recursive: true, force: true });
     }
   }, 20000);
 });
