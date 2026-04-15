@@ -23,6 +23,11 @@ HAPROXY_PROTOCOL: false
 # 单间最大用户数
 ROOM_MAX_USERS: 8
 
+# 是否启用回放录制功能（默认关闭）
+# 启用后，游戏对局会自动录制为 .phirarec 文件
+# 可通过 API /admin/replay/config 动态开启/关闭
+REPLAY_ENABLED: false
+
 # 观战用户ID
 monitors:
   - 2

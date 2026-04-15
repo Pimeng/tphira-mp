@@ -80,7 +80,7 @@ export class ServerState {
     this.adminDataPath = adminDataPath;
     this.replayEnabled = Boolean(config.replay_enabled);
     this.roomCreationEnabled = true;
-    this.replayRecorder = new ReplayRecorder(defaultReplayBaseDir());
+    this.replayRecorder = new ReplayRecorder(defaultReplayBaseDir(), logger);
   }
 
   private snapshotAdminData(): AdminDataFile {

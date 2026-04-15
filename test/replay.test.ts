@@ -79,6 +79,16 @@ describe("回放录制", () => {
     const prevAdmin = process.env.ADMIN_TOKEN;
     process.env.ADMIN_TOKEN = "test-token";
 
+    // 先关闭录制，确保测试初始状态正确
+    const running0 = await startServer({ port: 0, config: { monitors: [200], http_service: true, http_port: 0 } });
+    const httpPort0 = running0.http!.address().port;
+    await originalFetch(`http://127.0.0.1:${httpPort0}/admin/replay/config`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-admin-token": "test-token" },
+      body: JSON.stringify({ enabled: false })
+    });
+    await running0.close();
+
     const running = await startServer({ port: 0, config: { monitors: [200], http_service: true, http_port: 0 } });
     const port = running.address().port;
     const httpPort = running.http!.address().port;
@@ -186,6 +196,16 @@ describe("回放录制", () => {
     const prevAdmin = process.env.ADMIN_TOKEN;
     process.env.ADMIN_TOKEN = "test-token";
 
+    // 先关闭录制，确保测试初始状态正确
+    const running0 = await startServer({ port: 0, config: { monitors: [200], http_service: true, http_port: 0 } });
+    const httpPort0 = running0.http!.address().port;
+    await originalFetch(`http://127.0.0.1:${httpPort0}/admin/replay/config`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-admin-token": "test-token" },
+      body: JSON.stringify({ enabled: false })
+    });
+    await running0.close();
+
     const running = await startServer({ port: 0, config: { monitors: [200], http_service: true, http_port: 0 } });
     const port = running.address().port;
     const httpPort = running.http!.address().port;
@@ -234,6 +254,19 @@ describe("回放录制", () => {
 
   test("回放录制默认关闭：不落盘", async () => {
     await rm(join(process.cwd(), "record"), { recursive: true, force: true });
+
+    // 先关闭录制，确保测试初始状态正确
+    const prevAdmin = process.env.ADMIN_TOKEN;
+    process.env.ADMIN_TOKEN = "test-token";
+    const running0 = await startServer({ port: 0, config: { monitors: [200], http_service: true, http_port: 0 } });
+    const httpPort0 = running0.http!.address().port;
+    await originalFetch(`http://127.0.0.1:${httpPort0}/admin/replay/config`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-admin-token": "test-token" },
+      body: JSON.stringify({ enabled: false })
+    });
+    await running0.close();
+    process.env.ADMIN_TOKEN = prevAdmin;
 
     const running = await startServer({ port: 0, config: { monitors: [200] } });
     const port = running.address().port;

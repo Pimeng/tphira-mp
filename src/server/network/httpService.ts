@@ -2,7 +2,7 @@ import http from "node:http";
 import type net from "node:net";
 import { once } from "node:events";
 import { createReadStream, createWriteStream } from "node:fs";
-import { stat, readFile, unlink, mkdir } from "node:fs/promises";
+import { stat, readFile, unlink, mkdir, writeFile } from "node:fs/promises";
 import { pipeline } from "node:stream/promises";
 import { dirname, join } from "node:path";
 import { parseRoomId, roomIdToString, type RoomId } from "../../common/roomId.js";
@@ -24,6 +24,8 @@ import type { ServerCommand } from "../../common/commands.js";
 import { defaultReplayBaseDir, deleteReplayForUser, listReplaysForUser, readReplayHeader, replayFilePath } from "../replay/replayStorage.js";
 import type { AutoUploadConfig } from "../core/state.js";
 import { startWebSocketService, type WebSocketService } from "../network/websocketService.js";
+import { getAppPaths } from "../utils/appPaths.js";
+import yaml from "js-yaml";
 
 export type HttpService = {
   server: http.Server;
@@ -805,6 +807,19 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           if (!snapshot.enabled) {
             const tasks = snapshot.roomIds.map((rid) => state.replayRecorder.endRoom(rid));
             await Promise.allSettled(tasks);
+          }
+
+          // 持久化配置到文件
+          try {
+            const { configPath } = getAppPaths();
+            const configText = await readFile(configPath, "utf8").catch(() => "");
+            const configObj = (yaml.load(configText) ?? {}) as Record<string, unknown>;
+            configObj.replay_enabled = enabled;
+            const newText = yaml.dump(configObj, { lineWidth: -1 });
+            await writeFile(configPath, newText, "utf8");
+            state.logger.log("INFO", `Replay config persisted: replay_enabled=${enabled}`);
+          } catch (e) {
+            state.logger.log("WARN", `Failed to persist replay config: ${e}`);
           }
 
           write(200, { ok: true, enabled: snapshot.enabled });
