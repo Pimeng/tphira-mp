@@ -8,54 +8,55 @@ HTTP_SERVICE: false
 # HTTP 服务监听端口
 HTTP_PORT: 12347
 
-# 日志等级（DEBUG, INFO, MARK, WARN, ERROR），默认 INFO
+# 日志等级：DEBUG、INFO、MARK、WARN、ERROR，默认 INFO
 LOG_LEVEL: INFO
 
-# 真实 IP 头名称（用于反向代理场景），默认 X-Forwarded-For
-# 可选值：X-Forwarded-For, X-Real-IP, CF-Connecting-IP 等
-# 注：此处仅HTTP服务生效
+# 真实 IP 头名称，用于反向代理场景，默认 X-Forwarded-For
+# 可选值例如：X-Forwarded-For、X-Real-IP、CF-Connecting-IP
+# 注意：这里只对 HTTP 服务生效
 REAL_IP_HEADER: X-Forwarded-For
 
 # 是否启用 HAProxy PROXY Protocol 支持
-# 注：用于 TCP 代理时正常获取真实 IP
+# 注意：用于 TCP 代理场景下获取真实 IP
 HAPROXY_PROTOCOL: false
 
-# 单间最大用户数
+# 单房间最大用户数
 ROOM_MAX_USERS: 8
 
-# 是否启用回放录制功能（默认关闭）
-# 启用后，游戏对局会自动录制为 .phirarec 文件
-# 可通过 API /admin/replay/config 动态开启/关闭
+# 是否启用回放录制功能，默认关闭
+# 启用后，对局会自动录制为 .phirarec 文件
+# 可通过 API /admin/replay/config 动态开关
 REPLAY_ENABLED: false
 
-# 观战用户ID
+# 观战用户 ID
 monitors:
   - 2
 
-# 测试账号 ID 列表：配置后，这些账号的日志不写入文件（除非 LOG_LEVEL=DEBUG）；不配置或留空则所有人日志都写入文件。默认 [1739989]
+# 测试账号 ID 列表：配置后，这些账号的日志默认不写入文件
+# 默认值：[1739989]
 test_account_ids:
   - 1739989
 
-# 服务器名称（欢迎信息会使用）
+# 服务器名称，会显示在欢迎信息中
 server_name: Phira MP
 
-# 管理员接口鉴权 token（HTTP /admin/*）
+# 管理接口鉴权 token（HTTP /admin/*）
 # ADMIN_TOKEN: "replace_me"
 
-# 管理员数据持久化路径（JSON）
+# 管理数据持久化路径（JSON）
 # ADMIN_DATA_PATH: "./admin_data.json"
 
-# 登录后展示可用房间列表后追加的提示文案（可用于群宣传/查房间等，纯文本）
+# 登录后房间列表后追加显示的提示文案
 # ROOM_LIST_TIP: "欢迎加入交流群：123456；查房间：example.com"
 
-# Phira API 端点地址（用于用户认证、获取谱面信息、获取成绩记录等）
-# 默认: https://phira.5wyxi.com
+# Phira API 端点地址，用于用户认证、获取谱面、获取成绩记录等
+# 默认：https://phira.5wyxi.com
 PHIRA_API_ENDPOINT: "https://phira.5wyxi.com"
 
-# 鏈嶅姟绔嚭绔欎唬鐞?
-# 涓嶉厤缃細淇濇寔鏈嶅姟鍣ㄧ幇鏈夌殑浠ｇ悊琛屼负
-# false / False锛氬己鍒剁洿杩烇紝涓嶈蛋浠ｇ悊
-# http(s)://... / socks://...锛氬己鍒朵娇鐢ㄦ寚瀹氫唬鐞?
+# 服务端出站代理配置
+# 不配置：保持当前环境里的默认代理行为
+# false / False：强制直连，不走代理
+# http(s)://... / socks://...：强制使用指定代理
 # OUTBOUND_PROXY: false
 # OUTBOUND_PROXY: "http://127.0.0.1:7890"
 
@@ -63,6 +64,5 @@ PHIRA_API_ENDPOINT: "https://phira.5wyxi.com"
 # share_station:
 #   # 分享站地址
 #   url: "http://127.0.0.1:40004"
-#   # 服务器认证 token（用于自动上传等内部接口）
+#   # 服务端认证 token（用于自动上传等内部接口）
 #   token: "your_share_station_token_here"
-

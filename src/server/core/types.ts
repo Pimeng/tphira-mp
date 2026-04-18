@@ -1,13 +1,13 @@
 export type ShareStationConfig = {
   /** 分享站地址 */
   url: string;
-  /** 服务器认证token（用于自动上传等内部接口） */
+  /** 服务端认证 token，用于自动上传等内部接口 */
   token: string;
 };
 
 export type ServerConfig = {
   monitors: number[];
-  /** 测试账号 ID 列表：配置后，这些账号的日志不写入文件（仅当全局日志等级非 DEBUG 时）；不配置或为空数组则所有人日志都写入文件。默认 [1739989] */
+  /** 测试账号 ID 列表。默认值：[1739989] */
   test_account_ids?: number[];
   server_name?: string;
   host?: string;
@@ -16,21 +16,22 @@ export type ServerConfig = {
   http_port?: number;
   room_max_users?: number;
   replay_enabled?: boolean;
-  /** 回放录制基础目录，默认使用 process.cwd()/record */
+  /** 回放录制基础目录，默认 process.cwd()/record */
   replay_base_dir?: string;
   admin_token?: string;
   admin_data_path?: string;
   room_list_tip?: string;
-  /** 日志等级（DEBUG, INFO, MARK, WARN, ERROR），默认 INFO */
+  /** 日志等级：DEBUG、INFO、MARK、WARN、ERROR，默认 INFO */
   log_level?: string;
-  /** 真实 IP 头名称（用于反向代理场景），默认 X-Forwarded-For */
+  /** 真实 IP 头名称，用于反向代理场景，默认 X-Forwarded-For */
   real_ip_header?: string;
   /** 是否启用 HAProxy PROXY Protocol 支持 */
   haproxy_protocol?: boolean;
   /** Phira API 端点地址，默认 https://phira.5wyxi.com */
   phira_api_endpoint?: string;
-  /** Phira Replay 分享站配置 */
+  /** 服务端出站代理配置：false 表示强制直连，字符串表示使用指定代理 */
   outbound_proxy?: string | false;
+  /** Phira Replay 分享站配置 */
   share_station?: ShareStationConfig;
 };
 

@@ -32,15 +32,15 @@ async function fetchHitokoto(proxy?: OutboundProxyValue): Promise<HitokotoValue 
 
 export async function getHitokotoCached(proxy?: OutboundProxyValue): Promise<HitokotoValue | null> {
   const now = Date.now();
-  
+
   // 先检查缓存
   const cached = await hitokotoCache.get("current");
   if (cached) return cached;
-  
-  // 如果有正在进行的请求，等待它
+
+  // 如果已经有进行中的请求，直接等待它
   if (inFlight) return await inFlight;
-  
-  // 检查最小请求间隔
+
+  // 控制最小请求间隔，避免频繁请求远端
   if (now - lastAttemptAt < HITOKOTO_MIN_INTERVAL_MS) {
     return cached;
   }

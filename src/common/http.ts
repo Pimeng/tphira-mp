@@ -13,7 +13,7 @@ type ParsedProxy =
   | { type: "socks4" | "socks5"; host: string; port: number; username?: string; password?: string };
 
 /**
- * 鑾峰彇瀹㈡埛绔湡瀹?IP 鍦板潃
+ * 获取客户端真实 IP 地址
  */
 export function getClientIp(req: http.IncomingMessage, headerName: string = "X-Forwarded-For"): string {
   const normalizedHeader = headerName.toLowerCase();
@@ -24,7 +24,7 @@ export function getClientIp(req: http.IncomingMessage, headerName: string = "X-F
 }
 
 /**
- * 搴旂敤 CORS 澶?
+ * 设置 CORS 响应头
  */
 export function applyCors(res: http.ServerResponse, req: http.IncomingMessage): void {
   const reqHeaders = typeof req.headers["access-control-request-headers"] === "string"
@@ -37,7 +37,7 @@ export function applyCors(res: http.ServerResponse, req: http.IncomingMessage): 
 }
 
 /**
- * 鍐欏叆 JSON 鍝嶅簲
+ * 写入 JSON 响应
  */
 export function writeJson(res: http.ServerResponse, status: number, body: unknown): void {
   const text = JSON.stringify(body);
@@ -48,7 +48,7 @@ export function writeJson(res: http.ServerResponse, status: number, body: unknow
 }
 
 /**
- * 璇诲彇璇锋眰浣撳苟瑙ｆ瀽涓?JSON
+ * 读取请求体并解析为 JSON
  */
 export async function readJson(req: http.IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
@@ -63,7 +63,7 @@ export async function readJson(req: http.IncomingMessage): Promise<unknown> {
 }
 
 /**
- * 鍙戦€佹枃鏈搷搴?
+ * 写入文本响应
  */
 export function writeText(res: http.ServerResponse, status: number, text: string): void {
   res.statusCode = status;
@@ -72,7 +72,7 @@ export function writeText(res: http.ServerResponse, status: number, text: string
 }
 
 /**
- * 澶勭悊 OPTIONS 棰勬璇锋眰
+ * 处理 OPTIONS 预检请求
  */
 export function handleOptionsRequest(res: http.ServerResponse): void {
   res.statusCode = 204;
@@ -80,7 +80,7 @@ export function handleOptionsRequest(res: http.ServerResponse): void {
 }
 
 /**
- * 浠?Authorization 澶翠腑鎻愬彇 Bearer token
+ * 从 Authorization 头中提取 Bearer token
  */
 export function extractBearerToken(value: string): string {
   const match = /^Bearer\s+(.+)$/i.exec(value.trim());
@@ -88,7 +88,7 @@ export function extractBearerToken(value: string): string {
 }
 
 /**
- * 鎻愬彇绠＄悊鍛?token锛堜粠澶氫釜鏉ユ簮锛?
+ * 从多个来源提取管理员 token
  */
 export function extractAdminToken(req: http.IncomingMessage, url: URL): string {
   return (
@@ -99,7 +99,7 @@ export function extractAdminToken(req: http.IncomingMessage, url: URL): string {
 }
 
 /**
- * 楠岃瘉骞舵彁鍙栬姹備綋涓殑瀛楃涓插瓧娈?
+ * 提取请求体中的字符串字段
  */
 export function extractStringField(body: unknown, field: string): string {
   const value = (body as any)?.[field];
@@ -107,14 +107,14 @@ export function extractStringField(body: unknown, field: string): string {
 }
 
 /**
- * 楠岃瘉骞舵彁鍙栬姹備綋涓殑鏁板瓧瀛楁
+ * 提取请求体中的数字字段
  */
 export function extractNumberField(body: unknown, field: string): number {
   return Number((body as any)?.[field] ?? "");
 }
 
 /**
- * 楠岃瘉骞舵彁鍙栬姹備綋涓殑甯冨皵瀛楁
+ * 提取请求体中的布尔字段
  */
 export function extractBooleanField(body: unknown, field: string): boolean {
   return Boolean((body as any)?.[field]);
@@ -627,7 +627,7 @@ async function fetchWithConfiguredProxy(input: string | URL, init: FetchWithProx
 }
 
 /**
- * 甯﹁秴鏃剁殑 fetch 璇锋眰
+ * 发送带超时的 fetch 请求
  */
 export async function fetchWithTimeout(
   input: string | URL,
@@ -649,7 +649,7 @@ export async function fetchWithTimeout(
 }
 
 /**
- * 甯﹂噸璇曟満鍒剁殑 fetch 璇锋眰锛堟渶澶氶噸璇?娆★級
+ * 发送带重试的 fetch 请求，默认最多重试 2 次
  */
 export async function fetchWithRetry(
   input: string | URL,
