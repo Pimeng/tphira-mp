@@ -52,6 +52,13 @@ server_name: Phira MP
 # 默认: https://phira.5wyxi.com
 PHIRA_API_ENDPOINT: "https://phira.5wyxi.com"
 
+# 鏈嶅姟绔嚭绔欎唬鐞?
+# 涓嶉厤缃細淇濇寔鏈嶅姟鍣ㄧ幇鏈夌殑浠ｇ悊琛屼负
+# false / False锛氬己鍒剁洿杩烇紝涓嶈蛋浠ｇ悊
+# http(s)://... / socks://...锛氬己鍒朵娇鐢ㄦ寚瀹氫唬鐞?
+# OUTBOUND_PROXY: false
+# OUTBOUND_PROXY: "http://127.0.0.1:7890"
+
 # Phira Replay 分享站配置（用于上传回放到分享站）
 # share_station:
 #   # 分享站地址

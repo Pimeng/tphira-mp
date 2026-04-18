@@ -30,6 +30,7 @@ export type ServerConfig = {
   /** Phira API 端点地址，默认 https://phira.5wyxi.com */
   phira_api_endpoint?: string;
   /** Phira Replay 分享站配置 */
+  outbound_proxy?: string | false;
   share_station?: ShareStationConfig;
 };
 

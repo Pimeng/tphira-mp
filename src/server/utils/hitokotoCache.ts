@@ -1,5 +1,5 @@
 import { Cache } from "./cache.js";
-import { fetchWithTimeout } from "../../common/http.js";
+import { fetchWithTimeout, type OutboundProxyValue } from "../../common/http.js";
 
 const HITOKOTO_URL = "https://v1.hitokoto.cn/";
 const HITOKOTO_FETCH_TIMEOUT_MS = 3000;
@@ -18,8 +18,8 @@ const hitokotoCache = new Cache<"current", HitokotoValue>({
 let lastAttemptAt = 0;
 let inFlight: Promise<HitokotoValue | null> | null = null;
 
-async function fetchHitokoto(): Promise<HitokotoValue | null> {
-  const res = await fetchWithTimeout(HITOKOTO_URL, {}, HITOKOTO_FETCH_TIMEOUT_MS);
+async function fetchHitokoto(proxy?: OutboundProxyValue): Promise<HitokotoValue | null> {
+  const res = await fetchWithTimeout(HITOKOTO_URL, { proxy }, HITOKOTO_FETCH_TIMEOUT_MS);
   if (!res.ok) return null;
   const json = (await res.json()) as { hitokoto?: unknown; from?: unknown; from_who?: unknown };
   const quote = typeof json.hitokoto === "string" ? json.hitokoto.trim() : "";
@@ -30,7 +30,7 @@ async function fetchHitokoto(): Promise<HitokotoValue | null> {
   return { quote, from: displayFrom };
 }
 
-export async function getHitokotoCached(): Promise<HitokotoValue | null> {
+export async function getHitokotoCached(proxy?: OutboundProxyValue): Promise<HitokotoValue | null> {
   const now = Date.now();
   
   // 先检查缓存
@@ -48,7 +48,7 @@ export async function getHitokotoCached(): Promise<HitokotoValue | null> {
   lastAttemptAt = now;
   inFlight = (async () => {
     try {
-      const value = await fetchHitokoto();
+      const value = await fetchHitokoto(proxy);
       if (value) {
         await hitokotoCache.set("current", value);
         return value;

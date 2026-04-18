@@ -129,7 +129,8 @@ export class Session {
   private async handleAuthenticate(token: string): Promise<void> {
     try {
       const me = await fetchWithRetry(`${this.getPhiraApiEndpoint()}/me`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
+        proxy: this.state.config.outbound_proxy
       }, FETCH_TIMEOUT_MS).then(async (r) => {
         if (!r.ok) throw new Error("auth-fetch-me-failed");
         return (await r.json()) as { id: number; name: string; language: string };
@@ -265,7 +266,7 @@ export class Session {
     try {
       const lang = user.lang;
       const tip = this.state.config.room_list_tip;
-      const hitokoto = await getHitokotoCached();
+      const hitokoto = await getHitokotoCached(this.state.config.outbound_proxy);
 
       // 感谢出走大大提供的清屏思路
       let message = "\n".repeat(30)
@@ -830,7 +831,9 @@ export class Session {
     }
 
     // 缓存未命中，从远程获取
-    const res = await fetchWithRetry(`${this.getPhiraApiEndpoint()}/chart/${id}`, {}, FETCH_TIMEOUT_MS).then(async (r) => {
+    const res = await fetchWithRetry(`${this.getPhiraApiEndpoint()}/chart/${id}`, {
+      proxy: this.state.config.outbound_proxy
+    }, FETCH_TIMEOUT_MS).then(async (r) => {
       if (!r.ok) throw new Error(user.lang.format("chart-fetch-failed"));
       return (await r.json()) as Chart;
     });
@@ -844,7 +847,9 @@ export class Session {
   }
 
   private async fetchRecord(user: User, id: number): Promise<RecordData> {
-    return await fetchWithRetry(`${this.getPhiraApiEndpoint()}/record/${id}`, {}, FETCH_TIMEOUT_MS).then(async (r) => {
+    return await fetchWithRetry(`${this.getPhiraApiEndpoint()}/record/${id}`, {
+      proxy: this.state.config.outbound_proxy
+    }, FETCH_TIMEOUT_MS).then(async (r) => {
       if (!r.ok) throw new Error(user.lang.format("record-fetch-failed"));
       return (await r.json()) as RecordData;
     });

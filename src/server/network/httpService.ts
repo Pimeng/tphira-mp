@@ -64,7 +64,8 @@ export async function startHttpService(opts: { state: ServerState; host: string;
     const phiraApiEndpoint = state.config.phira_api_endpoint || "https://phira.5wyxi.com";
     try {
       const resp = await fetchWithRetry(`${phiraApiEndpoint}/me`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
+        proxy: state.config.outbound_proxy
       }, 8000);
       if (!resp.ok) return null;
       const data = await resp.json() as { id: number };
@@ -151,7 +152,8 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           'Content-Type': `multipart/form-data; boundary=${boundary}`,
           'Content-Length': body.length.toString()
         },
-        body
+        body,
+        proxy: state.config.outbound_proxy
       }, 60000);
 
       if (!response.ok) {
@@ -194,7 +196,8 @@ export async function startHttpService(opts: { state: ServerState; host: string;
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${shareStation.token}`
-        }
+        },
+        proxy: state.config.outbound_proxy
       }, 10000);
 
       return response.ok;
@@ -374,7 +377,8 @@ export async function startHttpService(opts: { state: ServerState; host: string;
 
         const phiraApiEndpoint = state.config.phira_api_endpoint || "https://phira.5wyxi.com";
         const me = await fetchWithRetry(`${phiraApiEndpoint}/me`, {
-          headers: { Authorization: `Bearer ${token}` }
+          headers: { Authorization: `Bearer ${token}` },
+          proxy: state.config.outbound_proxy
         }, 8000).then(async (r) => {
           if (!r.ok) throw new Error("auth-failed");
           return (await r.json()) as { id: number };
