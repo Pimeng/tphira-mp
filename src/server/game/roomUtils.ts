@@ -103,6 +103,16 @@ export function isWaitingForReady(room: Room): boolean {
   return room.state.type === "WaitForReady";
 }
 
+export function roomShouldBeLive(room: Room, replayEnabled: boolean): boolean {
+  return room.monitorIds().length > 0 || (replayEnabled && room.replayEligible);
+}
+
+export function refreshRoomLive(room: Room, replayEnabled: boolean): boolean {
+  const live = roomShouldBeLive(room, replayEnabled);
+  room.live = live;
+  return live;
+}
+
 /**
  * 获取房间中所有用户的信息
  * @param room 房间对象

@@ -103,6 +103,80 @@ describe("回放录制", () => {
     }
   });
 
+  test("回放开关不应覆盖真实观战者的 live 转发", async () => {
+    tempDir = await createTempDir("replay-test-live-monitor");
+
+    const prevAdmin = process.env.ADMIN_TOKEN;
+    process.env.ADMIN_TOKEN = "test-token";
+
+    const running = await startServer({ port: 0, config: { monitors: [200], http_service: true, http_port: 0, replay_enabled: true, replay_base_dir: tempDir } });
+    const port = running.address().port;
+    const httpPort = running.http!.address().port;
+
+    const alice = await Client.connect("127.0.0.1", port);
+    const bob = await Client.connect("127.0.0.1", port);
+
+    const getRoom = async () => {
+      const data = await originalFetch(`http://127.0.0.1:${httpPort}/admin/rooms`, {
+        headers: { "x-admin-token": "test-token" }
+      }).then((r) => r.json() as any);
+      expect(data.ok).toBe(true);
+      const room = data.rooms.find((r: any) => r.roomid === "room_live_monitor");
+      expect(room).toBeTruthy();
+      return room;
+    };
+
+    const setReplay = async (enabled: boolean) => {
+      const res = await originalFetch(`http://127.0.0.1:${httpPort}/admin/replay/config`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-admin-token": "test-token" },
+        body: JSON.stringify({ enabled })
+      }).then((r) => r.json() as any);
+      expect(res).toMatchObject({ ok: true, enabled });
+    };
+
+    try {
+      await alice.authenticate("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+      await bob.authenticate("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+
+      await alice.createRoom("room_live_monitor");
+      const join = await bob.joinRoom("room_live_monitor", true);
+      expect(join.live).toBe(true);
+      expect((await getRoom()).live).toBe(true);
+
+      await setReplay(false);
+      expect((await getRoom()).live).toBe(true);
+
+      await setReplay(true);
+      expect((await getRoom()).live).toBe(true);
+
+      await alice.selectChart(1);
+      await alice.requestStart();
+      await bob.ready();
+
+      await waitFor(() => alice.roomState()?.type === "Playing", 3000);
+      await waitFor(() => bob.roomState()?.type === "Playing", 3000);
+
+      const frames: TouchFrame[] = [{ time: 1, points: [[0, { x: 0, y: 1 }]] }];
+      const judges: JudgeEvent[] = [{ time: 1, line_id: 1, note_id: 1, judgement: 0 } as any];
+      await alice.sendTouches(frames);
+      await alice.sendJudges(judges);
+
+      await waitFor(() => bob.livePlayer(100).touch_frames.length > 0, 1000);
+      await waitFor(() => bob.livePlayer(100).judge_events.length > 0, 1000);
+      expect(bob.livePlayer(100).touch_frames.at(-1)).toEqual(frames[0]);
+      expect(bob.livePlayer(100).judge_events.at(-1)).toEqual(judges[0]);
+
+      await alice.played(1);
+      await waitFor(() => alice.roomState()?.type === "SelectChart", 3000);
+    } finally {
+      process.env.ADMIN_TOKEN = prevAdmin;
+      await alice.close();
+      await bob.close();
+      await running.close();
+    }
+  }, 20000);
+
   test("回放结束时会输出每个录制的触控/判定统计", async () => {
     tempDir = await createTempDir("replay-test-log-summary");
 

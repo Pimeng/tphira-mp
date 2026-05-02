@@ -26,6 +26,7 @@ import type { AutoUploadConfig } from "../core/state.js";
 import { startWebSocketService, type WebSocketService } from "../network/websocketService.js";
 import { getAppPaths } from "../utils/appPaths.js";
 import { logRoomInfo } from "../utils/logUtils.js";
+import { refreshRoomLive } from "../game/roomUtils.js";
 import yaml from "js-yaml";
 
 export type HttpService = {
@@ -803,9 +804,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           const snapshot = await state.mutex.runExclusive(async () => {
             state.replayEnabled = enabled;
             const roomIds = enabled ? [] : [...state.rooms.keys()];
-            if (!enabled) {
-              for (const room of state.rooms.values()) room.live = false;
-            }
+            for (const room of state.rooms.values()) refreshRoomLive(room, enabled);
             return { enabled, roomIds };
           });
 

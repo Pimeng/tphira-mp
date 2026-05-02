@@ -7,6 +7,7 @@ import type { Stream } from "../../common/stream.js";
 import { fetchWithTimeout, fetchWithRetry } from "../../common/http.js";
 import type { Room } from "../game/room.js";
 import { Room as RoomClass } from "../game/room.js";
+import { refreshRoomLive as refreshRoomLiveState } from "../game/roomUtils.js";
 import type { ServerState } from "../core/state.js";
 import type { Chart, RecordData } from "../core/types.js";
 import { User } from "../game/user.js";
@@ -402,6 +403,8 @@ export class Session {
       await this.state.mutex.runExclusive(async () => {
         this.state.rooms.delete(room.id);
       });
+    } else {
+      refreshRoomLiveState(room, this.state.replayEnabled);
     }
   }
 
@@ -427,7 +430,7 @@ export class Session {
         if (!room) return null;
         if (room.state.type !== "Playing") return null;
         const canRecord = this.state.replayEnabled && room.replayEligible;
-        const canForward = room.isLive();
+        const canForward = refreshRoomLiveState(room, this.state.replayEnabled);
         if (!canRecord && !canForward) return null;
         const last = cmd.frames.at(-1);
         if (last) user.gameTime = last.time;
@@ -441,7 +444,7 @@ export class Session {
         if (!room) return null;
         if (room.state.type !== "Playing") return null;
         const canRecord = this.state.replayEnabled && room.replayEligible;
-        const canForward = room.isLive();
+        const canForward = refreshRoomLiveState(room, this.state.replayEnabled);
         if (!canRecord && !canForward) return null;
         this.state.logger.log("DEBUG", tl(this.state.serverLang, "log-user-judges", { user: user.name, room: room.id, count: String(cmd.judges.length) }), { judges: cmd.judges }, { userId: user.id });
         if (canRecord) this.state.replayRecorder.appendJudges(room.id, user.id, cmd.judges);
@@ -464,10 +467,10 @@ export class Session {
             user.room = room;
           });
           const room = user.room!;
+          refreshRoomLiveState(room, this.state.replayEnabled);
           logRoomMark(this.state.logger, this.state.serverLang, room.id, "log-room-created", { user: user.name }, { userId: user.id });
           await room.send((c) => this.broadcastRoom(room, c), { type: "CreateRoom", user: user.id });
           if (this.state.replayEnabled && room.replayEligible) {
-            room.live = true;
             const fake = this.state.replayRecorder.fakeMonitorInfo();
             // 使用 setImmediate 确保在当前事件循环后执行
             setImmediate(() => {
@@ -504,6 +507,7 @@ export class Session {
 
           user.monitor = cmd.monitor;
           user.room = room; // 直接设置，不需要mutex
+          refreshRoomLiveState(room, this.state.replayEnabled);
 
           const suffix = cmd.monitor ? tl(this.state.serverLang, "label-monitor-suffix") : "";
           logRoomMark(this.state.logger, this.state.serverLang, room.id, "log-room-joined", { user: user.name, suffix }, { userId: user.id });
@@ -550,6 +554,8 @@ export class Session {
             await this.state.mutex.runExclusive(async () => {
               this.state.rooms.delete(room.id);
             });
+          } else {
+            refreshRoomLiveState(room, this.state.replayEnabled);
           }
           return {};
         }) };

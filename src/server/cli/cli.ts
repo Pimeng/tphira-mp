@@ -5,6 +5,7 @@ import { parseRoomId, roomIdToString, type RoomId } from "../../common/roomId.js
 import type { ServerCommand } from "../../common/commands.js";
 import { tl } from "../utils/l10n.js";
 import { logRoomInfo } from "../utils/logUtils.js";
+import { refreshRoomLive } from "../game/roomUtils.js";
 
 export type CliContext = {
   state: ServerState;
@@ -565,9 +566,7 @@ export function startCli(ctx: CliContext): () => void {
     const snapshot = await ctx.state.mutex.runExclusive(async () => {
       ctx.state.replayEnabled = enabled;
       const roomIds = enabled ? [] : [...ctx.state.rooms.keys()];
-      if (!enabled) {
-        for (const room of ctx.state.rooms.values()) room.live = false;
-      }
+      for (const room of ctx.state.rooms.values()) refreshRoomLive(room, enabled);
       return { enabled, roomIds };
     });
 
