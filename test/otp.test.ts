@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 import { startServer, type RunningServer } from "../src/server/core/server.js";
 
 describe("OTP临时TOKEN功能测试", () => {
@@ -27,16 +27,30 @@ describe("OTP临时TOKEN功能测试", () => {
   });
 
   test("请求OTP应该返回SSID", async () => {
-    const res = await fetch(`${baseUrl}/admin/otp/request`, {
-      method: "POST"
-    });
-    const data = await res.json() as any;
-    
-    expect(res.status).toBe(200);
-    expect(data.ok).toBe(true);
-    expect(data.ssid).toBeDefined();
-    expect(typeof data.ssid).toBe("string");
-    expect(data.expiresIn).toBe(5 * 60 * 1000); // 5分钟
+    const stdoutChunks: string[] = [];
+    const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(((chunk: any) => {
+      stdoutChunks.push(String(chunk));
+      return true;
+    }) as any);
+
+    try {
+      const res = await fetch(`${baseUrl}/admin/otp/request`, {
+        method: "POST"
+      });
+      const data = await res.json() as any;
+      
+      expect(res.status).toBe(200);
+      expect(data.ok).toBe(true);
+      expect(data.ssid).toBeDefined();
+      expect(typeof data.ssid).toBe("string");
+      expect(data.expiresIn).toBe(5 * 60 * 1000); // 5分钟
+
+      const stdout = stdoutChunks.join("");
+      expect(stdout).toContain("管理员后台 API");
+      expect(stdout).not.toContain("�");
+    } finally {
+      stdoutSpy.mockRestore();
+    }
   });
 
   test("使用无效OTP应该返回错误", async () => {
@@ -56,17 +70,37 @@ describe("OTP临时TOKEN功能测试", () => {
   });
 
   test("OTP验证失败3次后应该封禁IP和SSID", async () => {
-    // 1. 请求OTP获取有效的SSID
-    const otpRes = await fetch(`${baseUrl}/admin/otp/request`, {
-      method: "POST"
-    });
-    const otpData = await otpRes.json() as any;
-    expect(otpData.ok).toBe(true);
-    const ssid = otpData.ssid;
+    const stdoutChunks: string[] = [];
+    const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(((chunk: any) => {
+      stdoutChunks.push(String(chunk));
+      return true;
+    }) as any);
 
-    // 2. 尝试3次错误的OTP
-    for (let i = 0; i < 3; i++) {
-      const res = await fetch(`${baseUrl}/admin/otp/verify`, {
+    // 1. 请求OTP获取有效的SSID
+    try {
+      const otpRes = await fetch(`${baseUrl}/admin/otp/request`, {
+        method: "POST"
+      });
+      const otpData = await otpRes.json() as any;
+      expect(otpData.ok).toBe(true);
+      const ssid = otpData.ssid;
+
+      // 2. 尝试3次错误的OTP
+      for (let i = 0; i < 3; i++) {
+        const res = await fetch(`${baseUrl}/admin/otp/verify`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ssid: ssid,
+            otp: "wrong-otp"
+          })
+        });
+        const data = await res.json() as any;
+        expect(data.ok).toBe(false);
+      }
+
+      // 3. 第4次尝试应该返回封禁错误
+      const res4 = await fetch(`${baseUrl}/admin/otp/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -74,24 +108,20 @@ describe("OTP临时TOKEN功能测试", () => {
           otp: "wrong-otp"
         })
       });
-      const data = await res.json() as any;
-      expect(data.ok).toBe(false);
-    }
+      const data4 = await res4.json() as any;
+      
+      expect(res4.status).toBe(403);
+      expect(data4.ok).toBe(false);
+      expect(data4.error).toMatch(/banned/);
 
-    // 3. 第4次尝试应该返回封禁错误
-    const res4 = await fetch(`${baseUrl}/admin/otp/verify`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ssid: ssid,
-        otp: "wrong-otp"
-      })
-    });
-    const data4 = await res4.json() as any;
-    
-    expect(res4.status).toBe(403);
-    expect(data4.ok).toBe(false);
-    expect(data4.error).toMatch(/banned/);
+      const stdout = stdoutChunks.join("");
+      expect(stdout).toContain("（3次）");
+      expect(stdout).not.toContain("{ipAttempts}");
+      expect(stdout).not.toContain("{ssidAttempts}");
+      expect(stdout).not.toContain("�");
+    } finally {
+      stdoutSpy.mockRestore();
+    }
   });
 
   test("完整OTP流程：请求->验证->使用临时TOKEN", async () => {

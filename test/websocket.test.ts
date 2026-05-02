@@ -62,12 +62,16 @@ describe("WebSocket 测试", () => {
       if (url.endsWith("/me")) {
         const auth = String(init?.headers && (init.headers as any).Authorization ? (init.headers as any).Authorization : (init?.headers as any)?.get?.("Authorization") ?? "");
         const token = auth.replace(/^Bearer\s+/i, "");
-        
-        if (token === "user1token") {
-          return new Response(JSON.stringify({ id: 1001, name: "User1", language: "zh-CN" }), { status: 200 });
-        }
-        if (token === "user2token") {
-          return new Response(JSON.stringify({ id: 1002, name: "User2", language: "zh-CN" }), { status: 200 });
+
+        const usersByToken: Record<string, { id: number; name: string; language: string }> = {
+          user1token: { id: 1001, name: "User1", language: "zh-CN" },
+          user2token: { id: 1002, name: "User2", language: "zh-CN" },
+          roomloghost: { id: 3001, name: "RoomLogHost", language: "zh-CN" },
+          roomlogguest: { id: 3002, name: "RoomLogGuest", language: "zh-CN" }
+        };
+        const user = usersByToken[token];
+        if (user) {
+          return new Response(JSON.stringify(user), { status: 200 });
         }
         return new Response("unauthorized", { status: 401 });
       }
@@ -197,6 +201,48 @@ describe("WebSocket 测试", () => {
       expect(error.message).toBe("room-not-found");
 
       await closeWebSocket(ws);
+    });
+
+    test("应该推送订阅房间的 INFO 日志", async () => {
+      const roomId = "room-log-test";
+      const host = await Client.connect("127.0.0.1", gamePort);
+      const guest = await Client.connect("127.0.0.1", gamePort);
+      let ws: WebSocket | null = null;
+
+      try {
+        await host.authenticate("roomloghost");
+        await guest.authenticate("roomlogguest");
+        await host.createRoom(roomId);
+        await guest.joinRoom(roomId, false);
+
+        ws = await createWebSocket(`ws://127.0.0.1:${httpPort}/ws`);
+        const messages: any[] = [];
+        ws.on("message", (data) => {
+          messages.push(JSON.parse(data.toString()));
+        });
+
+        ws.send(JSON.stringify({
+          type: "subscribe",
+          roomId,
+          userId: 3001
+        }));
+
+        await waitFor(() => messages.some(m => m.type === "subscribed"));
+        server.state.logger.log("INFO", "opaque structured room log", undefined, { roomId });
+        await waitFor(() => messages.some(m => m.type === "room_log" && m.data.message === "opaque structured room log"));
+
+        await host.selectChart(1);
+        await host.requestStart();
+        await guest.ready();
+
+        await waitFor(() => messages.some(m => m.type === "room_log" && String(m.data.message).includes(roomId)));
+        const roomLog = messages.find(m => m.type === "room_log" && String(m.data.message).includes(roomId));
+        expect(roomLog.data.message).toContain("房间");
+      } finally {
+        if (ws) await closeWebSocket(ws);
+        await guest.close();
+        await host.close();
+      }
     });
   });
 

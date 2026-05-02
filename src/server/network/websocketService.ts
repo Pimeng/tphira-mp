@@ -21,7 +21,7 @@ export type WebSocketService = {
   wss: WebSocketServer;
   clients: Map<WebSocket, WebSocketClient>;
   broadcastRoomUpdate: (roomId: RoomId) => Promise<void>;
-  broadcastRoomLog: (message: string, timestamp: Date) => Promise<void>;
+  broadcastRoomLog: (roomId: RoomId, message: string, timestamp: Date) => Promise<void>;
   broadcastAdminUpdate: () => Promise<void>;
   close: () => Promise<void>;
 };
@@ -535,22 +535,7 @@ export function startWebSocketService(opts: { httpServer: http.Server; state: Se
     }
   };
 
-  const broadcastRoomLog = async (message: string, timestamp: Date): Promise<void> => {
-    // 从日志消息中提取房间 ID
-    // 日志格式通常包含房间信息，例如："用户 "xxx" 加入房间 "room-id""
-    const roomIdMatch = message.match(/房间\s*[「""]([^」""]+)[」""]/);
-    if (!roomIdMatch) {
-      return; // 如果没有房间信息，不推送
-    }
-
-    const roomIdStr = roomIdMatch[1];
-    let roomId: RoomId;
-    try {
-      roomId = parseRoomId(roomIdStr);
-    } catch {
-      return; // 无效的房间 ID
-    }
-
+  const broadcastRoomLog = async (roomId: RoomId, message: string, timestamp: Date): Promise<void> => {
     const response: WebSocketResponse = {
       type: "room_log",
       data: {
@@ -560,8 +545,9 @@ export function startWebSocketService(opts: { httpServer: http.Server; state: Se
     };
     const messageStr = JSON.stringify(response);
 
+    const normalizedRoomId = roomIdToString(roomId);
     for (const [ws, client] of clients) {
-      if (client.roomId && roomIdToString(client.roomId) === roomIdStr) {
+      if (client.roomId && roomIdToString(client.roomId) === normalizedRoomId) {
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(messageStr);
         }

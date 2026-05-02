@@ -4,6 +4,7 @@ import { tl, type Language } from "../utils/l10n.js";
 import type { Chart, RecordData } from "../core/types.js";
 import type { User } from "../game/user.js";
 import type { Logger } from "../utils/logger.js";
+import { logRoomInfo } from "../utils/logUtils.js";
 
 export type InternalRoomState =
   | { type: "SelectChart" }
@@ -148,7 +149,7 @@ export class Room {
         const newHost = opts.pickRandomUserId(users);
         if (newHost === null) return true;
         this.hostId = newHost;
-        opts.logger?.info(tl(opts.lang, "log-room-host-changed-offline", { room: this.id, old: String(user.id), next: String(newHost) }));
+        if (opts.logger) logRoomInfo(opts.logger, opts.lang, this.id, "log-room-host-changed-offline", { old: String(user.id), next: String(newHost) });
         await this.send(opts.broadcast, { type: "NewHost", user: newHost });
         const newHostUser = opts.usersById(newHost);
         if (newHostUser) await newHostUser.trySend({ type: "ChangeHost", is_host: true });
@@ -201,7 +202,7 @@ export class Room {
         const usersText = users.join(sep);
         const monitorsText = monitors.join(sep);
         const monitorsSuffix = monitors.length > 0 ? tl(opts.lang, "log-room-game-start-monitors", { monitors: monitorsText }) : "";
-        opts.logger?.info(tl(opts.lang, "log-room-game-start", { room: this.id, users: usersText, monitorsSuffix }));
+        if (opts.logger) logRoomInfo(opts.logger, opts.lang, this.id, "log-room-game-start", { users: usersText, monitorsSuffix });
         await this.send(opts.broadcast, { type: "StartPlaying" });
         this.resetGameTime(opts.usersById);
         this.state = { type: "Playing", results: new Map(), aborted: new Set() };
@@ -258,11 +259,10 @@ export class Room {
           await this.send(opts.broadcast, { type: "Chat", user: 0, content: summary });
         }
 
-        opts.logger?.info(tl(opts.lang, "log-room-game-end", {
-          room: this.id,
+        if (opts.logger) logRoomInfo(opts.logger, opts.lang, this.id, "log-room-game-end", {
           uploaded: String(results.size),
           aborted: String(aborted.size)
-        }));
+        });
         await this.send(opts.broadcast, { type: "GameEnd" });
         if (opts.onGameEnd) await opts.onGameEnd(this);
         this.state = { type: "SelectChart" };
@@ -275,12 +275,11 @@ export class Room {
               return { id, name, score: r.score, acc: r.accuracy, fc: r.full_combo, std: r.std, std_score: r.std_score };
             })
             .sort((a, b) => b.score - a.score);
-          opts.logger?.info(tl(opts.lang, "log-contest-game-results", {
-            room: this.id,
+          if (opts.logger) logRoomInfo(opts.logger, opts.lang, this.id, "log-contest-game-results", {
             chart: chartText,
             results: JSON.stringify(rows),
             aborted: JSON.stringify([...aborted].sort((a, b) => a - b))
-          }));
+          });
           await opts.disbandRoom(this);
           return;
         }
@@ -292,7 +291,7 @@ export class Room {
             const newHost = users[(index + 1) % users.length]!;
             const oldHost = this.hostId;
             this.hostId = newHost;
-            opts.logger?.info(tl(opts.lang, "log-room-host-changed-cycle", { room: this.id, old: String(oldHost), next: String(newHost) }));
+            if (opts.logger) logRoomInfo(opts.logger, opts.lang, this.id, "log-room-host-changed-cycle", { old: String(oldHost), next: String(newHost) });
             await this.send(opts.broadcast, { type: "NewHost", user: newHost });
             const oldHostUser = opts.usersById(oldHost);
             if (oldHostUser) await oldHostUser.trySend({ type: "ChangeHost", is_host: false });

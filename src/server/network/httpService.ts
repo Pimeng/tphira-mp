@@ -25,6 +25,7 @@ import { defaultReplayBaseDir, deleteReplayForUser, listReplaysForUser, readRepl
 import type { AutoUploadConfig } from "../core/state.js";
 import { startWebSocketService, type WebSocketService } from "../network/websocketService.js";
 import { getAppPaths } from "../utils/appPaths.js";
+import { logRoomInfo } from "../utils/logUtils.js";
 import yaml from "js-yaml";
 
 export type HttpService = {
@@ -48,7 +49,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
 
   // 临时管理员TOKEN管理常量
   const TEMP_TOKEN_TTL_MS = 4 * 60 * 60 * 1000; // 4小时
-  const OTP_TTL_MS = 5 * 60 * 1000; // 验证�?分钟有效
+  const OTP_TTL_MS = 5 * 60 * 1000; // 验证码 5 分钟有效
   const otpSessions = new Map<string, { otp: string; expiresAt: number }>();
 
   // OTP验证尝试限制
@@ -275,7 +276,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
               write(401, { ok: false, error: "token-expired" });
               return false;
             }
-            // 临时TOKEN验证通过，直接返�?
+            // 临时TOKEN验证通过，直接返回
             state.logger.debug("Temp token validated successfully");
             return true;
           } else {
@@ -317,7 +318,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
       const pickRandomUserId = (ids: number[]): number | null => ids[0] ?? null;
 
       if (req.method === "GET" && url.pathname === "/room") {
-        // 优化：不使用mutex，直接读�?
+        // 优化：不使用 mutex，直接读取
         const rooms: Array<{
           roomid: string;
           cycle: boolean;
@@ -677,7 +678,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
         otpSessions.set(ssid, { otp, expiresAt });
 
         // 输出到终端（INFO级别，强制输出，不写入文件）
-        const message = `[OTP Request] 您正在尝试请求验证码登录管理员后�?API，本次请求的验证码是 ${otp}，会话ID: ${ssid}, 5分钟内有效`;
+        const message = `[OTP Request] 您正在尝试请求验证码登录管理员后台 API，本次请求的验证码是 ${otp}，会话ID: ${ssid}, 5分钟内有效`;
         process.stdout.write(`\x1b[32m[${new Date().toISOString()}] [INFO] ${message}\x1b[0m\n`);
 
         write(200, { ok: true, ssid, expiresIn: OTP_TTL_MS });
@@ -727,16 +728,16 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           otpAttemptsByIp.set(clientIp, ipAttempts);
           otpAttemptsBySsid.set(ssid, ssidAttempts);
 
-          // 检查是否超过最大尝试次�?
+          // 检查是否超过最大尝试次数
           if (ipAttempts >= OTP_MAX_ATTEMPTS) {
             otpBannedIps.add(clientIp);
-            const message = `[OTP] IP ${clientIp} 因OTP验证失败次数过多�?{ipAttempts}次）已被封禁`;
+            const message = `[OTP] IP ${clientIp} 因OTP验证失败次数过多（${ipAttempts}次）已被封禁`;
             process.stdout.write(`\x1b[31m[${new Date().toISOString()}] [WARN] ${message}\x1b[0m\n`);
           }
           if (ssidAttempts >= OTP_MAX_ATTEMPTS) {
             otpBannedSsids.add(ssid);
             otpSessions.delete(ssid); // 删除被封禁的会话
-            const message = `[OTP] 会话 ${ssid} 因OTP验证失败次数过多�?{ssidAttempts}次）已被封禁`;
+            const message = `[OTP] 会话 ${ssid} 因OTP验证失败次数过多（${ssidAttempts}次）已被封禁`;
             process.stdout.write(`\x1b[31m[${new Date().toISOString()}] [WARN] ${message}\x1b[0m\n`);
           }
 
@@ -744,7 +745,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           return;
         }
 
-        // 验证成功，清除尝试记�?
+        // 验证成功，清除尝试记录
         otpAttemptsByIp.delete(clientIp);
         otpAttemptsBySsid.delete(ssid);
 
@@ -754,8 +755,8 @@ export async function startHttpService(opts: { state: ServerState; host: string;
         state.tempAdminTokens.set(tempToken, { ip: clientIp, expiresAt, banned: false });
         otpSessions.delete(ssid); // 删除已使用的OTP
 
-        // 输出到终�?
-        const message = `[OTP] 临时管理员TOKEN已生成，生成�?使用IP: ${clientIp}，临时Token: ${tempToken.slice(0, 8)}..., 此Token将在4小时内有效`;
+        // 输出到终端
+        const message = `[OTP] 临时管理员TOKEN已生成，生成时使用IP: ${clientIp}，临时Token: ${tempToken.slice(0, 8)}..., 此Token将在4小时内有效`;
         process.stdout.write(`\x1b[32m[${new Date().toISOString()}] [INFO] ${message}\x1b[0m\n`);
 
         write(200, { ok: true, token: tempToken, expiresAt, expiresIn: TEMP_TOKEN_TTL_MS });
@@ -837,14 +838,14 @@ export async function startHttpService(opts: { state: ServerState; host: string;
         }
 
         if (req.method === "GET" && url.pathname === "/admin/rooms") {
-          // 优化：不使用mutex，直接读�?
+          // 优化：不使用 mutex，直接读取
           const rooms = [...state.rooms.entries()].map(([rid, room]) => {
             const roomid = roomIdToString(rid);
             const hostUser = state.users.get(room.hostId);
             const hostName = hostUser?.name ?? String(room.hostId);
             const hostConnected = Boolean(hostUser?.session);
             
-            // 状态详细信�?
+            // 状态详细信息
             const stateStr =
               room.state.type === "Playing" ? "playing" : room.state.type === "WaitForReady" ? "waiting_for_ready" : "select_chart";
             
@@ -892,7 +893,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
               return userInfo;
             });
             
-            // 观察者详细信�?
+            // 观察者详细信息
             const monitors = room.monitorIds().map((id) => {
               const u = state.users.get(id);
               return { 
@@ -985,7 +986,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
             return;
           }
 
-          // 断开所有用户连�?
+          // 断开所有用户连接
           const allIds = [...room.userIds(), ...room.monitorIds()];
           const disconnectTasks: Promise<void>[] = [];
           for (const id of allIds) {
@@ -1006,7 +1007,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
             await state.replayRecorder.endRoom(rid);
           }
 
-          state.logger.info(tl(state.serverLang, "log-room-disbanded-by-admin", { room: roomIdToString(rid) }));
+          logRoomInfo(state.logger, state.serverLang, rid, "log-room-disbanded-by-admin");
           write(200, { ok: true, roomid: roomIdToString(rid) });
           return;
         }
@@ -1314,7 +1315,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           const usersText = users.join(sep);
           const monitorsText = monitors.join(sep);
           const monitorsSuffix = monitors.length > 0 ? tl(state.serverLang, "log-room-game-start-monitors", { monitors: monitorsText }) : "";
-          state.logger.info(tl(state.serverLang, "log-room-game-start", { room: room.id, users: usersText, monitorsSuffix }));
+          logRoomInfo(state.logger, state.serverLang, room.id, "log-room-game-start", { users: usersText, monitorsSuffix });
           await room.send((c) => broadcastRoomAll(room.id, c), { type: "StartPlaying" });
           room.resetGameTime((id) => state.users.get(id));
           if (state.replayEnabled && room.replayEligible) await state.replayRecorder.startRoom(room.id, room.chart!.id, room.userIds());
@@ -1343,7 +1344,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
             return [...state.rooms.keys()];
           });
 
-          // 优化：完全异步，不等�?
+          // 优化：完全异步，不等待
           for (const roomId of snapshot) {
             void broadcastRoomAll(roomId, { type: "Message", message: { type: "Chat", user: 0, content: message } }).catch(() => {});
           }
@@ -1353,7 +1354,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           return;
         }
 
-        // 向指定房间发送消息接�?
+        // 向指定房间发送消息接口
         const mRoomChat = /^\/admin\/rooms\/(.+)\/chat$/.exec(url.pathname);
         if (req.method === "POST" && mRoomChat) {
           const roomIdText = decodeURIComponent(mRoomChat[1]!);
@@ -1385,12 +1386,12 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           }
 
           void broadcastRoomAll(rid, { type: "Message", message: { type: "Chat", user: 0, content: message } }).catch(() => {});
-          state.logger.info(tl(state.serverLang, "log-admin-room-message", { room: roomIdText, message }));
+          logRoomInfo(state.logger, state.serverLang, rid, "log-admin-room-message", { message });
           write(200, { ok: true });
           return;
         }
 
-        // IP黑名单管理接�?
+        // IP黑名单管理接口
         if (req.method === "GET" && url.pathname === "/admin/ip-blacklist") {
           const blacklist = state.logger.getBlacklistedIps();
           write(200, { ok: true, blacklist });

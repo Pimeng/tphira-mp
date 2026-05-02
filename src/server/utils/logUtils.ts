@@ -1,19 +1,75 @@
 // 日志记录辅助函数
 
-import type { Logger } from "../utils/logger.js";
+import type { FluentVariable } from "@fluent/bundle";
+import type { RoomId } from "../../common/roomId.js";
+import type { Logger, LogContext, LogLevel } from "../utils/logger.js";
 import type { Language } from "../utils/l10n.js";
 import { tl } from "../utils/l10n.js";
 
 // 导出通用终端日志函数（已迁移到 common）
 export { debugLog, infoLog, warnLog, errorLog } from "../../common/console.js";
 
-/**
- * 日志上下文信息
- */
-export interface LogContext {
-  userId?: number;
-  roomId?: string;
-  [key: string]: any;
+export type LogParams = Record<string, FluentVariable>;
+export type RoomLogContext = Omit<LogContext, "roomId">;
+
+function roomLogContext(roomId: RoomId | string, context?: RoomLogContext): LogContext {
+  return { ...context, roomId: String(roomId) };
+}
+
+export function logLocalized(
+  logger: Logger,
+  level: LogLevel,
+  lang: Language,
+  key: string,
+  params?: LogParams,
+  context?: LogContext
+): void {
+  logger.log(level, tl(lang, key, params ?? {}), undefined, context);
+}
+
+export function logRoom(
+  logger: Logger,
+  level: LogLevel,
+  lang: Language,
+  roomId: RoomId | string,
+  key: string,
+  params?: LogParams,
+  context?: RoomLogContext
+): void {
+  logLocalized(logger, level, lang, key, { ...(params ?? {}), room: String(roomId) }, roomLogContext(roomId, context));
+}
+
+export function logRoomInfo(
+  logger: Logger,
+  lang: Language,
+  roomId: RoomId | string,
+  key: string,
+  params?: LogParams,
+  context?: RoomLogContext
+): void {
+  logRoom(logger, "INFO", lang, roomId, key, params, context);
+}
+
+export function logRoomMark(
+  logger: Logger,
+  lang: Language,
+  roomId: RoomId | string,
+  key: string,
+  params?: LogParams,
+  context?: RoomLogContext
+): void {
+  logRoom(logger, "MARK", lang, roomId, key, params, context);
+}
+
+export function logRoomWarn(
+  logger: Logger,
+  lang: Language,
+  roomId: RoomId | string,
+  key: string,
+  params?: LogParams,
+  context?: RoomLogContext
+): void {
+  logRoom(logger, "WARN", lang, roomId, key, params, context);
 }
 
 /**
@@ -27,11 +83,12 @@ export interface LogContext {
 export function logRoomAction(
   logger: Logger,
   lang: Language,
+  roomId: RoomId | string,
   key: string,
-  params: Record<string, string | number>,
-  context?: LogContext
+  params?: LogParams,
+  context?: RoomLogContext
 ): void {
-  logger.log("MARK", tl(lang, key, params), undefined, context);
+  logRoomMark(logger, lang, roomId, key, params, context);
 }
 
 /**
@@ -47,11 +104,11 @@ export function logUserAction(
   logger: Logger,
   lang: Language,
   key: string,
-  params: Record<string, string | number>,
+  params: LogParams,
   userId: number,
   context?: Omit<LogContext, "userId">
 ): void {
-  logger.log("MARK", tl(lang, key, params), undefined, { ...context, userId });
+  logLocalized(logger, "MARK", lang, key, params, { ...context, userId });
 }
 
 /**
@@ -65,9 +122,10 @@ export function logInfo(
   logger: Logger,
   lang: Language,
   key: string,
-  params?: Record<string, string | number>
+  params?: LogParams,
+  context?: LogContext
 ): void {
-  logger.info(tl(lang, key, params || {}));
+  logLocalized(logger, "INFO", lang, key, params, context);
 }
 
 /**
@@ -81,9 +139,10 @@ export function logWarning(
   logger: Logger,
   lang: Language,
   key: string,
-  params?: Record<string, string | number>
+  params?: LogParams,
+  context?: LogContext
 ): void {
-  logger.warn(tl(lang, key, params || {}));
+  logLocalized(logger, "WARN", lang, key, params, context);
 }
 
 /**
@@ -97,7 +156,8 @@ export function logError(
   logger: Logger,
   lang: Language,
   key: string,
-  params?: Record<string, string | number>
+  params?: LogParams,
+  context?: LogContext
 ): void {
-  logger.error(tl(lang, key, params || {}));
+  logLocalized(logger, "ERROR", lang, key, params, context);
 }

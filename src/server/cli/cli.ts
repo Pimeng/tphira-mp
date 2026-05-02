@@ -4,6 +4,7 @@ import type { Logger } from "../utils/logger.js";
 import { parseRoomId, roomIdToString, type RoomId } from "../../common/roomId.js";
 import type { ServerCommand } from "../../common/commands.js";
 import { tl } from "../utils/l10n.js";
+import { logRoomInfo } from "../utils/logUtils.js";
 
 export type CliContext = {
   state: ServerState;
@@ -465,7 +466,7 @@ export function startCli(ctx: CliContext): () => void {
     }
 
     await ctx.broadcastRoomAll(rid, { type: "Message", message: { type: "Chat", user: 0, content: message } });
-    ctx.logger.info(tl(ctx.state.serverLang, "log-admin-room-message", { room: args[0]!, message }));
+    logRoomInfo(ctx.logger, ctx.state.serverLang, rid, "log-admin-room-message", { message });
     printSuccess(`已向房间 ${args[0]} 发送消息 / Message sent to room ${args[0]}`);
   };
 
@@ -543,7 +544,7 @@ export function startCli(ctx: CliContext): () => void {
       await ctx.state.replayRecorder.endRoom(rid);
     }
 
-    ctx.logger.info(tl(ctx.state.serverLang, "log-room-disbanded-by-admin", { room: args[0]! }));
+    logRoomInfo(ctx.logger, ctx.state.serverLang, rid, "log-room-disbanded-by-admin");
     printSuccess(`已解散房间 ${args[0]} / Disbanded room ${args[0]}`);
   };
 
@@ -693,7 +694,7 @@ export function startCli(ctx: CliContext): () => void {
       const usersText = users.join(sep);
       const monitorsText = monitors.join(sep);
       const monitorsSuffix = monitors.length > 0 ? tl(ctx.state.serverLang, "log-room-game-start-monitors", { monitors: monitorsText }) : "";
-      ctx.logger.info(tl(ctx.state.serverLang, "log-room-game-start", { room: room.id, users: usersText, monitorsSuffix }));
+      logRoomInfo(ctx.logger, ctx.state.serverLang, room.id, "log-room-game-start", { users: usersText, monitorsSuffix });
       await room.send((c) => ctx.broadcastRoomAll(room.id, c), { type: "StartPlaying" });
       room.resetGameTime((id) => ctx.state.users.get(id));
       if (ctx.state.replayEnabled && room.replayEligible) await ctx.state.replayRecorder.startRoom(room.id, room.chart!.id, room.userIds());

@@ -240,7 +240,7 @@ SelectChart → WaitForReady → Playing → SelectChart
 ### 网络优化
 - 限速（回放下载 50KB/s）
 - 心跳检测（3秒/30秒）
-- 增量���新（管理员 WebSocket）
+- 增量更新（管理员 WebSocket）
 
 ## 部署建议 / Deployment Recommendations
 

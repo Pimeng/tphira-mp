@@ -1,6 +1,6 @@
 // 回放录制测试
 import { afterAll, beforeAll, afterEach, describe, expect, test } from "vitest";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Client } from "../src/client/client.js";
@@ -10,14 +10,22 @@ import type { JudgeEvent, TouchFrame } from "../src/common/commands.js";
 
 describe("回放录制", () => {
   const { originalFetch, mockFetch } = setupMockFetch();
+  const configPath = join(process.cwd(), "server_config.yml");
+  let originalConfigText: string | null = null;
   let tempDir: string;
 
   beforeAll(() => {
+    originalConfigText = existsSync(configPath) ? readFileSync(configPath, "utf8") : null;
     globalThis.fetch = mockFetch;
   });
 
   afterAll(() => {
     globalThis.fetch = originalFetch;
+    if (originalConfigText === null) {
+      if (existsSync(configPath)) unlinkSync(configPath);
+    } else {
+      writeFileSync(configPath, originalConfigText, "utf8");
+    }
   });
 
   afterEach(async () => {

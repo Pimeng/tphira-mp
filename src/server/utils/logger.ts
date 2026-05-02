@@ -23,10 +23,10 @@ export type LoggerOptions = {
   /** 启用日志限流和IP黑名单 */
   enableRateLimiting?: boolean;
   /** INFO 日志回调函数，用于实时推送 */
-  onInfoLog?: (message: string, timestamp: Date) => void;
+  onInfoLog?: (message: string, timestamp: Date, context?: LogContext) => void;
 };
 
-export type LogContext = { userId?: number; ip?: string };
+export type LogContext = { userId?: number; ip?: string; roomId?: string };
 
 function pad2(n: number): string {
   return String(n).padStart(2, "0");
@@ -74,7 +74,7 @@ export class Logger {
   private readonly useColor: boolean;
   private readonly testAccountIds: ReadonlySet<number>;
   private readonly rateLimiter: RateLimiter | null;
-  private readonly onInfoLog?: (message: string, timestamp: Date) => void;
+  private readonly onInfoLog?: (message: string, timestamp: Date, context?: LogContext) => void;
 
   private currentDateKey: string | null = null;
   private stream: WriteStream | null = null;
@@ -91,24 +91,24 @@ export class Logger {
     mkdirSync(this.logsDir, { recursive: true });
   }
 
-  debug(message: string, meta?: Record<string, unknown>): void {
-    this.write("DEBUG", message, meta);
+  debug(message: string, meta?: Record<string, unknown>, context?: LogContext): void {
+    this.write("DEBUG", message, meta, context);
   }
 
-  info(message: string, meta?: Record<string, unknown>): void {
-    this.write("INFO", message, meta);
+  info(message: string, meta?: Record<string, unknown>, context?: LogContext): void {
+    this.write("INFO", message, meta, context);
   }
 
-  mark(message: string, meta?: Record<string, unknown>): void {
-    this.write("MARK", message, meta);
+  mark(message: string, meta?: Record<string, unknown>, context?: LogContext): void {
+    this.write("MARK", message, meta, context);
   }
 
-  warn(message: string, meta?: Record<string, unknown>): void {
-    this.write("WARN", message, meta);
+  warn(message: string, meta?: Record<string, unknown>, context?: LogContext): void {
+    this.write("WARN", message, meta, context);
   }
 
-  error(message: string, meta?: Record<string, unknown>): void {
-    this.write("ERROR", message, meta);
+  error(message: string, meta?: Record<string, unknown>, context?: LogContext): void {
+    this.write("ERROR", message, meta, context);
   }
 
   /** 带上下文的日志：当 context.userId 为测试账号且全局非 DEBUG 时不写入文件；当启用限流且IP被限流时，连接日志不输出 */
@@ -179,7 +179,7 @@ export class Logger {
 
     // 如果是 INFO 级别的日志且有回调函数，调用回调
     if (level === "INFO" && this.onInfoLog) {
-      this.onInfoLog(message, now);
+      this.onInfoLog(message, now, context);
     }
   }
 

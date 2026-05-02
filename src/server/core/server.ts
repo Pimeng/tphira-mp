@@ -19,7 +19,7 @@ import { tl } from "../utils/l10n.js";
 import { startReplayCleanup } from "../replay/replayCleanup.js";
 import { parseProxyProtocol } from "../network/proxyProtocol.js";
 import { startCli } from "../cli/cli.js";
-import type { RoomId } from "../../common/roomId.js";
+import { parseRoomId, type RoomId } from "../../common/roomId.js";
 
 export type StartServerOptions = { host?: string; port?: number; config?: Partial<ServerConfig> };
 
@@ -267,11 +267,22 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
     ...(options.port !== undefined ? { port: options.port } : {})
   };
   const mergedCfg = mergeConfig(mergeConfig(fileCfg, envCfg), cliCfg);
+  let broadcastInfoLog: ((roomId: RoomId, message: string, timestamp: Date) => void) | null = null;
   const logger = new Logger({
     logsDir: paths.logsDir,
     minLevel: mergedCfg.log_level as any,
     testAccountIds: mergedCfg.test_account_ids ?? [1739989],
-    enableRateLimiting: true
+    enableRateLimiting: true,
+    onInfoLog: (message, timestamp, context) => {
+      if (!context?.roomId) return;
+      let roomId: RoomId;
+      try {
+        roomId = parseRoomId(context.roomId);
+      } catch {
+        return;
+      }
+      broadcastInfoLog?.(roomId, message, timestamp);
+    }
   });
   const serverName = mergedCfg.server_name || "Phira MP";
   const adminDataPath = mergedCfg.admin_data_path ?? paths.adminDataPath;
@@ -338,34 +349,42 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
     }
   });
 
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen({ port: listenPort, host: listenHost }, () => resolve());
-  });
-
-  const httpService = mergedCfg.http_service === true ? await startHttpService({ state, host: listenHost, port: mergedCfg.http_port ?? 12347 }) : null;
-
-  // 设置 WebSocket 服务引用
-  if (httpService) {
-    state.wsService = httpService.ws;
-    state.autoUploadCallback = httpService.handleGameEndAutoUpload;
-    
-    // 将 WebSocket 日志推送注册到 Logger
-    // 需要重新创建 Logger 以添加回调
-    const oldLogger = logger;
-    const newLogger = new Logger({
-      logsDir: paths.logsDir,
-      minLevel: mergedCfg.log_level as any,
-      testAccountIds: mergedCfg.test_account_ids ?? [1739989],
-      enableRateLimiting: true,
-      onInfoLog: (message, timestamp) => {
-        void httpService.ws.broadcastRoomLog(message, timestamp).catch(() => {});
-      }
+  let httpService: HttpService | null = null;
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const onError = (err: Error) => {
+        server.off("listening", onListening);
+        reject(err);
+      };
+      const onListening = () => {
+        server.off("error", onError);
+        resolve();
+      };
+      server.once("error", onError);
+      server.once("listening", onListening);
+      server.listen({ port: listenPort, host: listenHost });
     });
-    
-    // 替换 state 中的 logger
-    (state as any).logger = newLogger;
-    oldLogger.close();
+
+    httpService = mergedCfg.http_service === true ? await startHttpService({ state, host: listenHost, port: mergedCfg.http_port ?? 12347 }) : null;
+
+    // 设置 WebSocket 服务引用
+    if (httpService) {
+      state.wsService = httpService.ws;
+      state.autoUploadCallback = httpService.handleGameEndAutoUpload;
+      broadcastInfoLog = (roomId, message, timestamp) => {
+        void httpService?.ws.broadcastRoomLog(roomId, message, timestamp).catch(() => {});
+      };
+    }
+  } catch (e) {
+    replayCleanup.stop();
+    if (httpService) await httpService.close().catch(() => {});
+    if (server.listening) {
+      await new Promise<void>((resolve) => {
+        server.close(() => resolve());
+      });
+    }
+    logger.close();
+    throw e;
   }
 
   const addr = server.address() as net.AddressInfo;
@@ -407,6 +426,7 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
     close: async () => {
       try {
         stopCli();
+        broadcastInfoLog = null;
         if (httpService) await httpService.close();
         await new Promise<void>((resolve, reject) => {
           server.close((err) => {

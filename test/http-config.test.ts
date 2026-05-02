@@ -93,6 +93,15 @@ describe("HTTP和配置", () => {
     }
   });
 
+  test("启用 HTTP 服务时 state 和 RunningServer 使用同一个 logger", async () => {
+    const running = await startServer({ port: 0, config: { monitors: [200], http_service: true, http_port: 0 } });
+    try {
+      expect(running.state.logger).toBe(running.logger);
+    } finally {
+      await running.close();
+    }
+  });
+
   test("test_account_ids 配置生效：服务器正常启动", async () => {
     const running = await startServer({ port: 0, config: { monitors: [200], test_account_ids: [100, 200] } });
     const port = running.address().port;

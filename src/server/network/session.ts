@@ -13,6 +13,7 @@ import { User } from "../game/user.js";
 import { tl, type Language } from "../utils/l10n.js";
 import { chartCache } from "../utils/cache.js";
 import { getHitokotoCached, type HitokotoValue } from "../utils/hitokotoCache.js";
+import { logRoomInfo, logRoomMark, logRoomWarn } from "../utils/logUtils.js";
 
 const DEFAULT_PHIRA_API_ENDPOINT = "https://phira.5wyxi.com";
 const FETCH_TIMEOUT_MS = 8000;
@@ -349,7 +350,7 @@ export class Session {
   private async dangleUser(user: User): Promise<void> {
     const room = user.room;
     if (room && room.state.type === "Playing") {
-      this.state.logger.log("WARN", tl(this.state.serverLang, "log-user-disconnect-playing", { user: user.name, room: room.id }), undefined, { userId: user.id });
+      logRoomWarn(this.state.logger, this.state.serverLang, room.id, "log-user-disconnect-playing", { user: user.name }, { userId: user.id });
       await this.state.mutex.runExclusive(async () => {
         this.state.users.delete(user.id);
       });
@@ -379,7 +380,7 @@ export class Session {
       void (async () => {
         const room2 = user.room;
         if (!room2) return;
-        this.state.logger.log("WARN", tl(this.state.serverLang, "log-user-dangle-timeout-remove", { user: user.name, room: room2.id }), undefined, { userId: user.id });
+        logRoomWarn(this.state.logger, this.state.serverLang, room2.id, "log-user-dangle-timeout-remove", { user: user.name }, { userId: user.id });
         await this.state.mutex.runExclusive(async () => {
           this.state.users.delete(user.id);
         });
@@ -407,7 +408,7 @@ export class Session {
       }
     });
     if (shouldDrop) {
-      this.state.logger.log("INFO", tl(this.state.serverLang, "log-room-recycled", { room: room.id }), undefined, { userId: user.id });
+      logRoomInfo(this.state.logger, this.state.serverLang, room.id, "log-room-recycled", undefined, { userId: user.id });
       await this.state.mutex.runExclusive(async () => {
         this.state.rooms.delete(room.id);
       });
@@ -427,7 +428,7 @@ export class Session {
       case "Chat":
         return { type: "Chat", result: await errToStr(async () => {
           const room = this.requireRoom(user);
-          this.state.logger.log("INFO", tl(this.state.serverLang, "log-user-chat", { user: user.name, room: room.id }), undefined, { userId: user.id });
+          logRoomInfo(this.state.logger, this.state.serverLang, room.id, "log-user-chat", { user: user.name }, { userId: user.id });
           await room.sendAs((c) => this.broadcastRoom(room, c), user, "为符合规范，该服务器已禁用聊天功能"); // "" --> cmd.message
           return {};
         }) };
@@ -473,7 +474,7 @@ export class Session {
             user.room = room;
           });
           const room = user.room!;
-          this.state.logger.log("MARK", tl(this.state.serverLang, "log-room-created", { user: user.name, room: room.id }), undefined, { userId: user.id });
+          logRoomMark(this.state.logger, this.state.serverLang, room.id, "log-room-created", { user: user.name }, { userId: user.id });
           await room.send((c) => this.broadcastRoom(room, c), { type: "CreateRoom", user: user.id });
           if (this.state.replayEnabled && room.replayEligible) {
             room.live = true;
@@ -515,7 +516,7 @@ export class Session {
           user.room = room; // 直接设置，不需要mutex
 
           const suffix = cmd.monitor ? tl(this.state.serverLang, "label-monitor-suffix") : "";
-          this.state.logger.log("MARK", tl(this.state.serverLang, "log-room-joined", { user: user.name, suffix, room: room.id }), undefined, { userId: user.id });
+          logRoomMark(this.state.logger, this.state.serverLang, room.id, "log-room-joined", { user: user.name, suffix }, { userId: user.id });
           await this.broadcastRoom(room, { type: "OnJoinRoom", info: user.toInfo() });
           await room.send((c) => this.broadcastRoom(room, c), { type: "JoinRoom", user: user.id, name: user.name });
 
@@ -548,7 +549,7 @@ export class Session {
         return { type: "LeaveRoom", result: await errToStr(async () => {
           const room = this.requireRoom(user);
           const suffix = user.monitor ? tl(this.state.serverLang, "label-monitor-suffix") : "";
-          this.state.logger.log("MARK", tl(this.state.serverLang, "log-room-left", { user: user.name, suffix, room: room.id }), undefined, { userId: user.id });
+          logRoomMark(this.state.logger, this.state.serverLang, room.id, "log-room-left", { user: user.name, suffix }, { userId: user.id });
           const shouldDrop = await room.onUserLeave({
             user,
             usersById: (id) => this.state.users.get(id),
@@ -568,7 +569,7 @@ export class Session {
             }
           });
           if (shouldDrop) {
-            this.state.logger.log("INFO", tl(this.state.serverLang, "log-room-recycled", { room: room.id }), undefined, { userId: user.id });
+            logRoomInfo(this.state.logger, this.state.serverLang, room.id, "log-room-recycled", undefined, { userId: user.id });
             await this.state.mutex.runExclusive(async () => {
               this.state.rooms.delete(room.id);
             });
@@ -580,7 +581,7 @@ export class Session {
           const room = this.requireRoom(user);
           room.checkHost(user);
           room.locked = cmd.lock;
-          this.state.logger.log("MARK", tl(this.state.serverLang, "log-room-lock", { user: user.name, room: room.id, lock: cmd.lock ? "true" : "false" }), undefined, { userId: user.id });
+          logRoomMark(this.state.logger, this.state.serverLang, room.id, "log-room-lock", { user: user.name, lock: cmd.lock ? "true" : "false" }, { userId: user.id });
           await room.send((c) => this.broadcastRoom(room, c), { type: "LockRoom", lock: cmd.lock });
           return {};
         }) };
@@ -589,7 +590,7 @@ export class Session {
           const room = this.requireRoom(user);
           room.checkHost(user);
           room.cycle = cmd.cycle;
-          this.state.logger.log("MARK", tl(this.state.serverLang, "log-room-cycle", { user: user.name, room: room.id, cycle: cmd.cycle ? "true" : "false" }), undefined, { userId: user.id });
+          logRoomMark(this.state.logger, this.state.serverLang, room.id, "log-room-cycle", { user: user.name, cycle: cmd.cycle ? "true" : "false" }, { userId: user.id });
           await room.send((c) => this.broadcastRoom(room, c), { type: "CycleRoom", cycle: cmd.cycle });
           return {};
         }) };
@@ -599,7 +600,7 @@ export class Session {
           room.validateSelectChart(user);
           const chart = await this.fetchChart(user, cmd.id);
           room.chart = chart;
-          this.state.logger.log("MARK", tl(this.state.serverLang, "log-room-select-chart", { user: user.name, userId: String(user.id), room: room.id, chart: chart.name }), undefined, { userId: user.id });
+          logRoomMark(this.state.logger, this.state.serverLang, room.id, "log-room-select-chart", { user: user.name, userId: String(user.id), chart: chart.name }, { userId: user.id });
           await room.send((c) => this.broadcastRoom(room, c), { type: "SelectChart", user: user.id, name: chart.name, id: chart.id });
           await room.onStateChange((c) => this.broadcastRoom(room, c));
           await room.notifyWebSocket(this.state);
@@ -610,7 +611,7 @@ export class Session {
           const room = this.requireRoom(user);
           room.validateStart(user);
           room.resetGameTime((id) => this.state.users.get(id));
-          this.state.logger.log("MARK", tl(this.state.serverLang, "log-room-request-start", { user: user.name, room: room.id }), undefined, { userId: user.id });
+          logRoomMark(this.state.logger, this.state.serverLang, room.id, "log-room-request-start", { user: user.name }, { userId: user.id });
           await room.send((c) => this.broadcastRoom(room, c), { type: "GameStart", user: user.id });
           room.state = { type: "WaitForReady", started: new Set([user.id]) };
           await room.onStateChange((c) => this.broadcastRoom(room, c));
@@ -640,7 +641,7 @@ export class Session {
           if (room.state.type === "WaitForReady") {
             if (room.state.started.has(user.id)) throw new Error(user.lang.format("room-already-ready"));
             room.state.started.add(user.id);
-            this.state.logger.log("INFO", tl(this.state.serverLang, "log-room-ready", { user: user.name, room: room.id }), undefined, { userId: user.id });
+            logRoomInfo(this.state.logger, this.state.serverLang, room.id, "log-room-ready", { user: user.name }, { userId: user.id });
             await room.send((c) => this.broadcastRoom(room, c), { type: "Ready", user: user.id });
             await room.notifyWebSocket(this.state);
             await room.checkAllReady({
@@ -669,13 +670,13 @@ export class Session {
           if (room.state.type === "WaitForReady") {
             if (!room.state.started.delete(user.id)) throw new Error(user.lang.format("room-not-ready"));
             if (room.hostId === user.id) {
-              this.state.logger.log("MARK", tl(this.state.serverLang, "log-room-cancel-game", { user: user.name, room: room.id }), undefined, { userId: user.id });
+              logRoomMark(this.state.logger, this.state.serverLang, room.id, "log-room-cancel-game", { user: user.name }, { userId: user.id });
               await room.send((c) => this.broadcastRoom(room, c), { type: "CancelGame", user: user.id });
               room.state = { type: "SelectChart" };
               await room.onStateChange((c) => this.broadcastRoom(room, c));
               await room.notifyWebSocket(this.state);
             } else {
-              this.state.logger.log("INFO", tl(this.state.serverLang, "log-room-cancel-ready", { user: user.name, room: room.id }), undefined, { userId: user.id });
+              logRoomInfo(this.state.logger, this.state.serverLang, room.id, "log-room-cancel-ready", { user: user.name }, { userId: user.id });
               await room.send((c) => this.broadcastRoom(room, c), { type: "CancelReady", user: user.id });
               await room.notifyWebSocket(this.state);
             }
@@ -687,7 +688,7 @@ export class Session {
           const room = this.requireRoom(user);
           const record = await this.fetchRecord(user, cmd.id);
           if (record.player !== user.id) throw new Error(user.lang.format("record-invalid"));
-          this.state.logger.log("MARK", tl(this.state.serverLang, "log-room-played", { user: user.name, room: room.id, score: String(record.score), acc: String(record.accuracy) }), undefined, { userId: user.id });
+          logRoomMark(this.state.logger, this.state.serverLang, room.id, "log-room-played", { user: user.name, score: String(record.score), acc: String(record.accuracy) }, { userId: user.id });
           await room.send((c) => this.broadcastRoom(room, c), {
             type: "Played",
             user: user.id,
@@ -728,7 +729,7 @@ export class Session {
             if (room.state.results.has(user.id)) throw new Error(user.lang.format("record-already-uploaded"));
             if (room.state.aborted.has(user.id)) throw new Error(user.lang.format("room-game-aborted"));
             room.state.aborted.add(user.id);
-            this.state.logger.log("MARK", tl(this.state.serverLang, "log-room-abort", { user: user.name, room: room.id }), undefined, { userId: user.id });
+            logRoomMark(this.state.logger, this.state.serverLang, room.id, "log-room-abort", { user: user.name }, { userId: user.id });
             await room.send((c) => this.broadcastRoom(room, c), { type: "Abort", user: user.id });
             await room.notifyWebSocket(this.state);
             await room.checkAllReady({
@@ -820,7 +821,7 @@ export class Session {
     await this.state.mutex.runExclusive(async () => {
       this.state.rooms.delete(room.id);
     });
-    this.state.logger.log("INFO", tl(this.state.serverLang, "log-room-recycled", { room: room.id }), undefined, { userId: this.user?.id });
+    logRoomInfo(this.state.logger, this.state.serverLang, room.id, "log-room-recycled", undefined, { userId: this.user?.id });
   }
 
   private async fetchChart(user: User, id: number): Promise<Chart> {
