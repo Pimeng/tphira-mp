@@ -20,7 +20,7 @@
 管理员 API 默认禁用；只有配置了 token 才可访问。
 
 - 环境变量：`ADMIN_TOKEN=your_token`
-- 配置文件：`admin_token: "your_token"`
+- 配置文件：`ADMIN_TOKEN: "your_token"`
 
 请求携带 token 的方式（三选一）：
 
@@ -102,7 +102,7 @@ Body：
 - 默认路径：`admin_data.json`（位于 `PHIRA_MP_HOME` 或工作目录）
 - 覆盖路径：
   - 环境变量：`ADMIN_DATA_PATH=/path/to/admin_data.json`
-  - 配置文件：`admin_data_path: "/path/to/admin_data.json"`
+  - 配置文件：`ADMIN_DATA_PATH: "/path/to/admin_data.json"`
 
 ### 比赛房间（一次性房间）
 
@@ -342,7 +342,7 @@ curl -X POST -H "Content-Type: application/json" \
 
 允许用户配置游戏结束后是否自动将回放上传到分享站。
 
-**注意**：需要服务器配置了 `share_station` 才能正常工作。详见 [分享站配置](#分享站配置)。
+**注意**：需要服务器配置了 `SHARE_STATION` 才能正常工作。详见 [分享站配置](#分享站配置)。
 
 ##### 查询自动上传配置
 
@@ -415,7 +415,7 @@ curl -X POST -H "Content-Type: application/json" \
 - 自动上传会在游戏结束后**延迟30秒**执行
 - 自动上传的文件 `show` 属性默认为 `false`（不显示），与手动上传不同
 - 如果用户禁用了自动上传，所有待处理的自动上传任务会被取消
-- 需要服务器配置了 `share_station` 才能正常工作
+- 需要服务器配置了 `SHARE_STATION` 才能正常工作
 
 ##### 调用的Phira Replay API
 
@@ -424,7 +424,7 @@ curl -X POST -H "Content-Type: application/json" \
 1. **上传回放文件（内部接口）**
    - 端点：`POST /upload_direct`
    - 功能：供其他服务器自动上传 `.phirarec` 文件，自动从外部API拉取对应谱面文件和曲绘
-   - 认证：使用服务器配置的 `share_station.token` (Bearer Token)
+   - 认证：使用服务器配置的 `SHARE_STATION.TOKEN` (Bearer Token)
    - 特点：通过此接口上传的记录 `is_visible` 默认为 0，不会在主页列表显示
 
 2. **设置回放可见性**
@@ -447,11 +447,11 @@ curl -X POST -H "Content-Type: application/json" \
 要启用分享站功能，需要在 `server_config.yml` 中配置：
 
 ```yaml
-share_station:
+SHARE_STATION:
   # 分享站地址
-  url: "http://183.66.27.19:40004"
+  URL: "http://183.66.27.19:40004"
   # 服务器认证 token（用于自动上传等内部接口）
-  token: "your_share_station_token_here"
+  TOKEN: "your_share_station_token_here"
 ```
 
 或使用环境变量：

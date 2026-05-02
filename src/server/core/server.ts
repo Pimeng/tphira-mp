@@ -1,5 +1,5 @@
 import net from "node:net";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import yaml from "js-yaml";
 import { newUuid } from "../../common/uuid.js";
@@ -33,11 +33,26 @@ export type RunningServer = {
 };
 
 function parseBoolEnv(value: string | undefined): boolean | undefined {
+  return parseBoolValue(value);
+}
+
+function parseBoolValue(value: unknown): boolean | undefined {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") {
+    if (value === 1) return true;
+    if (value === 0) return false;
+    return undefined;
+  }
+  if (typeof value !== "string") return undefined;
   if (!value) return undefined;
   const v = value.trim().toLowerCase();
   if (v === "1" || v === "true" || v === "yes" || v === "on") return true;
   if (v === "0" || v === "false" || v === "no" || v === "off") return false;
   return undefined;
+}
+
+function parseStringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
 }
 
 function parseOutboundProxyValue(value: unknown): string | false | undefined {
@@ -50,21 +65,21 @@ function parseOutboundProxyValue(value: unknown): string | false | undefined {
   return trimmed;
 }
 
-function parsePortEnv(value: string | undefined): number | undefined {
-  if (!value) return undefined;
+function parsePortValue(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
   const v = Number(value);
   if (!Number.isInteger(v) || v <= 0 || v > 65535) return undefined;
   return v;
 }
 
-function parseRoomMaxUsersEnv(value: string | undefined): number | undefined {
-  if (!value) return undefined;
+function parseRoomMaxUsersValue(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
   const v = Number(value);
   if (!Number.isInteger(v) || v < 1) return undefined;
   return Math.min(v, 64);
 }
 
-function parseMonitorsEnv(value: string | undefined): number[] | undefined {
+function parseIntegerListText(value: string | undefined): number[] | undefined {
   if (!value) return undefined;
   const ids = value
     .split(/[,\s;，]+/g)
@@ -74,26 +89,51 @@ function parseMonitorsEnv(value: string | undefined): number[] | undefined {
   return ids;
 }
 
+function parseIntegerListValue(value: unknown): number[] | undefined {
+  if (Array.isArray(value)) return value.map((it) => Number(it)).filter((it) => Number.isInteger(it));
+  if (typeof value === "string") return parseIntegerListText(value);
+  if (typeof value === "number" && Number.isInteger(value)) return [value];
+  return undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function parseShareStationValue(value: unknown): ServerConfig["share_station"] {
+  if (!isRecord(value)) return undefined;
+  const url = parseStringValue(value.URL);
+  const token = parseStringValue(value.TOKEN);
+  return url && token ? { url, token } : undefined;
+}
+
 function loadEnvConfig(): Partial<ServerConfig> {
-  const monitors = parseMonitorsEnv(process.env.MONITORS);
-  const server_name = process.env.SERVER_NAME?.trim() || undefined;
-  const host = process.env.HOST?.trim() || undefined;
-  const port = parsePortEnv(process.env.PORT);
+  const monitors = parseIntegerListText(process.env.MONITORS);
+  const test_account_ids = parseIntegerListText(process.env.TEST_ACCOUNT_IDS);
+  const server_name = parseStringValue(process.env.SERVER_NAME);
+  const host = parseStringValue(process.env.HOST);
+  const port = parsePortValue(process.env.PORT);
   const http_service = parseBoolEnv(process.env.HTTP_SERVICE);
-  const http_port = parsePortEnv(process.env.HTTP_PORT);
-  const room_max_users = parseRoomMaxUsersEnv(process.env.ROOM_MAX_USERS);
+  const http_port = parsePortValue(process.env.HTTP_PORT);
+  const room_max_users = parseRoomMaxUsersValue(process.env.ROOM_MAX_USERS);
   const replay_enabled = parseBoolEnv(process.env.REPLAY_ENABLED);
-  const admin_token = process.env.ADMIN_TOKEN?.trim() || undefined;
-  const admin_data_path = process.env.ADMIN_DATA_PATH?.trim() || undefined;
-  const room_list_tip = process.env.ROOM_LIST_TIP?.trim() || undefined;
-  const log_level = process.env.LOG_LEVEL?.trim() || undefined;
-  const real_ip_header = process.env.REAL_IP_HEADER?.trim() || undefined;
+  const replay_base_dir = parseStringValue(process.env.REPLAY_BASE_DIR);
+  const admin_token = parseStringValue(process.env.ADMIN_TOKEN);
+  const admin_data_path = parseStringValue(process.env.ADMIN_DATA_PATH);
+  const room_list_tip = parseStringValue(process.env.ROOM_LIST_TIP);
+  const log_level = parseStringValue(process.env.LOG_LEVEL);
+  const real_ip_header = parseStringValue(process.env.REAL_IP_HEADER);
   const haproxy_protocol = parseBoolEnv(process.env.HAPROXY_PROTOCOL);
-  const phira_api_endpoint = process.env.PHIRA_API_ENDPOINT?.trim() || undefined;
+  const phira_api_endpoint = parseStringValue(process.env.PHIRA_API_ENDPOINT);
   const outbound_proxy = parseOutboundProxyValue(process.env.OUTBOUND_PROXY);
+  const share_station = parseShareStationValue({
+    URL: process.env.SHARE_STATION_URL,
+    TOKEN: process.env.SHARE_STATION_TOKEN
+  });
 
   const out: Partial<ServerConfig> = {};
   if (monitors) out.monitors = monitors;
+  if (test_account_ids) out.test_account_ids = test_account_ids;
   if (server_name) out.server_name = server_name;
   if (host) out.host = host;
   if (port !== undefined) out.port = port;
@@ -101,6 +141,7 @@ function loadEnvConfig(): Partial<ServerConfig> {
   if (http_port !== undefined) out.http_port = http_port;
   if (room_max_users !== undefined) out.room_max_users = room_max_users;
   if (replay_enabled !== undefined) out.replay_enabled = replay_enabled;
+  if (replay_base_dir) out.replay_base_dir = replay_base_dir;
   if (admin_token) out.admin_token = admin_token;
   if (admin_data_path) out.admin_data_path = admin_data_path;
   if (room_list_tip) out.room_list_tip = room_list_tip;
@@ -109,6 +150,7 @@ function loadEnvConfig(): Partial<ServerConfig> {
   if (haproxy_protocol !== undefined) out.haproxy_protocol = haproxy_protocol;
   if (phira_api_endpoint) out.phira_api_endpoint = phira_api_endpoint;
   if (outbound_proxy !== undefined) out.outbound_proxy = outbound_proxy;
+  if (share_station) out.share_station = share_station;
   return out;
 }
 
@@ -131,92 +173,74 @@ function mergeConfig(base: ServerConfig, override: Partial<ServerConfig>): Serve
     real_ip_header: override.real_ip_header ?? base.real_ip_header,
     haproxy_protocol: override.haproxy_protocol ?? base.haproxy_protocol,
     phira_api_endpoint: override.phira_api_endpoint ?? base.phira_api_endpoint,
-    outbound_proxy: override.outbound_proxy ?? base.outbound_proxy
+    outbound_proxy: override.outbound_proxy ?? base.outbound_proxy,
+    share_station: override.share_station ?? base.share_station
   };
 }
 
+export function parseConfigText(text: string): ServerConfig {
+  const loaded = yaml.load(text);
+  const raw = isRecord(loaded) ? loaded : {};
+
+  const read = (key: string): unknown => {
+    return Object.prototype.hasOwnProperty.call(raw, key) ? raw[key] : undefined;
+  };
+
+  const parsedMonitors = parseIntegerListValue(read("MONITORS"));
+  const monitors = parsedMonitors && parsedMonitors.length > 0 ? parsedMonitors : [2];
+  const test_account_ids = parseIntegerListValue(read("TEST_ACCOUNT_IDS"));
+  const server_name = parseStringValue(read("SERVER_NAME"));
+  const host = parseStringValue(read("HOST"));
+  const port = parsePortValue(read("PORT"));
+  const http_service = parseBoolValue(read("HTTP_SERVICE"));
+  const http_port = parsePortValue(read("HTTP_PORT"));
+  const room_max_users = parseRoomMaxUsersValue(read("ROOM_MAX_USERS"));
+  const replay_enabled = parseBoolValue(read("REPLAY_ENABLED"));
+  const replay_base_dir = parseStringValue(read("REPLAY_BASE_DIR"));
+  const admin_token = parseStringValue(read("ADMIN_TOKEN"));
+  const admin_data_path = parseStringValue(read("ADMIN_DATA_PATH"));
+  const room_list_tip = parseStringValue(read("ROOM_LIST_TIP"));
+  const log_level = parseStringValue(read("LOG_LEVEL"));
+  const real_ip_header = parseStringValue(read("REAL_IP_HEADER"));
+  const haproxy_protocol = parseBoolValue(read("HAPROXY_PROTOCOL"));
+  const phira_api_endpoint = parseStringValue(read("PHIRA_API_ENDPOINT"));
+  const outbound_proxy = parseOutboundProxyValue(read("OUTBOUND_PROXY"));
+  const share_station = parseShareStationValue(read("SHARE_STATION"));
+
+  return {
+    monitors,
+    test_account_ids,
+    server_name,
+    host,
+    port,
+    http_service,
+    http_port,
+    room_max_users,
+    replay_enabled,
+    replay_base_dir,
+    admin_token,
+    admin_data_path,
+    room_list_tip,
+    log_level,
+    real_ip_header,
+    haproxy_protocol,
+    phira_api_endpoint,
+    outbound_proxy,
+    share_station
+  };
+}
+
+export function loadConfigFile(configPath: string): ServerConfig {
+  const text = readFileSync(configPath, { encoding: "utf8" });
+  return parseConfigText(text);
+}
+
 function loadConfig(): ServerConfig {
-  try {
-    const { configPath } = getAppPaths();
-    const text = readFileSync(configPath, "utf8");
-    const raw = (yaml.load(text) ?? {}) as Record<string, unknown>;
-
-    const read = <T>(keys: readonly string[]): T | undefined => {
-      for (const k of keys) {
-        if (Object.prototype.hasOwnProperty.call(raw, k)) return raw[k] as T;
-      }
-      return undefined;
-    };
-
-    const monitorsRaw = read<unknown>(["monitors", "MONITORS"]);
-    const monitorsFromArray = Array.isArray(monitorsRaw) ? monitorsRaw.map((it) => Number(it)).filter((it) => Number.isInteger(it)) : null;
-    const monitorsFromString = typeof monitorsRaw === "string" ? (parseMonitorsEnv(monitorsRaw) ?? null) : null;
-    const monitorsFromNumber = typeof monitorsRaw === "number" && Number.isInteger(monitorsRaw) ? [monitorsRaw] : null;
-    const monitors =
-      monitorsFromArray && monitorsFromArray.length > 0
-        ? monitorsFromArray
-        : monitorsFromString && monitorsFromString.length > 0
-          ? monitorsFromString
-          : monitorsFromNumber && monitorsFromNumber.length > 0
-            ? monitorsFromNumber
-            : [2];
-
-    const serverNameRaw = read<unknown>(["server_name", "SERVER_NAME"]);
-    const server_name = typeof serverNameRaw === "string" && serverNameRaw.trim().length > 0 ? serverNameRaw.trim() : undefined;
-
-    const hostRaw = read<unknown>(["host", "HOST"]);
-    const host = typeof hostRaw === "string" && hostRaw.trim().length > 0 ? hostRaw.trim() : undefined;
-
-    const portRaw = read<unknown>(["port", "PORT"]);
-    const port = typeof portRaw === "number" ? portRaw : Number(portRaw);
-    const safePort = Number.isInteger(port) && port > 0 && port <= 65535 ? port : undefined;
-
-    const httpServiceRaw = read<unknown>(["http_service", "HTTP_SERVICE"]);
-    const http_service = typeof httpServiceRaw === "boolean" ? httpServiceRaw : undefined;
-
-    const httpPortRaw = read<unknown>(["http_port", "HTTP_PORT"]);
-    const http_port = typeof httpPortRaw === "number" ? httpPortRaw : Number(httpPortRaw);
-    const safeHttpPort = Number.isInteger(http_port) && http_port > 0 && http_port <= 65535 ? http_port : undefined;
-
-    const roomMaxUsersRaw = read<unknown>(["room_max_users", "ROOM_MAX_USERS"]);
-    const roomMaxUsers = typeof roomMaxUsersRaw === "number" ? roomMaxUsersRaw : Number(roomMaxUsersRaw);
-    const room_max_users = Number.isInteger(roomMaxUsers) && roomMaxUsers >= 1 ? Math.min(roomMaxUsers, 64) : undefined;
-
-    const replayEnabledRaw = read<unknown>(["replay_enabled", "REPLAY_ENABLED", "replayEnabled"]);
-    const replay_enabled = typeof replayEnabledRaw === "boolean" ? replayEnabledRaw : undefined;
-
-    const adminTokenRaw = read<unknown>(["admin_token", "ADMIN_TOKEN", "adminToken"]);
-    const admin_token = typeof adminTokenRaw === "string" && adminTokenRaw.trim().length > 0 ? adminTokenRaw.trim() : undefined;
-
-    const adminDataPathRaw = read<unknown>(["admin_data_path", "ADMIN_DATA_PATH", "adminDataPath"]);
-    const admin_data_path = typeof adminDataPathRaw === "string" && adminDataPathRaw.trim().length > 0 ? adminDataPathRaw.trim() : undefined;
-
-    const roomListTipRaw = read<unknown>(["room_list_tip", "ROOM_LIST_TIP", "roomListTip"]);
-    const room_list_tip = typeof roomListTipRaw === "string" && roomListTipRaw.trim().length > 0 ? roomListTipRaw.trim() : undefined;
-
-    const testAccountIdsRaw = read<unknown>(["test_account_ids", "testAccountIds"]);
-    const test_account_ids = Array.isArray(testAccountIdsRaw)
-      ? testAccountIdsRaw.map((it) => Number(it)).filter((it) => Number.isInteger(it))
-      : undefined;
-
-    const logLevelRaw = read<unknown>(["log_level", "LOG_LEVEL", "logLevel"]);
-    const log_level = typeof logLevelRaw === "string" && logLevelRaw.trim().length > 0 ? logLevelRaw.trim() : undefined;
-
-    const realIpHeaderRaw = read<unknown>(["real_ip_header", "REAL_IP_HEADER", "realIpHeader"]);
-    const real_ip_header = typeof realIpHeaderRaw === "string" && realIpHeaderRaw.trim().length > 0 ? realIpHeaderRaw.trim() : undefined;
-
-    const haproxyProtocolRaw = read<unknown>(["haproxy_protocol", "HAPROXY_PROTOCOL", "haproxyProtocol"]);
-    const haproxy_protocol = typeof haproxyProtocolRaw === "boolean" ? haproxyProtocolRaw : undefined;
-
-    const phiraApiEndpointRaw = read<unknown>(["phira_api_endpoint", "PHIRA_API_ENDPOINT", "phiraApiEndpoint"]);
-    const phira_api_endpoint = typeof phiraApiEndpointRaw === "string" && phiraApiEndpointRaw.trim().length > 0 ? phiraApiEndpointRaw.trim() : undefined;
-    const outboundProxyRaw = read<unknown>(["outbound_proxy", "OUTBOUND_PROXY", "outboundProxy"]);
-    const outbound_proxy = parseOutboundProxyValue(outboundProxyRaw);
-
-    return { monitors, test_account_ids, server_name, host, port: safePort, http_service, http_port: safeHttpPort, room_max_users, replay_enabled, admin_token, admin_data_path, room_list_tip, log_level, real_ip_header, haproxy_protocol, phira_api_endpoint, outbound_proxy };
-  } catch {
+  const { configPath } = getAppPaths();
+  if (!existsSync(configPath)) {
     return { monitors: [2] };
   }
+  return loadConfigFile(configPath);
 }
 
 const codec: StreamCodec<ServerCommand, ClientCommand> = {

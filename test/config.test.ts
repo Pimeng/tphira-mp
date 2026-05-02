@@ -1,240 +1,138 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { writeFileSync, unlinkSync, mkdirSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { loadConfigFile, parseConfigText } from "../src/server/core/server.js";
 
 describe("配置文件解析", () => {
   let tempDir: string;
   let configPath: string;
 
   beforeEach(() => {
-    tempDir = join(tmpdir(), `phira-mp-config-test-${Date.now()}`);
+    tempDir = join(tmpdir(), `phira-mp-config-test-${Date.now()}-${Math.random().toString(16).slice(2)}`);
     mkdirSync(tempDir, { recursive: true });
     configPath = join(tempDir, "server_config.yml");
   });
 
   afterEach(() => {
-    try {
-      unlinkSync(configPath);
-    } catch {}
+    rmSync(tempDir, { recursive: true, force: true });
   });
 
-  describe("日志等级配置", () => {
-    it("解析 LOG_LEVEL 配置项", () => {
-      const config = `
-LOG_LEVEL: DEBUG
+  it("按全大写键名解析完整配置", () => {
+    const config = parseConfigText(`
+MONITORS: "2, 100; 200"
+TEST_ACCOUNT_IDS:
+  - 1739989
+  - "200"
+SERVER_NAME: "Phira MP"
 HOST: "::"
-PORT: 12346
-monitors:
-  - 2
-`;
-      writeFileSync(configPath, config, "utf8");
-
-      // 这里我们只验证配置文件格式正确
-      // 实际的解析逻辑在 server.ts 中
-      expect(true).toBe(true);
-    });
-
-    it("支持不同的日志等级", () => {
-      const levels = ["DEBUG", "INFO", "MARK", "WARN", "ERROR"];
-      
-      for (const level of levels) {
-        const config = `
-LOG_LEVEL: ${level}
-HOST: "::"
-PORT: 12346
-monitors:
-  - 2
-`;
-        writeFileSync(configPath, config, "utf8");
-        expect(true).toBe(true);
-      }
-    });
-
-    it("日志等级默认为 INFO", () => {
-      const config = `
-HOST: "::"
-PORT: 12346
-monitors:
-  - 2
-`;
-      writeFileSync(configPath, config, "utf8");
-      expect(true).toBe(true);
-    });
-  });
-
-  describe("真实 IP 头配置", () => {
-    it("解析 REAL_IP_HEADER 配置项", () => {
-      const config = `
-REAL_IP_HEADER: X-Real-IP
-HOST: "::"
-PORT: 12346
-monitors:
-  - 2
-`;
-      writeFileSync(configPath, config, "utf8");
-      expect(true).toBe(true);
-    });
-
-    it("支持不同的 IP 头名称", () => {
-      const headers = ["X-Forwarded-For", "X-Real-IP", "CF-Connecting-IP", "True-Client-IP"];
-      
-      for (const header of headers) {
-        const config = `
-REAL_IP_HEADER: ${header}
-HOST: "::"
-PORT: 12346
-monitors:
-  - 2
-`;
-        writeFileSync(configPath, config, "utf8");
-        expect(true).toBe(true);
-      }
-    });
-
-    it("真实 IP 头默认为 X-Forwarded-For", () => {
-      const config = `
-HOST: "::"
-PORT: 12346
-monitors:
-  - 2
-`;
-      writeFileSync(configPath, config, "utf8");
-      expect(true).toBe(true);
-    });
-  });
-
-  describe("HAProxy PROXY Protocol 配置", () => {
-    it("解析 HAPROXY_PROTOCOL 配置项", () => {
-      const config = `
-HAPROXY_PROTOCOL: true
-HOST: "::"
-PORT: 12346
-monitors:
-  - 2
-`;
-      writeFileSync(configPath, config, "utf8");
-      expect(true).toBe(true);
-    });
-
-    it("支持布尔值", () => {
-      const values = [true, false];
-      
-      for (const value of values) {
-        const config = `
-HAPROXY_PROTOCOL: ${value}
-HOST: "::"
-PORT: 12346
-monitors:
-  - 2
-`;
-        writeFileSync(configPath, config, "utf8");
-        expect(true).toBe(true);
-      }
-    });
-
-    it("HAProxy 协议默认为 false", () => {
-      const config = `
-HOST: "::"
-PORT: 12346
-monitors:
-  - 2
-`;
-      writeFileSync(configPath, config, "utf8");
-      expect(true).toBe(true);
-    });
-  });
-
-  describe("完整配置", () => {
-    it("解析包含所有新配置项的完整配置文件", () => {
-      const config = `
-HOST: "::"
-PORT: 12346
-HTTP_SERVICE: false
-HTTP_PORT: 12347
+PORT: "12346"
+HTTP_SERVICE: "true"
+HTTP_PORT: "12347"
 LOG_LEVEL: INFO
 REAL_IP_HEADER: X-Forwarded-For
-HAPROXY_PROTOCOL: false
-ROOM_MAX_USERS: 8
+HAPROXY_PROTOCOL: "false"
+ROOM_MAX_USERS: 128
+REPLAY_ENABLED: "on"
+REPLAY_BASE_DIR: "./record"
+ADMIN_TOKEN: "replace_me"
+ADMIN_DATA_PATH: "./admin_data.json"
+ROOM_LIST_TIP: "欢迎加入"
 PHIRA_API_ENDPOINT: "https://phira.5wyxi.com"
-monitors:
-  - 2
-test_account_ids:
-  - 1739989
-server_name: Phira MP
-`;
-      writeFileSync(configPath, config, "utf8");
-      expect(true).toBe(true);
+OUTBOUND_PROXY: false
+SHARE_STATION:
+  URL: "http://127.0.0.1:40004"
+  TOKEN: "share_station_token"
+`);
+
+    expect(config).toMatchObject({
+      monitors: [2, 100, 200],
+      test_account_ids: [1739989, 200],
+      server_name: "Phira MP",
+      host: "::",
+      port: 12346,
+      http_service: true,
+      http_port: 12347,
+      log_level: "INFO",
+      real_ip_header: "X-Forwarded-For",
+      haproxy_protocol: false,
+      room_max_users: 64,
+      replay_enabled: true,
+      replay_base_dir: "./record",
+      admin_token: "replace_me",
+      admin_data_path: "./admin_data.json",
+      room_list_tip: "欢迎加入",
+      phira_api_endpoint: "https://phira.5wyxi.com",
+      outbound_proxy: false,
+      share_station: {
+        url: "http://127.0.0.1:40004",
+        token: "share_station_token"
+      }
     });
   });
 
-  describe("Phira API 端点配置", () => {
-    it("解析 PHIRA_API_ENDPOINT 配置项", () => {
-      const config = `
-PHIRA_API_ENDPOINT: "https://custom-phira.example.com"
-HOST: "::"
-PORT: 12346
+  it("旧的小写和驼峰配置键名不再生效", () => {
+    const config = parseConfigText(`
 monitors:
-  - 2
-`;
-      writeFileSync(configPath, config, "utf8");
-      expect(true).toBe(true);
-    });
+  - 100
+test_account_ids:
+  - 200
+server_name: "Legacy Server"
+replay_enabled: true
+phiraApiEndpoint: "https://legacy.example.com"
+share_station:
+  url: "http://127.0.0.1:40004"
+  token: "legacy_token"
+`);
 
-    it("支持不同的 Phira API 端点地址", () => {
-      const endpoints = [
-        "https://phira.5wyxi.com",
-        "https://custom-phira.example.com",
-        "http://localhost:8080",
-        "https://phira-api.example.org/v1"
-      ];
+    expect(config.monitors).toEqual([2]);
+    expect(config.test_account_ids).toBeUndefined();
+    expect(config.server_name).toBeUndefined();
+    expect(config.replay_enabled).toBeUndefined();
+    expect(config.phira_api_endpoint).toBeUndefined();
+    expect(config.share_station).toBeUndefined();
+  });
 
-      for (const endpoint of endpoints) {
-        const config = `
-PHIRA_API_ENDPOINT: "${endpoint}"
-HOST: "::"
-PORT: 12346
-monitors:
-  - 2
-`;
-        writeFileSync(configPath, config, "utf8");
-        expect(true).toBe(true);
-      }
-    });
+  it("无效配置值回落到默认或未配置状态", () => {
+    const config = parseConfigText(`
+MONITORS: []
+PORT: 70000
+HTTP_SERVICE: "maybe"
+HTTP_PORT: 0
+ROOM_MAX_USERS: 0
+SHARE_STATION:
+  URL: ""
+  TOKEN: "token"
+`);
 
-    it("Phira API 端点默认为 https://phira.5wyxi.com", () => {
-      const config = `
-HOST: "::"
-PORT: 12346
-monitors:
-  - 2
-`;
-      writeFileSync(configPath, config, "utf8");
-      expect(true).toBe(true);
-    });
+    expect(config.monitors).toEqual([2]);
+    expect(config.port).toBeUndefined();
+    expect(config.http_service).toBeUndefined();
+    expect(config.http_port).toBeUndefined();
+    expect(config.room_max_users).toBeUndefined();
+    expect(config.share_station).toBeUndefined();
+  });
 
-    it("支持环境变量风格的配置键名", () => {
-      const config = `
-PHIRA_API_ENDPOINT: "https://env-style.example.com"
-HOST: "::"
-PORT: 12346
-monitors:
-  - 2
-`;
-      writeFileSync(configPath, config, "utf8");
-      expect(true).toBe(true);
-    });
+  it("YAML 语法错误不会被当作默认配置吞掉", () => {
+    expect(() => parseConfigText("HOST: [")).toThrow();
+  });
 
-    it("支持驼峰命名风格的配置键名", () => {
-      const config = `
-phiraApiEndpoint: "https://camel-case.example.com"
-HOST: "::"
-PORT: 12346
-monitors:
+  it("使用 UTF-8 编码读取配置文件", () => {
+    writeFileSync(
+      configPath,
+      `
+SERVER_NAME: "测试服务器"
+ROOM_LIST_TIP: "欢迎加入交流群"
+MONITORS:
   - 2
-`;
-      writeFileSync(configPath, config, "utf8");
-      expect(true).toBe(true);
-    });
+`,
+      "utf8"
+    );
+
+    const config = loadConfigFile(configPath);
+
+    expect(config.server_name).toBe("测试服务器");
+    expect(config.room_list_tip).toBe("欢迎加入交流群");
+    expect(config.monitors).toEqual([2]);
   });
 });

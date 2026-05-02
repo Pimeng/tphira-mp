@@ -27,18 +27,20 @@ ROOM_MAX_USERS: 8
 # 启用后，对局会自动录制为 .phirarec 文件
 # 可通过 API /admin/replay/config 动态开关
 REPLAY_ENABLED: false
+# 回放录制目录，默认 ./record
+# REPLAY_BASE_DIR: "./record"
 
 # 观战用户 ID
-monitors:
+MONITORS:
   - 2
 
 # 测试账号 ID 列表：配置后，这些账号的日志默认不写入文件
 # 默认值：[1739989]
-test_account_ids:
+TEST_ACCOUNT_IDS:
   - 1739989
 
 # 服务器名称，会显示在欢迎信息中
-server_name: Phira MP
+SERVER_NAME: Phira MP
 
 # 管理接口鉴权 token（HTTP /admin/*）
 # ADMIN_TOKEN: "replace_me"
@@ -61,8 +63,8 @@ PHIRA_API_ENDPOINT: "https://phira.5wyxi.com"
 # OUTBOUND_PROXY: "http://127.0.0.1:7890"
 
 # Phira Replay 分享站配置（用于上传回放到分享站）
-# share_station:
+# SHARE_STATION:
 #   # 分享站地址
-#   url: "http://127.0.0.1:40004"
+#   URL: "http://127.0.0.1:40004"
 #   # 服务端认证 token（用于自动上传等内部接口）
-#   token: "your_share_station_token_here"
+#   TOKEN: "your_share_station_token_here"

@@ -26,7 +26,7 @@ else
       printf "ROOM_MAX_USERS: %s\n" "$ROOM_MAX_USERS_VALUE"
 
       if [ -n "${MONITORS:-}" ]; then
-        printf "monitors:\n"
+        printf "MONITORS:\n"
         old_ifs="${IFS}"
         IFS=",; "
         for m in $MONITORS; do
@@ -37,11 +37,11 @@ else
         done
         IFS="${old_ifs}"
       else
-        printf "monitors:\n  - 2\n"
+        printf "MONITORS:\n  - 2\n"
       fi
 
       if [ -n "$SERVER_NAME_VALUE" ]; then
-        printf "server_name: \"%s\"\n" "$SERVER_NAME_VALUE"
+        printf "SERVER_NAME: \"%s\"\n" "$SERVER_NAME_VALUE"
       fi
     } > "$CONFIG_PATH"
   fi

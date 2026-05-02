@@ -463,7 +463,7 @@ setInterval(() => {
 
 - 管理员订阅需要提供有效的管理员 Token
 - Token 验证失败会返回 `unauthorized` 错误
-- 支持永久管理员 Token（配置文件中的 `admin_token`）
+- 支持永久管理员 Token（配置文件中的 `ADMIN_TOKEN`）
 - 支持临时 Token（通过 OTP 验证获取，有效期 4 小时）
   - 临时 Token 绑定生成时的 IP 地址
   - 如果检测到 IP 不匹配，Token 会被自动封禁

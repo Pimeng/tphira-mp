@@ -20,9 +20,9 @@ Configuration priority (highest to lowest):
 
 ## 配置文件格式 / Configuration File Format
 
-配置文件使用 YAML 格式，支持大小写键名（推荐使用大写）。
+配置文件使用 YAML 格式，键名统一使用全大写，并按 UTF-8 编码读取。
 
-Configuration file uses YAML format and supports both uppercase and lowercase keys (uppercase recommended).
+Configuration file uses YAML format with uppercase keys and is read as UTF-8.
 
 示例配置文件 / Example configuration file:
 
@@ -52,16 +52,19 @@ HAPROXY_PROTOCOL: false
 # 单间最大用户数
 ROOM_MAX_USERS: 8
 
+# 是否启用回放录制功能，默认关闭
+REPLAY_ENABLED: false
+
 # 观战用户ID
-monitors:
+MONITORS:
   - 2
 
-# 测试账号 ID 列表：配置后，这些账号的日志不写入文件（除非 LOG_LEVEL=DEBUG）；不配置或留空则所有人日志都写入文件。默认 [1739989]
-test_account_ids:
+# 测试账号 ID 列表：配置后，这些账号的日志不写入文件（除非 LOG_LEVEL=DEBUG）；不配置使用默认 [1739989]，配置空数组则所有人日志都写入文件。
+TEST_ACCOUNT_IDS:
   - 1739989
 
 # 服务器名称（欢迎信息会使用）
-server_name: Phira MP
+SERVER_NAME: Phira MP
 
 # 管理员接口鉴权 token（HTTP /admin/*）
 # ADMIN_TOKEN: "replace_me"
@@ -77,18 +80,18 @@ server_name: Phira MP
 PHIRA_API_ENDPOINT: "https://phira.5wyxi.com"
 
 # Phira Replay 分享站配置（用于上传回放到分享站）
-# share_station:
+# SHARE_STATION:
 #   # 分享站地址
-#   url: "http://127.0.0.1:40004"
+#   URL: "http://127.0.0.1:40004"
 #   # 服务器认证 token（用于自动上传等内部接口）
-#   token: "your_share_station_token_here"
+#   TOKEN: "your_share_station_token_here"
 ```
 
 ## 配置选项详解 / Configuration Options
 
 ### 服务器基本配置 / Basic Server Configuration
 
-#### server_name
+#### SERVER_NAME
 
 服务器名称，显示在欢迎消息中。
 
@@ -101,7 +104,7 @@ Server name displayed in welcome messages.
 
 示例 / Example:
 ```yaml
-server_name: "Phira MP"
+SERVER_NAME: "Phira MP"
 ```
 
 #### HOST
@@ -298,6 +301,36 @@ ROOM_MAX_USERS: 16
 - 此配置仅影响新创建的房间
 - This configuration only affects newly created rooms
 
+#### REPLAY_ENABLED
+
+是否启用回放录制功能。
+
+Whether to enable replay recording.
+
+- 类型 / Type: `boolean`
+- 默认值 / Default: `false`
+- 环境变量 / Environment: `REPLAY_ENABLED`
+
+示例 / Example:
+```yaml
+REPLAY_ENABLED: true
+```
+
+#### REPLAY_BASE_DIR
+
+回放录制文件的基础目录。
+
+Base directory for replay recording files.
+
+- 类型 / Type: `string`
+- 默认值 / Default: `record`（位于工作目录下）
+- 环境变量 / Environment: `REPLAY_BASE_DIR`
+
+示例 / Example:
+```yaml
+REPLAY_BASE_DIR: "./record"
+```
+
 #### PHIRA_MP_LANG
 
 服务器默认语言。
@@ -317,7 +350,7 @@ export PHIRA_MP_LANG=en-US
 
 ### 观战配置 / Monitor Configuration
 
-#### monitors
+#### MONITORS
 
 观战用户 ID 列表，这些用户可以以观战者身份加入任何房间。
 
@@ -325,11 +358,11 @@ Monitor user ID list, these users can join any room as monitors.
 
 - 类型 / Type: `array of numbers`
 - 默认值 / Default: `[2]`
-- 环境变量 / Environment: 不支持 / Not supported
+- 环境变量 / Environment: `MONITORS`
 
 示例 / Example:
 ```yaml
-monitors:
+MONITORS:
   - 2
   - 100
   - 200
@@ -337,7 +370,7 @@ monitors:
 
 ### 测试账号配置 / Test Account Configuration
 
-#### test_account_ids
+#### TEST_ACCOUNT_IDS
 
 测试账号 ID 列表，这些账号的日志不写入文件（除非 LOG_LEVEL=DEBUG）。
 
@@ -345,11 +378,11 @@ Test account ID list, logs from these accounts are not written to files (unless 
 
 - 类型 / Type: `array of numbers`
 - 默认值 / Default: `[1739989]`
-- 环境变量 / Environment: 不支持 / Not supported
+- 环境变量 / Environment: `TEST_ACCOUNT_IDS`
 
 示例 / Example:
 ```yaml
-test_account_ids:
+TEST_ACCOUNT_IDS:
   - 1739989
   - 100
 ```
@@ -463,7 +496,7 @@ Phira API endpoint for user authentication and chart info retrieval.
 PHIRA_API_ENDPOINT: "https://phira.5wyxi.com"
 ```
 
-#### share_station
+#### SHARE_STATION
 
 Phira Replay 分享站配置，用于上传回放到分享站。
 
@@ -471,28 +504,28 @@ Phira Replay share station configuration for uploading replays.
 
 - 类型 / Type: `object`
 - 默认值 / Default: `undefined`（未配置）
-- 环境变量 / Environment: 不支持直接配置，需使用配置文件
+- 环境变量 / Environment: `SHARE_STATION_URL`, `SHARE_STATION_TOKEN`
 
 子配置项 / Sub-options:
-- `url` (string): 分享站地址，例如 `"http://127.0.0.1:40004"`
-- `token` (string): 服务器认证 token，用于自动上传等内部接口
+- `URL` (string): 分享站地址，例如 `"http://127.0.0.1:40004"`
+- `TOKEN` (string): 服务器认证 token，用于自动上传等内部接口
 
 示例 / Example:
 ```yaml
-share_station:
-  url: "http://127.0.0.1:40004"
-  token: "your_share_station_token_here"
+SHARE_STATION:
+  URL: "http://127.0.0.1:40004"
+  TOKEN: "your_share_station_token_here"
 ```
 
 注意 / Note:
-- 需要同时配置 `url` 和 `token` 才能正常工作
-- Both `url` and `token` must be configured to work properly
+- 需要同时配置 `URL` 和 `TOKEN` 才能正常工作
+- Both `URL` and `TOKEN` must be configured to work properly
 
 ## 环境变量配置 / Environment Variable Configuration
 
-大部分配置项可以通过环境变量设置，环境变量名与配置文件键名相同（推荐使用大写）。以下配置项**仅支持环境变量**，不支持配置文件：`CONSOLE_LOG_LEVEL`、`PHIRA_MP_LANG`。
+大部分配置项可以通过环境变量设置，环境变量名与配置文件键名相同，均为全大写。以下配置项**仅支持环境变量**，不支持配置文件：`CONSOLE_LOG_LEVEL`、`PHIRA_MP_LANG`。
 
-Most configuration options can be set via environment variables with the same name as config file keys (uppercase recommended). The following options **only support environment variables**, not configuration file: `CONSOLE_LOG_LEVEL`, `PHIRA_MP_LANG`.
+Most configuration options can be set via environment variables with the same uppercase name as config file keys. The following options **only support environment variables**, not configuration file: `CONSOLE_LOG_LEVEL`, `PHIRA_MP_LANG`.
 
 示例 / Example:
 
@@ -502,6 +535,7 @@ export SERVER_NAME="My Server"
 export PORT=12346
 export HTTP_SERVICE=true
 export ADMIN_TOKEN="your_token"
+export MONITORS="2,100,200"
 export CONSOLE_LOG_LEVEL=INFO
 
 # Windows (PowerShell)
@@ -509,12 +543,14 @@ $env:SERVER_NAME="My Server"
 $env:PORT=12346
 $env:HTTP_SERVICE="true"
 $env:ADMIN_TOKEN="your_token"
+$env:MONITORS="2,100,200"
 
 # Windows (CMD)
 set SERVER_NAME=My Server
 set PORT=12346
 set HTTP_SERVICE=true
 set ADMIN_TOKEN=your_token
+set MONITORS=2,100,200
 ```
 
 ## 命令行参数 / Command-Line Arguments
@@ -642,7 +678,7 @@ Enable HTTP service for monitoring, configure appropriate log level, and regular
 
 配置文件 / Configuration file:
 ```yaml
-server_name: "Dev Server"
+SERVER_NAME: "Dev Server"
 HOST: "127.0.0.1"
 PORT: 12346
 HTTP_SERVICE: true
@@ -662,7 +698,7 @@ export PHIRA_MP_LANG=en-US
 
 配置文件 / Configuration file:
 ```yaml
-server_name: "Phira MP Production"
+SERVER_NAME: "Phira MP Production"
 HOST: "::"
 PORT: 12346
 HTTP_SERVICE: true
@@ -684,14 +720,14 @@ export CONSOLE_LOG_LEVEL=INFO
 
 配置文件 / Configuration file:
 ```yaml
-server_name: "Phira MP High Performance"
+SERVER_NAME: "Phira MP High Performance"
 HOST: "::"
 PORT: 12346
 HTTP_SERVICE: true
 HTTP_PORT: 12347
 LOG_LEVEL: WARN
 ROOM_MAX_USERS: 16
-test_account_ids:
+TEST_ACCOUNT_IDS:
   - 1739989
 ```
 
@@ -704,7 +740,7 @@ export CONSOLE_LOG_LEVEL=WARN
 
 配置文件 / Configuration file:
 ```yaml
-server_name: "Phira MP Docker"
+SERVER_NAME: "Phira MP Docker"
 HOST: "0.0.0.0"
 PORT: 12346
 HTTP_SERVICE: true

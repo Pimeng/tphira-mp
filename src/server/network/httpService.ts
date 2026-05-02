@@ -817,11 +817,17 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           try {
             const { configPath } = getAppPaths();
             const configText = await readFile(configPath, "utf8").catch(() => "");
-            const configObj = (yaml.load(configText) ?? {}) as Record<string, unknown>;
-            configObj.replay_enabled = enabled;
+            const loadedConfig = yaml.load(configText);
+            const configObj =
+              typeof loadedConfig === "object" && loadedConfig !== null && !Array.isArray(loadedConfig)
+                ? (loadedConfig as Record<string, unknown>)
+                : {};
+            delete configObj.replay_enabled;
+            delete configObj.replayEnabled;
+            configObj.REPLAY_ENABLED = enabled;
             const newText = yaml.dump(configObj, { lineWidth: -1 });
             await writeFile(configPath, newText, "utf8");
-            state.logger.log("INFO", `Replay config persisted: replay_enabled=${enabled}`);
+            state.logger.log("INFO", `Replay config persisted: REPLAY_ENABLED=${enabled}`);
           } catch (e) {
             state.logger.log("WARN", `Failed to persist replay config: ${e}`);
           }
