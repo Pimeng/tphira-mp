@@ -22,6 +22,7 @@ export type LoggerOptions = {
   testAccountIds?: number[];
   /** 启用日志限流和IP黑名单 */
   enableRateLimiting?: boolean;
+  onLog?: (level: LogLevel, message: string, timestamp: Date, context?: LogContext) => void;
   /** INFO 日志回调函数，用于实时推送 */
   onInfoLog?: (message: string, timestamp: Date, context?: LogContext) => void;
 };
@@ -74,6 +75,7 @@ export class Logger {
   private readonly useColor: boolean;
   private readonly testAccountIds: ReadonlySet<number>;
   private readonly rateLimiter: RateLimiter | null;
+  private readonly onLog?: (level: LogLevel, message: string, timestamp: Date, context?: LogContext) => void;
   private readonly onInfoLog?: (message: string, timestamp: Date, context?: LogContext) => void;
 
   private currentDateKey: string | null = null;
@@ -86,6 +88,7 @@ export class Logger {
     this.useColor = shouldUseColor();
     this.testAccountIds = new Set(options.testAccountIds ?? []);
     this.rateLimiter = options.enableRateLimiting ? new RateLimiter() : null;
+    this.onLog = options.onLog;
     this.onInfoLog = options.onInfoLog;
 
     mkdirSync(this.logsDir, { recursive: true });
@@ -143,6 +146,9 @@ export class Logger {
   }
 
   private write(level: LogLevel, message: string, meta?: Record<string, unknown>, context?: LogContext & { isConnectionLog?: boolean }): void {
+    const now = new Date();
+    this.onLog?.(level, message, now, context);
+
     if (LEVEL_WEIGHT[level] < LEVEL_WEIGHT[this.minLevel]) return;
 
     // 检查是否应该跳过连接日志（限流）
@@ -155,7 +161,6 @@ export class Logger {
       }
     }
 
-    const now = new Date();
     const dateKey = formatLocalDateKey(now);
     if (this.currentDateKey !== dateKey) {
       this.rotate(dateKey);

@@ -267,13 +267,14 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
     ...(options.port !== undefined ? { port: options.port } : {})
   };
   const mergedCfg = mergeConfig(mergeConfig(fileCfg, envCfg), cliCfg);
-  let broadcastInfoLog: ((roomId: RoomId, message: string, timestamp: Date) => void) | null = null;
+  let broadcastRoomLog: ((roomId: RoomId, message: string, timestamp: Date) => void) | null = null;
   const logger = new Logger({
     logsDir: paths.logsDir,
     minLevel: mergedCfg.log_level as any,
     testAccountIds: mergedCfg.test_account_ids ?? [1739989],
     enableRateLimiting: true,
-    onInfoLog: (message, timestamp, context) => {
+    onLog: (level, message, timestamp, context) => {
+      if (level === "DEBUG") return;
       if (!context?.roomId) return;
       let roomId: RoomId;
       try {
@@ -281,7 +282,7 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
       } catch {
         return;
       }
-      broadcastInfoLog?.(roomId, message, timestamp);
+      broadcastRoomLog?.(roomId, message, timestamp);
     }
   });
   const serverName = mergedCfg.server_name || "Phira MP";
@@ -371,7 +372,7 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
     if (httpService) {
       state.wsService = httpService.ws;
       state.autoUploadCallback = httpService.handleGameEndAutoUpload;
-      broadcastInfoLog = (roomId, message, timestamp) => {
+      broadcastRoomLog = (roomId, message, timestamp) => {
         void httpService?.ws.broadcastRoomLog(roomId, message, timestamp).catch(() => {});
       };
     }
@@ -426,7 +427,7 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
     close: async () => {
       try {
         stopCli();
-        broadcastInfoLog = null;
+        broadcastRoomLog = null;
         if (httpService) await httpService.close();
         await new Promise<void>((resolve, reject) => {
           server.close((err) => {

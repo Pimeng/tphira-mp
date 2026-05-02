@@ -90,7 +90,8 @@ describe("WebSocket 测试", () => {
       http_service: true,
       http_port: 0,
       admin_token: "test-admin-token",
-      replay_enabled: false
+      replay_enabled: false,
+      log_level: "ERROR"
     };
 
     server = await startServer({ host: "127.0.0.1", port: 0, config });
@@ -203,7 +204,7 @@ describe("WebSocket 测试", () => {
       await closeWebSocket(ws);
     });
 
-    test("应该推送订阅房间的 INFO 日志", async () => {
+    test("应该推送订阅房间的实时日志事件", async () => {
       const roomId = "room-log-test";
       const host = await Client.connect("127.0.0.1", gamePort);
       const guest = await Client.connect("127.0.0.1", gamePort);
@@ -211,9 +212,7 @@ describe("WebSocket 测试", () => {
 
       try {
         await host.authenticate("roomloghost");
-        await guest.authenticate("roomlogguest");
         await host.createRoom(roomId);
-        await guest.joinRoom(roomId, false);
 
         ws = await createWebSocket(`ws://127.0.0.1:${httpPort}/ws`);
         const messages: any[] = [];
@@ -228,16 +227,36 @@ describe("WebSocket 测试", () => {
         }));
 
         await waitFor(() => messages.some(m => m.type === "subscribed"));
+        const countRoomLogsFor = (name: string) => messages.filter((m) => {
+          const text = String(m.data?.message ?? "");
+          return m.type === "room_log" && text.includes(name) && text.includes(roomId);
+        }).length;
+
         server.state.logger.log("INFO", "opaque structured room log", undefined, { roomId });
         await waitFor(() => messages.some(m => m.type === "room_log" && m.data.message === "opaque structured room log"));
+        server.state.logger.log("MARK", "opaque structured room mark", undefined, { roomId });
+        await waitFor(() => messages.some(m => m.type === "room_log" && m.data.message === "opaque structured room mark"));
 
+        await guest.authenticate("roomlogguest");
+        await guest.joinRoom(roomId, false);
+        await waitFor(() => countRoomLogsFor("RoomLogGuest") >= 1);
+
+        const guestLogsBeforeChat = countRoomLogsFor("RoomLogGuest");
+        await guest.chat("hello");
+        await waitFor(() => countRoomLogsFor("RoomLogGuest") > guestLogsBeforeChat);
+
+        const hostLogsBeforeSelect = countRoomLogsFor("RoomLogHost");
         await host.selectChart(1);
+        await waitFor(() => countRoomLogsFor("RoomLogHost") > hostLogsBeforeSelect);
         await host.requestStart();
+        const guestLogsBeforeReady = countRoomLogsFor("RoomLogGuest");
         await guest.ready();
+        await waitFor(() => countRoomLogsFor("RoomLogGuest") > guestLogsBeforeReady);
 
         await waitFor(() => messages.some(m => m.type === "room_log" && String(m.data.message).includes(roomId)));
-        const roomLog = messages.find(m => m.type === "room_log" && String(m.data.message).includes(roomId));
-        expect(roomLog.data.message).toContain("房间");
+        const guestLogsBeforeLeave = countRoomLogsFor("RoomLogGuest");
+        await guest.leaveRoom();
+        await waitFor(() => countRoomLogsFor("RoomLogGuest") > guestLogsBeforeLeave);
       } finally {
         if (ws) await closeWebSocket(ws);
         await guest.close();
