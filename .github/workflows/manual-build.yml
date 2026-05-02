@@ -2,6 +2,17 @@ name: 手动构建 Release 和 Docker
 
 on:
   workflow_dispatch:  # 仅手动触发，自动构建请改 package.json 版本号并 push 到 main
+    inputs:
+      version:
+        description: '发布版本号（留空则读取 package.json）'
+        required: false
+        type: string
+        default: ''
+      prerelease:
+        description: '标记为 Pre-release'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -35,7 +46,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-latest]
+        os: [ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-latest, macos-13]
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -85,8 +96,71 @@ jobs:
           path: |
             phira-mp-*.zip
 
+  build-freebsd:
+    needs: [test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 在 FreeBSD 上构建
+        uses: vmactions/freebsd-vm@v1
+        with:
+          usesh: true
+          prepare: |
+            pkg install -y node22 zip
+            npm install -g pnpm@10.29.3
+          run: |
+            pnpm install --frozen-lockfile
+            pnpm run package:sea
+            cd release && zip -r ../phira-mp-freebsd-x64.zip .
+
+      - name: 上传压缩包
+        uses: actions/upload-artifact@v4
+        with:
+          name: phira-mp-FreeBSD-X64
+          path: phira-mp-freebsd-x64.zip
+
+  build-bundle:
+    needs: [test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: 设置 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: "10.29.3"
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 构建 Bundle
+        run: pnpm run bundle:server
+
+      - name: 制作压缩包
+        shell: bash
+        run: |
+          mkdir -p phira-mp-nodejs
+          cp dist-bundle/server.cjs phira-mp-nodejs/server.js
+          cp -r locales phira-mp-nodejs/locales
+          cp server_config.example.yml phira-mp-nodejs/server_config.yml
+          zip -r phira-mp-nodejs.zip phira-mp-nodejs
+
+      - name: 上传压缩包
+        uses: actions/upload-artifact@v4
+        with:
+          name: phira-mp-nodejs-bundle
+          path: phira-mp-nodejs.zip
+
   release-and-docker:
-    needs: [build]
+    needs: [build, build-freebsd, build-bundle]
     runs-on: ubuntu-latest
     steps:
       - name: 检出代码
@@ -189,7 +263,12 @@ jobs:
         id: version
         shell: bash
         run: |
-          version=$(node -p "require('./package.json').version")
+          input_version="${{ inputs.version }}"
+          if [ -n "$input_version" ]; then
+            version="$input_version"
+          else
+            version=$(node -p "require('./package.json').version")
+          fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: 列出 artifacts 目录结构
@@ -205,7 +284,12 @@ jobs:
             artifacts/phira-mp-Linux-X64/*.zip
             artifacts/phira-mp-Windows-X64/*.zip
             artifacts/phira-mp-macOS-ARM64/*.zip
+            artifacts/phira-mp-macOS-X64/*.zip
+            artifacts/phira-mp-FreeBSD-X64/*.zip
+            artifacts/phira-mp-nodejs-bundle/*.zip
           body: ${{ steps.notes.outputs.release_notes }}
+          prerelease: ${{ inputs.prerelease }}
+          make_latest: ${{ !inputs.prerelease }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -228,7 +312,12 @@ jobs:
           repo_lc="${REPOSITORY,,}"
           image="ghcr.io/${repo_lc}"
 
-          version="$(node -p "JSON.parse(require('fs').readFileSync('package.json','utf8')).version")"
+          input_version="${{ inputs.version }}"
+          if [ -n "$input_version" ]; then
+            version="$input_version"
+          else
+            version="$(node -p "JSON.parse(require('fs').readFileSync('package.json','utf8')).version")"
+          fi
           version_lc="${version,,}"
           version_tag="v${version_lc}"
           if [[ "$version_lc" =~ ^([0-9]+)\.([0-9]+)\.0$ ]]; then
@@ -237,7 +326,9 @@ jobs:
 
           tags=()
           tags+=("${image}:${version_tag}")
-          tags+=("${image}:latest")
+          if [ "${{ inputs.prerelease }}" != "true" ]; then
+            tags+=("${image}:latest")
+          fi
 
           printf "tags=%s\n" "$(IFS=, ; echo "${tags[*]}")" >> "$GITHUB_OUTPUT"
           printf "version=%s\n" "$version_tag" >> "$GITHUB_OUTPUT"
