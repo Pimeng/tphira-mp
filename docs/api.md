@@ -2,6 +2,10 @@
 
 本项目内置一个轻量 HTTP 服务，提供房间列表与管理员 API。管理员 API 需要 `ADMIN_TOKEN` 鉴权。
 
+> [!NOTE] 关于谱面分享站：
+> API/前端地址：http://183.66.27.19:40004
+> 如需上传Token，请添加Evidence https://rymc.ltd/e 询问相关事宜
+
 ## 启用与鉴权
 
 ### 启用 HTTP 服务

@@ -63,8 +63,9 @@ PHIRA_API_ENDPOINT: "https://phira.5wyxi.com"
 # OUTBOUND_PROXY: "http://127.0.0.1:7890"
 
 # Phira Replay 分享站配置（用于上传回放到分享站）
-# SHARE_STATION:
-#   # 分享站地址
-#   URL: "http://127.0.0.1:40004"
-#   # 服务端认证 token（用于自动上传等内部接口）
-#   TOKEN: "your_share_station_token_here"
+SHARE_STATION:
+  # 分享站地址
+  URL: "http://183.66.27.19:40004"
+  # 服务端认证 token（用于自动上传等内部接口）
+  # 如需Token，请访问 https://rymc.ltd/e 询问 Evidence 相关Token事宜
+  TOKEN: "your_share_station_token_here"
