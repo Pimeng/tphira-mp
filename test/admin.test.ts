@@ -2,10 +2,10 @@
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { unlink, rm } from "node:fs/promises";
+import { unlink } from "node:fs/promises";
 import { Client } from "../src/client/client.js";
 import { startServer } from "../src/server/core/server.js";
-import { setupMockFetch } from "./helpers.js";
+import { setupMockFetch, createTempDir, cleanupTempDir } from "./helpers.js";
 
 describe("管理员API", () => {
   const { originalFetch, mockFetch } = setupMockFetch();
@@ -360,12 +360,12 @@ describe("管理员API", () => {
   });
 
   test("管理员接口：解散启用回放录制的房间", async () => {
-    await rm(join(process.cwd(), "record"), { recursive: true, force: true });
+    const replayDir = await createTempDir("admin-replay-test");
 
     const prev = process.env.ADMIN_TOKEN;
     process.env.ADMIN_TOKEN = "test-token";
 
-    const running = await startServer({ port: 0, config: { monitors: [200], http_service: true, http_port: 0, replay_enabled: true } });
+    const running = await startServer({ port: 0, config: { monitors: [200], http_service: true, http_port: 0, replay_enabled: true, replay_base_dir: replayDir } });
     const port = running.address().port;
     const httpPort = running.http!.address().port;
 
@@ -400,18 +400,7 @@ describe("管理员API", () => {
       await alice.close();
       await bob.close();
       await running.close();
-      // 等待文件系统操作完成
-      await new Promise(resolve => setTimeout(resolve, 100));
-      // 多次尝试删除,处理 Windows 文件锁定问题
-      for (let i = 0; i < 3; i++) {
-        try {
-          await rm(join(process.cwd(), "record"), { recursive: true, force: true });
-          break;
-        } catch (e) {
-          if (i === 2) throw e;
-          await new Promise(resolve => setTimeout(resolve, 100));
-        }
-      }
+      await cleanupTempDir(replayDir);
     }
   }, 20000);
 });

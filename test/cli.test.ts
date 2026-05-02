@@ -1,16 +1,19 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { ServerState } from "../src/server/state.js";
-import { Logger } from "../src/server/logger.js";
-import type { ServerConfig } from "../src/server/types.js";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { ServerState } from "../src/server/core/state.js";
+import { Logger } from "../src/server/utils/logger.js";
+import type { ServerConfig } from "../src/server/core/types.js";
 import { parseRoomId } from "../src/common/roomId.js";
-import { Room } from "../src/server/room.js";
-import { User } from "../src/server/user.js";
+import { Room } from "../src/server/game/room.js";
+import { User } from "../src/server/game/user.js";
+import { createTempDir, cleanupTempDir } from "./helpers.js";
 
 describe("CLI 命令逻辑测试", () => {
   let state: ServerState;
   let logger: Logger;
+  let tempDir: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    tempDir = await createTempDir("cli-test");
     const config: ServerConfig = {
       monitors: [2],
       test_account_ids: [],
@@ -22,15 +25,20 @@ describe("CLI 命令逻辑测试", () => {
       room_max_users: 8,
       replay_enabled: false,
       admin_token: "test_token",
-      admin_data_path: "./test_admin_data.json",
+      admin_data_path: `${tempDir}/test_admin_data.json`,
       room_list_tip: undefined,
       log_level: "ERROR",
       real_ip_header: undefined,
       haproxy_protocol: false
     };
 
-    logger = new Logger({ logsDir: "./test_logs", minLevel: "ERROR" });
-    state = new ServerState(config, logger, "测试服务器", "./test_admin_data.json");
+    logger = new Logger({ logsDir: tempDir, minLevel: "ERROR" });
+    state = new ServerState(config, logger, "测试服务器", `${tempDir}/test_admin_data.json`);
+  });
+
+  afterEach(async () => {
+    logger.close();
+    await cleanupTempDir(tempDir);
   });
 
   describe("房间管理", () => {

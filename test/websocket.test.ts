@@ -3,16 +3,13 @@ import WebSocket from "ws";
 import { startServer, type RunningServer } from "../src/server/core/server.js";
 import { Client } from "../src/client/client.js";
 import type { ServerConfig } from "../src/server/core/types.js";
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
-}
+import { sleep } from "./helpers.js";
 
 async function waitFor(cond: () => boolean, timeoutMs = 2000): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     if (cond()) return;
-    await sleep(20); // 减少轮询间隔到20ms
+    await sleep(20);
   }
   throw new Error("Timeout waiting for condition");
 }

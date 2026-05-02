@@ -1,10 +1,8 @@
 // 核心功能测试
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
-import { rm } from "node:fs/promises";
-import { join } from "node:path";
 import { Client } from "../src/client/client.js";
 import { startServer } from "../src/server/core/server.js";
-import { sleep, waitFor, setupMockFetch } from "./helpers.js";
+import { sleep, waitFor, setupMockFetch, createTempDir, cleanupTempDir } from "./helpers.js";
 import type { TouchFrame } from "../src/common/commands.js";
 
 describe("核心功能", () => {
@@ -22,9 +20,8 @@ describe("核心功能", () => {
     const prevTip = process.env.ROOM_LIST_TIP;
     process.env.ROOM_LIST_TIP = "群：123456；查房间：example.com";
 
-    await rm(join(process.cwd(), "record"), { recursive: true, force: true });
-
-    const running = await startServer({ port: 0, config: { monitors: [200], replay_enabled: true } });
+    const tempDir = await createTempDir("core-test");
+    const running = await startServer({ port: 0, config: { monitors: [200], replay_enabled: true, replay_base_dir: tempDir } });
     const port = running.address().port;
 
     const alice = await Client.connect("127.0.0.1", port);
@@ -82,7 +79,7 @@ describe("核心功能", () => {
       await alice.close();
       await bob.close();
       await running.close();
-      await rm(join(process.cwd(), "record"), { recursive: true, force: true });
+      await cleanupTempDir(tempDir);
     }
   });
 });

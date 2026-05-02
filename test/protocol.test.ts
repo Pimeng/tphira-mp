@@ -1,11 +1,9 @@
 // 协议和连接测试
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import net from "node:net";
-import { rm } from "node:fs/promises";
-import { join } from "node:path";
 import { Client } from "../src/client/client.js";
 import { startServer } from "../src/server/core/server.js";
-import { sleep, waitFor, setupMockFetch } from "./helpers.js";
+import { sleep, waitFor, setupMockFetch, createTempDir, cleanupTempDir } from "./helpers.js";
 import type { TouchFrame } from "../src/common/commands.js";
 
 describe("协议和连接", () => {
@@ -52,9 +50,8 @@ describe("协议和连接", () => {
   }, 10000);
 
   test("观战者不读数据导致广播背压时，结算仍能正常结束（不应卡死/心跳误断）", async () => {
-    await rm(join(process.cwd(), "record"), { recursive: true, force: true });
-
-    const running = await startServer({ port: 0, config: { monitors: [200], replay_enabled: true } });
+    const tempDir = await createTempDir("protocol-test");
+    const running = await startServer({ port: 0, config: { monitors: [200], replay_enabled: true, replay_base_dir: tempDir } });
     const port = running.address().port;
     const alice = await Client.connect("127.0.0.1", port, { timeoutMs: 20000 });
     const bob = await Client.connect("127.0.0.1", port, { timeoutMs: 20000 });
@@ -89,7 +86,7 @@ describe("协议和连接", () => {
       await alice.close();
       await bob.close();
       await running.close();
-      await rm(join(process.cwd(), "record"), { recursive: true, force: true });
+      await cleanupTempDir(tempDir);
     }
   }, 20000);
 

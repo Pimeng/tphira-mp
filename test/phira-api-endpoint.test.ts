@@ -1,10 +1,7 @@
 // Phira API 端点配置测试
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
-import { rm } from "node:fs/promises";
-import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { Client } from "../src/client/client.js";
 import { startServer } from "../src/server/core/server.js";
-import { sleep, waitFor } from "./helpers.js";
 
 describe("Phira API 端点配置", () => {
   const originalFetch = globalThis.fetch;
@@ -71,8 +68,6 @@ describe("Phira API 端点配置", () => {
     const mockFetch = createMockFetch("https://phira.5wyxi.com");
     globalThis.fetch = mockFetch;
 
-    await rm(join(process.cwd(), "record"), { recursive: true, force: true });
-
     // 不配置 phira_api_endpoint，使用默认值
     const running = await startServer({ port: 0, config: { monitors: [] } });
     const port = running.address().port;
@@ -89,8 +84,6 @@ describe("Phira API 端点配置", () => {
     } finally {
       await client.close();
       await running.close();
-      await sleep(100);
-      await rm(join(process.cwd(), "record"), { recursive: true, force: true });
     }
   });
 
@@ -98,8 +91,6 @@ describe("Phira API 端点配置", () => {
     const customEndpoint = "https://custom-phira-api.example.com";
     const mockFetch = createMockFetch(customEndpoint);
     globalThis.fetch = mockFetch;
-
-    await rm(join(process.cwd(), "record"), { recursive: true, force: true });
 
     // 配置自定义 Phira API 端点
     const running = await startServer({ 
@@ -123,8 +114,6 @@ describe("Phira API 端点配置", () => {
     } finally {
       await client.close();
       await running.close();
-      await sleep(100);
-      await rm(join(process.cwd(), "record"), { recursive: true, force: true });
     }
   });
 
@@ -132,8 +121,6 @@ describe("Phira API 端点配置", () => {
     const customEndpoint = "https://phira-mirror.example.org";
     const mockFetch = createMockFetch(customEndpoint);
     globalThis.fetch = mockFetch;
-
-    await rm(join(process.cwd(), "record"), { recursive: true, force: true });
 
     const running = await startServer({ 
       port: 0, 
@@ -161,8 +148,6 @@ describe("Phira API 端点配置", () => {
     } finally {
       await client.close();
       await running.close();
-      await sleep(100); // Windows: 等待文件句柄释放
-      await rm(join(process.cwd(), "record"), { recursive: true, force: true });
     }
   });
 
@@ -174,8 +159,6 @@ describe("Phira API 端点配置", () => {
     // 设置环境变量
     const prevEndpoint = process.env.PHIRA_API_ENDPOINT;
     process.env.PHIRA_API_ENDPOINT = customEndpoint;
-
-    await rm(join(process.cwd(), "record"), { recursive: true, force: true });
 
     try {
       // 不通过 config 传入，让服务器从环境变量读取
@@ -194,13 +177,10 @@ describe("Phira API 端点配置", () => {
       } finally {
         await client.close();
         await running.close();
-        await sleep(100);
       }
     } finally {
       // 恢复环境变量
       process.env.PHIRA_API_ENDPOINT = prevEndpoint;
-      await sleep(100);
-      await rm(join(process.cwd(), "record"), { recursive: true, force: true });
     }
   });
 });
