@@ -26,6 +26,7 @@ chat-hitokoto-unavailable = Failed to fetch quote
 chat-roomlist-title = Available rooms:
 chat-roomlist-empty = No available rooms
 chat-roomlist-item = { $id } ({ $count }/{ $max })
+chat-disabled-by-server = Chat is disabled on this server to avoid safety issues.
 
 chat-game-summary =
     Match summary:

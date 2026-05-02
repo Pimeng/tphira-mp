@@ -300,9 +300,9 @@ REPLAY_ENABLED: true
 
 #### CHAT_ENABLED
 
-是否启用玩家聊天。关闭后，玩家发送的聊天内容不会被转发，房间内会显示固定提示：`为避免安全问题，该服务器已禁用聊天`。
+是否启用玩家聊天。关闭后，玩家发送的聊天内容不会被转发，房间内会显示本地化提示 `chat-disabled-by-server`。
 
-Whether to enable player chat. When disabled, player chat content is not forwarded and the room receives a fixed notice.
+Whether to enable player chat. When disabled, player chat content is not forwarded and the room receives the localized `chat-disabled-by-server` notice.
 
 - 类型 / Type: `boolean`
 - 默认值 / Default: `true`

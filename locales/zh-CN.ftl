@@ -26,6 +26,7 @@ chat-hitokoto-unavailable = 一言获取失败
 chat-roomlist-title = 当前可用的房间如下：
 chat-roomlist-empty = 当前没有可用房间
 chat-roomlist-item = { $id }（{ $count }/{ $max }）
+chat-disabled-by-server = 为避免安全问题，该服务器已禁用聊天
 
 chat-game-summary =
     本局结算：
