@@ -46,7 +46,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-latest, macos-13]
+        os: [ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -108,7 +108,7 @@ jobs:
         with:
           usesh: true
           prepare: |
-            pkg install -y node22 zip
+            pkg install -y node22 npm-node22 zip
             npm install -g pnpm@10.29.3
           run: |
             pnpm install --frozen-lockfile
@@ -284,7 +284,6 @@ jobs:
             artifacts/phira-mp-Linux-X64/*.zip
             artifacts/phira-mp-Windows-X64/*.zip
             artifacts/phira-mp-macOS-ARM64/*.zip
-            artifacts/phira-mp-macOS-X64/*.zip
             artifacts/phira-mp-FreeBSD-X64/*.zip
             artifacts/phira-mp-nodejs-bundle/*.zip
           body: ${{ steps.notes.outputs.release_notes }}
