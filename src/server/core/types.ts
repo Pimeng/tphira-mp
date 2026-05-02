@@ -15,6 +15,8 @@ export type ServerConfig = {
   http_service?: boolean;
   http_port?: number;
   room_max_users?: number;
+  /** 是否启用玩家聊天，默认启用 */
+  chat_enabled?: boolean;
   replay_enabled?: boolean;
   /** 回放录制基础目录，默认 process.cwd()/record */
   replay_base_dir?: string;

@@ -33,6 +33,7 @@ LOG_LEVEL: INFO
 REAL_IP_HEADER: X-Forwarded-For
 HAPROXY_PROTOCOL: "false"
 ROOM_MAX_USERS: 128
+CHAT_ENABLED: "off"
 REPLAY_ENABLED: "on"
 REPLAY_BASE_DIR: "./record"
 ADMIN_TOKEN: "replace_me"
@@ -57,6 +58,7 @@ SHARE_STATION:
       real_ip_header: "X-Forwarded-For",
       haproxy_protocol: false,
       room_max_users: 64,
+      chat_enabled: false,
       replay_enabled: true,
       replay_base_dir: "./record",
       admin_token: "replace_me",
@@ -100,6 +102,7 @@ PORT: 70000
 HTTP_SERVICE: "maybe"
 HTTP_PORT: 0
 ROOM_MAX_USERS: 0
+CHAT_ENABLED: "maybe"
 SHARE_STATION:
   URL: ""
   TOKEN: "token"
@@ -110,6 +113,7 @@ SHARE_STATION:
     expect(config.http_service).toBeUndefined();
     expect(config.http_port).toBeUndefined();
     expect(config.room_max_users).toBeUndefined();
+    expect(config.chat_enabled).toBeUndefined();
     expect(config.share_station).toBeUndefined();
   });
 

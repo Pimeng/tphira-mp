@@ -21,7 +21,10 @@ REAL_IP_HEADER: X-Forwarded-For
 HAPROXY_PROTOCOL: false
 
 # 单房间最大用户数
-ROOM_MAX_USERS: 8
+ROOM_MAX_USERS: 12
+
+# 是否启用聊天，默认开启；关闭后玩家聊天会替换为安全提示
+CHAT_ENABLED: true
 
 # 是否启用回放录制功能，默认关闭
 # 启用后，对局会自动录制为 .phirarec 文件

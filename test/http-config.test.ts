@@ -2,7 +2,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { Client } from "../src/client/client.js";
 import { startServer } from "../src/server/core/server.js";
-import { setupMockFetch } from "./helpers.js";
+import { setupMockFetch, waitFor } from "./helpers.js";
 
 describe("HTTP和配置", () => {
   const { originalFetch, mockFetch } = setupMockFetch();
@@ -176,6 +176,38 @@ describe("HTTP和配置", () => {
 
       await alice.createRoom("room1");
       await expect(bob.joinRoom("room1", false)).rejects.toThrow("房间已满");
+    } finally {
+      await alice.close();
+      await bob.close();
+      await running.close();
+    }
+  });
+
+  test("CHAT_ENABLED=false 时替换玩家聊天内容", async () => {
+    const running = await startServer({ port: 0, config: { monitors: [200], chat_enabled: false } });
+    const port = running.address().port;
+
+    const alice = await Client.connect("127.0.0.1", port);
+    const bob = await Client.connect("127.0.0.1", port);
+
+    try {
+      await alice.authenticate("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+      await bob.authenticate("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+      await alice.createRoom("room1");
+      await bob.joinRoom("room1", true);
+      bob.takeMessages();
+
+      await alice.chat("hello from alice");
+
+      const received: string[] = [];
+      await waitFor(() => {
+        for (const message of bob.takeMessages()) {
+          if (message.type === "Chat" && message.user === 100) received.push(message.content);
+        }
+        return received.includes("为避免安全问题，该服务器已禁用聊天");
+      });
+
+      expect(received).not.toContain("hello from alice");
     } finally {
       await alice.close();
       await bob.close();

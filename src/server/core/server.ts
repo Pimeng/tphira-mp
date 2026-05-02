@@ -112,6 +112,7 @@ function loadEnvConfig(): Partial<ServerConfig> {
   const http_service = parseBoolValue(process.env.HTTP_SERVICE);
   const http_port = parsePortValue(process.env.HTTP_PORT);
   const room_max_users = parseRoomMaxUsersValue(process.env.ROOM_MAX_USERS);
+  const chat_enabled = parseBoolValue(process.env.CHAT_ENABLED);
   const replay_enabled = parseBoolValue(process.env.REPLAY_ENABLED);
   const replay_base_dir = parseStringValue(process.env.REPLAY_BASE_DIR);
   const admin_token = parseStringValue(process.env.ADMIN_TOKEN);
@@ -136,6 +137,7 @@ function loadEnvConfig(): Partial<ServerConfig> {
   if (http_service !== undefined) out.http_service = http_service;
   if (http_port !== undefined) out.http_port = http_port;
   if (room_max_users !== undefined) out.room_max_users = room_max_users;
+  if (chat_enabled !== undefined) out.chat_enabled = chat_enabled;
   if (replay_enabled !== undefined) out.replay_enabled = replay_enabled;
   if (replay_base_dir) out.replay_base_dir = replay_base_dir;
   if (admin_token) out.admin_token = admin_token;
@@ -160,6 +162,7 @@ function mergeConfig(base: ServerConfig, override: Partial<ServerConfig>): Serve
     http_service: override.http_service ?? base.http_service,
     http_port: override.http_port ?? base.http_port,
     room_max_users: override.room_max_users ?? base.room_max_users,
+    chat_enabled: override.chat_enabled ?? base.chat_enabled,
     replay_enabled: override.replay_enabled ?? base.replay_enabled,
     replay_base_dir: override.replay_base_dir ?? base.replay_base_dir,
     admin_token: override.admin_token ?? base.admin_token,
@@ -191,6 +194,7 @@ export function parseConfigText(text: string): ServerConfig {
   const http_service = parseBoolValue(read("HTTP_SERVICE"));
   const http_port = parsePortValue(read("HTTP_PORT"));
   const room_max_users = parseRoomMaxUsersValue(read("ROOM_MAX_USERS"));
+  const chat_enabled = parseBoolValue(read("CHAT_ENABLED"));
   const replay_enabled = parseBoolValue(read("REPLAY_ENABLED"));
   const replay_base_dir = parseStringValue(read("REPLAY_BASE_DIR"));
   const admin_token = parseStringValue(read("ADMIN_TOKEN"));
@@ -212,6 +216,7 @@ export function parseConfigText(text: string): ServerConfig {
     http_service,
     http_port,
     room_max_users,
+    chat_enabled,
     replay_enabled,
     replay_base_dir,
     admin_token,

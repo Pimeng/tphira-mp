@@ -18,6 +18,7 @@ import { logRoomInfo, logRoomMark, logRoomWarn } from "../utils/logUtils.js";
 
 const DEFAULT_PHIRA_API_ENDPOINT = "https://phira.5wyxi.com";
 const FETCH_TIMEOUT_MS = 8000;
+const CHAT_DISABLED_MESSAGE = "为避免安全问题，该服务器已禁用聊天";
 
 // 房间列表缓存
 type RoomListCache = {
@@ -422,7 +423,8 @@ export class Session {
         return { type: "Chat", result: await errToStr(async () => {
           const room = this.requireRoom(user);
           logRoomInfo(this.state.logger, this.state.serverLang, room.id, "log-user-chat", { user: user.name }, { userId: user.id });
-          await room.sendAs((c) => this.broadcastRoom(room, c), user, "为符合规范，该服务器已禁用聊天功能"); // "" --> cmd.message
+          const content = this.state.config.chat_enabled === false ? CHAT_DISABLED_MESSAGE : cmd.message;
+          await room.sendAs((c) => this.broadcastRoom(room, c), user, content);
           return {};
         }) };
       case "Touches": {

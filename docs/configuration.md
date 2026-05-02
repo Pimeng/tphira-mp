@@ -52,6 +52,9 @@ HAPROXY_PROTOCOL: false
 # 单间最大用户数
 ROOM_MAX_USERS: 8
 
+# 是否启用聊天，默认开启；关闭后玩家聊天会替换为安全提示
+CHAT_ENABLED: true
+
 # 是否启用回放录制功能，默认关闭
 REPLAY_ENABLED: false
 
@@ -293,6 +296,21 @@ Whether to enable replay recording.
 示例 / Example:
 ```yaml
 REPLAY_ENABLED: true
+```
+
+#### CHAT_ENABLED
+
+是否启用玩家聊天。关闭后，玩家发送的聊天内容不会被转发，房间内会显示固定提示：`为避免安全问题，该服务器已禁用聊天`。
+
+Whether to enable player chat. When disabled, player chat content is not forwarded and the room receives a fixed notice.
+
+- 类型 / Type: `boolean`
+- 默认值 / Default: `true`
+- 环境变量 / Environment: `CHAT_ENABLED`
+
+示例 / Example:
+```yaml
+CHAT_ENABLED: false
 ```
 
 #### REPLAY_BASE_DIR
