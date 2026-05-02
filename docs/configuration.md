@@ -475,6 +475,27 @@ Phira API endpoint for user authentication and chart info retrieval.
 PHIRA_API_ENDPOINT: "https://phira.5wyxi.com"
 ```
 
+#### OUTBOUND_PROXY
+
+服务端出站网络请求的代理配置。
+
+Proxy configuration for outbound server network requests.
+
+- 类型 / Type: `string | boolean`
+- 默认值 / Default: 保持当前环境里的默认代理行为 / Follow default environment proxy behavior
+- 环境变量 / Environment: `OUTBOUND_PROXY`
+
+支持的值 / Supported values:
+- `false` / `False`: 强制直连，不走代理 / Force direct connection, bypass proxy
+- `"http://..."` / `"socks://..."`: 强制使用指定代理 / Force connection through specified proxy
+
+示例 / Example:
+```yaml
+OUTBOUND_PROXY: false
+# 或是 / or
+OUTBOUND_PROXY: "http://127.0.0.1:7890"
+```
+
 #### SHARE_STATION
 
 Phira Replay 分享站配置，用于上传回放到分享站。
