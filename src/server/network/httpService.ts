@@ -162,19 +162,19 @@ export async function startHttpService(opts: { state: ServerState; host: string;
         return { success: false, message: `upload-failed: ${errorText}` };
       }
 
-      const result = await response.json() as { success?: boolean; replay_id?: string; message?: string };
-      
+      // 按 API 文档，/upload_direct 响应仅保证返回 replay_id（success/message 为 x-apifox-ignore-properties，不实际返回）
+      const result = await response.json() as { replay_id?: string };
+
       // 解析 replay_id 获取 score_id
-      // replay_id 格式通常是 "{user_id}_{chart_id}_{score_id}.phirarec"
+      // 格式为 "{user_id}_{chart_id}_{score_id}.phirarec"（分享站约定格式）
       const replayId = result.replay_id || '';
       const scoreIdMatch = /_(\d+)\.phirarec$/.exec(replayId);
       const scoreId = scoreIdMatch ? parseInt(scoreIdMatch[1]!, 10) : undefined;
 
       return {
-        success: result.success ?? true,
+        success: true, // HTTP 200 即为成功；API 不返回 success 字段
         replayId,
-        scoreId,
-        message: result.message
+        scoreId
       };
     } catch (error) {
       state.logger.error(`Upload to share station failed: ${error instanceof Error ? error.message : String(error)}`);
