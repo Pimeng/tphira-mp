@@ -396,23 +396,7 @@ export class Session {
   }
 
   private async handleUserLeaveRoom(user: User, room: Room): Promise<void> {
-    const shouldDrop = await room.onUserLeave({
-      user,
-      usersById: (id) => this.state.users.get(id),
-      broadcast: (cmd) => this.broadcastRoom(room, cmd),
-      broadcastToMonitors: (cmd) => this.broadcastRoomMonitors(room, cmd),
-      pickRandomUserId: (ids) => pickRandom(ids),
-      lang: this.state.serverLang,
-      logger: this.state.logger,
-      wsService: this.state.wsService,
-      onEnterPlaying: async (r) => {
-        if (!r.chart) return;
-        await this.startReplayRecording(r);
-      },
-      onGameEnd: async (r) => {
-        await this.handleGameEnd(r);
-      }
-    });
+    const shouldDrop = await room.onUserLeave({ user, ...this.makeRoomCallbacks(room) });
     if (shouldDrop) {
       logRoomInfo(this.state.logger, this.state.serverLang, room.id, "log-room-recycled", undefined, { userId: user.id });
       await this.state.mutex.runExclusive(async () => {
@@ -558,21 +542,8 @@ export class Session {
           logRoomMark(this.state.logger, this.state.serverLang, room.id, "log-room-left", { user: user.name, suffix }, { userId: user.id });
           const shouldDrop = await room.onUserLeave({
             user,
-            usersById: (id) => this.state.users.get(id),
-            broadcast: (c) => this.broadcastRoom(room, c),
-            broadcastToMonitors: (c) => this.broadcastRoomMonitors(room, c),
-            pickRandomUserId: (ids) => pickRandom(ids),
-            lang: this.state.serverLang,
-            logger: this.state.logger,
-            disbandRoom: (r) => this.disbandRoom(r),
-            wsService: this.state.wsService,
-            onEnterPlaying: async (r) => {
-              if (!r.chart) return;
-              await this.startReplayRecording(r);
-            },
-            onGameEnd: async (r) => {
-              await this.handleGameEnd(r);
-            }
+            ...this.makeRoomCallbacks(room),
+            disbandRoom: (r: Room) => this.disbandRoom(r),
           });
           if (shouldDrop) {
             logRoomInfo(this.state.logger, this.state.serverLang, room.id, "log-room-recycled", undefined, { userId: user.id });
@@ -622,23 +593,7 @@ export class Session {
           room.state = { type: "WaitForReady", started: new Set([user.id]) };
           await room.onStateChange((c) => this.broadcastRoom(room, c));
           await room.notifyWebSocket(this.state);
-          await room.checkAllReady({
-            usersById: (id) => this.state.users.get(id),
-            broadcast: (c) => this.broadcastRoom(room, c),
-            broadcastToMonitors: (c) => this.broadcastRoomMonitors(room, c),
-            pickRandomUserId: (ids) => pickRandom(ids),
-            lang: this.state.serverLang,
-            logger: this.state.logger,
-            disbandRoom: (r) => this.disbandRoom(r),
-            wsService: this.state.wsService,
-            onEnterPlaying: async (r) => {
-              if (!r.chart) return;
-              await this.startReplayRecording(r);
-            },
-            onGameEnd: async (r) => {
-              await this.handleGameEnd(r);
-            }
-          });
+          await room.checkAllReady({ ...this.makeRoomCallbacks(room), disbandRoom: (r: Room) => this.disbandRoom(r) });
           return {};
         }) };
       case "Ready":
@@ -650,23 +605,7 @@ export class Session {
             logRoomInfo(this.state.logger, this.state.serverLang, room.id, "log-room-ready", { user: user.name }, { userId: user.id });
             await room.send((c) => this.broadcastRoom(room, c), { type: "Ready", user: user.id });
             await room.notifyWebSocket(this.state);
-            await room.checkAllReady({
-              usersById: (id) => this.state.users.get(id),
-              broadcast: (c) => this.broadcastRoom(room, c),
-              broadcastToMonitors: (c) => this.broadcastRoomMonitors(room, c),
-              pickRandomUserId: (ids) => pickRandom(ids),
-              lang: this.state.serverLang,
-              logger: this.state.logger,
-              disbandRoom: (r) => this.disbandRoom(r),
-              wsService: this.state.wsService,
-              onEnterPlaying: async (r) => {
-                if (!r.chart) return;
-                await this.startReplayRecording(r);
-              },
-              onGameEnd: async (r) => {
-                await this.handleGameEnd(r);
-              }
-            });
+            await room.checkAllReady({ ...this.makeRoomCallbacks(room), disbandRoom: (r: Room) => this.disbandRoom(r) });
           }
           return {};
         }) };
@@ -708,23 +647,7 @@ export class Session {
             room.state.results.set(user.id, record);
             if (this.state.replayEnabled && room.replayEligible) this.state.replayRecorder.setRecordId(room.id, user.id, record.id);
             await room.notifyWebSocket(this.state);
-            await room.checkAllReady({
-              usersById: (id) => this.state.users.get(id),
-              broadcast: (c) => this.broadcastRoom(room, c),
-              broadcastToMonitors: (c) => this.broadcastRoomMonitors(room, c),
-              pickRandomUserId: (ids) => pickRandom(ids),
-              lang: this.state.serverLang,
-              logger: this.state.logger,
-              disbandRoom: (r) => this.disbandRoom(r),
-              wsService: this.state.wsService,
-              onEnterPlaying: async (r) => {
-                if (!r.chart) return;
-                await this.startReplayRecording(r);
-              },
-              onGameEnd: async (r) => {
-                await this.handleGameEnd(r);
-              }
-            });
+            await room.checkAllReady({ ...this.makeRoomCallbacks(room), disbandRoom: (r: Room) => this.disbandRoom(r) });
           }
           return {};
         }) };
@@ -738,23 +661,7 @@ export class Session {
             logRoomMark(this.state.logger, this.state.serverLang, room.id, "log-room-abort", { user: user.name }, { userId: user.id });
             await room.send((c) => this.broadcastRoom(room, c), { type: "Abort", user: user.id });
             await room.notifyWebSocket(this.state);
-            await room.checkAllReady({
-              usersById: (id) => this.state.users.get(id),
-              broadcast: (c) => this.broadcastRoom(room, c),
-              broadcastToMonitors: (c) => this.broadcastRoomMonitors(room, c),
-              pickRandomUserId: (ids) => pickRandom(ids),
-              lang: this.state.serverLang,
-              logger: this.state.logger,
-              disbandRoom: (r) => this.disbandRoom(r),
-              wsService: this.state.wsService,
-              onEnterPlaying: async (r) => {
-                if (!r.chart) return;
-                await this.startReplayRecording(r);
-              },
-              onGameEnd: async (r) => {
-                await this.handleGameEnd(r);
-              }
-            });
+            await room.checkAllReady({ ...this.makeRoomCallbacks(room), disbandRoom: (r: Room) => this.disbandRoom(r) });
           }
           return {};
         }) };
@@ -769,35 +676,40 @@ export class Session {
     return room;
   }
 
-  private async broadcastRoom(room: Room, cmd: ServerCommand): Promise<void> {
-    const ids = [...room.userIds(), ...room.monitorIds()];
-    if (ids.length === 0) return;
-    
-    // 批量发送，等待完成以确保消息顺序
+  private async broadcastToIds(ids: number[], cmd: ServerCommand): Promise<void> {
     const tasks: Promise<void>[] = [];
     for (const id of ids) {
       const u = this.state.users.get(id);
       if (u) tasks.push(u.trySend(cmd));
     }
-    
-    if (tasks.length > 0) {
-      await Promise.allSettled(tasks);
-    }
+    if (tasks.length > 0) await Promise.allSettled(tasks);
   }
 
-  private async broadcastRoomMonitors(room: Room, cmd: ServerCommand): Promise<void> {
-    const ids = room.monitorIds();
-    if (ids.length === 0) return;
-    
-    const tasks: Promise<void>[] = [];
-    for (const id of ids) {
-      const u = this.state.users.get(id);
-      if (u) tasks.push(u.trySend(cmd));
-    }
-    
-    if (tasks.length > 0) {
-      await Promise.allSettled(tasks);
-    }
+  private broadcastRoom(room: Room, cmd: ServerCommand): Promise<void> {
+    return this.broadcastToIds([...room.userIds(), ...room.monitorIds()], cmd);
+  }
+
+  private broadcastRoomMonitors(room: Room, cmd: ServerCommand): Promise<void> {
+    return this.broadcastToIds(room.monitorIds(), cmd);
+  }
+
+  private makeRoomCallbacks(room: Room) {
+    return {
+      usersById: (id: number) => this.state.users.get(id),
+      broadcast: (c: ServerCommand) => this.broadcastRoom(room, c),
+      broadcastToMonitors: (c: ServerCommand) => this.broadcastRoomMonitors(room, c),
+      pickRandomUserId: (ids: number[]) => pickRandom(ids),
+      lang: this.state.serverLang,
+      logger: this.state.logger,
+      wsService: this.state.wsService,
+      onEnterPlaying: async (r: Room) => {
+        if (!r.chart) return;
+        await this.startReplayRecording(r);
+      },
+      onGameEnd: async (r: Room) => {
+        await this.handleGameEnd(r);
+      }
+    };
   }
 
   private async disbandRoom(room: Room): Promise<void> {
@@ -806,23 +718,7 @@ export class Session {
       const u = this.state.users.get(id);
       if (!u) continue;
       if (!u.room || u.room.id !== room.id) continue;
-      await room.onUserLeave({
-        user: u,
-        usersById: (uid) => this.state.users.get(uid),
-        broadcast: (c) => this.broadcastRoom(room, c),
-        broadcastToMonitors: (c) => this.broadcastRoomMonitors(room, c),
-        pickRandomUserId: (arr) => pickRandom(arr),
-        lang: this.state.serverLang,
-        logger: this.state.logger,
-        wsService: this.state.wsService,
-        onEnterPlaying: async (r) => {
-          if (!r.chart) return;
-          await this.startReplayRecording(r);
-        },
-        onGameEnd: async (r) => {
-          await this.handleGameEnd(r);
-        }
-      });
+      await room.onUserLeave({ user: u, ...this.makeRoomCallbacks(room) });
     }
     await this.state.mutex.runExclusive(async () => {
       this.state.rooms.delete(room.id);

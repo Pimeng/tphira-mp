@@ -207,12 +207,7 @@ export class Room {
         this.resetGameTime(opts.usersById);
         this.state = { type: "Playing", results: new Map(), aborted: new Set() };
         await this.onStateChange(opts.broadcast);
-        if (opts.wsService) {
-          void Promise.allSettled([
-            opts.wsService.broadcastRoomUpdate(this.id), 
-            opts.wsService.broadcastAdminUpdate()
-          ]);
-        }
+        void this.notifyWebSocket({ wsService: opts.wsService ?? null });
         return;
       }
 
@@ -301,12 +296,7 @@ export class Room {
         }
 
         await this.onStateChange(opts.broadcast);
-        if (opts.wsService) {
-          void Promise.allSettled([
-            opts.wsService.broadcastRoomUpdate(this.id), 
-            opts.wsService.broadcastAdminUpdate()
-          ]);
-        }
+        void this.notifyWebSocket({ wsService: opts.wsService ?? null });
       }
     }
 
@@ -327,11 +317,6 @@ export class Room {
   validateSelectChart(user: User): void {
     this.checkHost(user);
     if (this.state.type !== "SelectChart") throw new Error(tl(user.lang, "room-invalid-state"));
-  }
-
-  requireRoom(user: User): Room {
-    if (!user.room) throw new Error(tl(user.lang, "room-no-room"));
-    return user.room;
   }
 
 }

@@ -32,10 +32,6 @@ export type RunningServer = {
   address: () => net.AddressInfo;
 };
 
-function parseBoolEnv(value: string | undefined): boolean | undefined {
-  return parseBoolValue(value);
-}
-
 function parseBoolValue(value: unknown): boolean | undefined {
   if (typeof value === "boolean") return value;
   if (typeof value === "number") {
@@ -113,17 +109,17 @@ function loadEnvConfig(): Partial<ServerConfig> {
   const server_name = parseStringValue(process.env.SERVER_NAME);
   const host = parseStringValue(process.env.HOST);
   const port = parsePortValue(process.env.PORT);
-  const http_service = parseBoolEnv(process.env.HTTP_SERVICE);
+  const http_service = parseBoolValue(process.env.HTTP_SERVICE);
   const http_port = parsePortValue(process.env.HTTP_PORT);
   const room_max_users = parseRoomMaxUsersValue(process.env.ROOM_MAX_USERS);
-  const replay_enabled = parseBoolEnv(process.env.REPLAY_ENABLED);
+  const replay_enabled = parseBoolValue(process.env.REPLAY_ENABLED);
   const replay_base_dir = parseStringValue(process.env.REPLAY_BASE_DIR);
   const admin_token = parseStringValue(process.env.ADMIN_TOKEN);
   const admin_data_path = parseStringValue(process.env.ADMIN_DATA_PATH);
   const room_list_tip = parseStringValue(process.env.ROOM_LIST_TIP);
   const log_level = parseStringValue(process.env.LOG_LEVEL);
   const real_ip_header = parseStringValue(process.env.REAL_IP_HEADER);
-  const haproxy_protocol = parseBoolEnv(process.env.HAPROXY_PROTOCOL);
+  const haproxy_protocol = parseBoolValue(process.env.HAPROXY_PROTOCOL);
   const phira_api_endpoint = parseStringValue(process.env.PHIRA_API_ENDPOINT);
   const outbound_proxy = parseOutboundProxyValue(process.env.OUTBOUND_PROXY);
   const share_station = parseShareStationValue({
