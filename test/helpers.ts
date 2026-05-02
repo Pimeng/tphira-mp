@@ -1,9 +1,10 @@
 // 共享的测试工具函数
-import { decodePacket } from "../src/common/binary.js";
-import { decodeClientCommand, type ClientCommand } from "../src/common/commands.js";
+import { BinaryReader, decodePacket } from "../src/common/binary.js";
+import { decodeClientCommand, type ClientCommand, type CompactPos, type JudgeEvent, type TouchFrame } from "../src/common/commands.js";
 import { mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { inflateSync, zstdDecompressSync } from "node:zlib";
 
 export function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
@@ -35,7 +36,28 @@ export async function waitFor(cond: () => boolean, timeoutMs = 1000): Promise<vo
   throw new Error("等待超时");
 }
 
+export type ParsedPhiraRecordV2 = {
+  recordId: number;
+  timestamp: number;
+  chartId: number;
+  chartName: string;
+  userId: number;
+  userName: string;
+  touchFrames: TouchFrame[];
+  judgeEvents: JudgeEvent[];
+  version: number;
+  compression: number;
+};
+
 export function parsePhiraRec(buf: Buffer): ClientCommand[] {
+  if (isPhiraRecordV2(buf)) {
+    const record = parsePhiraRecordV2(buf);
+    const out: ClientCommand[] = [];
+    if (record.touchFrames.length > 0) out.push({ type: "Touches", frames: record.touchFrames });
+    if (record.judgeEvents.length > 0) out.push({ type: "Judges", judges: record.judgeEvents });
+    return out;
+  }
+
   const out: ClientCommand[] = [];
   let offset = 14;
   while (offset + 4 <= buf.length) {
@@ -47,6 +69,63 @@ export function parsePhiraRec(buf: Buffer): ClientCommand[] {
     out.push(decodePacket(payload, decodeClientCommand));
   }
   return out;
+}
+
+export function parsePhiraRecordV2(buf: Buffer): ParsedPhiraRecordV2 {
+  if (!isPhiraRecordV2(buf)) throw new Error("not-phira-record-v2");
+  const version = buf.readInt32LE(8);
+  const compression = buf.readUInt8(12);
+  const r = new BinaryReader(decodePhiraRecordPayload(buf));
+  const recordId = r.readI32();
+  const timestamp = Number(r.readI64());
+  const chartId = r.readI32();
+  const chartName = r.readString();
+  const userId = r.readI32();
+  const userName = r.readString();
+  const touchFrames = r.readArray(decodeTouchFrame);
+  const judgeEvents = r.readArray(decodeJudgeEvent);
+  return { recordId, timestamp, chartId, chartName, userId, userName, touchFrames, judgeEvents, version, compression };
+}
+
+function isPhiraRecordV2(buf: Buffer): boolean {
+  return buf.length >= 13 && buf.subarray(0, 8).equals(Buffer.from("PHIRAREC", "ascii"));
+}
+
+function decodePhiraRecordPayload(buf: Buffer): Buffer {
+  const compression = buf.readUInt8(12);
+  const payload = buf.subarray(13);
+  switch (compression) {
+    case 0x00:
+      return payload;
+    case 0x01:
+      return zstdDecompressSync(payload);
+    case 0x02:
+      return inflateSync(payload);
+    default:
+      throw new Error(`unsupported-phira-record-compression:${compression}`);
+  }
+}
+
+function decodeTouchFrame(r: BinaryReader): TouchFrame {
+  const time = r.readF32();
+  const points = r.readArray((rr) => {
+    const id = rr.readI8();
+    const pos = decodeCompactPos(rr);
+    return [id, pos] as [number, CompactPos];
+  });
+  return { time, points };
+}
+
+function decodeCompactPos(r: BinaryReader): CompactPos {
+  return r.readCompactPos();
+}
+
+function decodeJudgeEvent(r: BinaryReader): JudgeEvent {
+  const time = r.readF32();
+  const line_id = r.readI32();
+  const note_id = r.readI32();
+  const judgement = r.readU8();
+  return { time, line_id, note_id, judgement };
 }
 
 // Mock fetch 设置和自动清理

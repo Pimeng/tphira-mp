@@ -317,6 +317,12 @@ export class Session {
     }
   }
 
+  private async startReplayRecording(room: Room): Promise<void> {
+    if (!this.state.replayEnabled || !room.replayEligible || !room.chart) return;
+    const users = room.userIds().map((id) => ({ id, name: this.state.users.get(id)?.name ?? String(id) }));
+    await this.state.replayRecorder.startRoom(room.id, room.chart, users);
+  }
+
   private async markLost(): Promise<void> {
     if (this.lost) return;
     this.lost = true;
@@ -401,7 +407,7 @@ export class Session {
       wsService: this.state.wsService,
       onEnterPlaying: async (r) => {
         if (!r.chart) return;
-        if (this.state.replayEnabled && r.replayEligible) await this.state.replayRecorder.startRoom(r.id, r.chart.id, r.userIds());
+        await this.startReplayRecording(r);
       },
       onGameEnd: async (r) => {
         await this.handleGameEnd(r);
@@ -562,7 +568,7 @@ export class Session {
             wsService: this.state.wsService,
             onEnterPlaying: async (r) => {
               if (!r.chart) return;
-              if (this.state.replayEnabled && r.replayEligible) await this.state.replayRecorder.startRoom(r.id, r.chart.id, r.userIds());
+              await this.startReplayRecording(r);
             },
             onGameEnd: async (r) => {
               await this.handleGameEnd(r);
@@ -627,7 +633,7 @@ export class Session {
             wsService: this.state.wsService,
             onEnterPlaying: async (r) => {
               if (!r.chart) return;
-              if (this.state.replayEnabled && r.replayEligible) await this.state.replayRecorder.startRoom(r.id, r.chart.id, r.userIds());
+              await this.startReplayRecording(r);
             },
             onGameEnd: async (r) => {
               await this.handleGameEnd(r);
@@ -655,7 +661,7 @@ export class Session {
               wsService: this.state.wsService,
               onEnterPlaying: async (r) => {
                 if (!r.chart) return;
-                if (this.state.replayEnabled && r.replayEligible) await this.state.replayRecorder.startRoom(r.id, r.chart.id, r.userIds());
+                await this.startReplayRecording(r);
               },
               onGameEnd: async (r) => {
                 await this.handleGameEnd(r);
@@ -713,7 +719,7 @@ export class Session {
               wsService: this.state.wsService,
               onEnterPlaying: async (r) => {
                 if (!r.chart) return;
-                if (this.state.replayEnabled && r.replayEligible) await this.state.replayRecorder.startRoom(r.id, r.chart.id, r.userIds());
+                await this.startReplayRecording(r);
               },
               onGameEnd: async (r) => {
                 await this.handleGameEnd(r);
@@ -743,7 +749,7 @@ export class Session {
               wsService: this.state.wsService,
               onEnterPlaying: async (r) => {
                 if (!r.chart) return;
-                if (this.state.replayEnabled && r.replayEligible) await this.state.replayRecorder.startRoom(r.id, r.chart.id, r.userIds());
+                await this.startReplayRecording(r);
               },
               onGameEnd: async (r) => {
                 await this.handleGameEnd(r);
@@ -811,7 +817,7 @@ export class Session {
         wsService: this.state.wsService,
         onEnterPlaying: async (r) => {
           if (!r.chart) return;
-          if (this.state.replayEnabled && r.replayEligible) await this.state.replayRecorder.startRoom(r.id, r.chart.id, r.userIds());
+          await this.startReplayRecording(r);
         },
         onGameEnd: async (r) => {
           await this.handleGameEnd(r);

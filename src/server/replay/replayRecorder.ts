@@ -1,27 +1,47 @@
-import { createWriteStream, type WriteStream } from "node:fs";
-import { open } from "node:fs/promises";
-import { encodePacket } from "../../common/binary.js";
-import { encodeClientCommand, type ClientCommand, type JudgeEvent, type TouchFrame, type UserInfo } from "../../common/commands.js";
+import { writeFile } from "node:fs/promises";
+import { zstdCompressSync } from "node:zlib";
+import { BinaryWriter } from "../../common/binary.js";
+import type { CompactPos, JudgeEvent, TouchFrame, UserInfo } from "../../common/commands.js";
 import { roomIdToString, type RoomId } from "../../common/roomId.js";
+import type { Chart } from "../core/types.js";
 import { ensureReplayDir, replayFilePath } from "../replay/replayStorage.js";
 import type { Logger } from "../utils/logger.js";
+
+type ReplayParticipant = {
+  id: number;
+  name?: string;
+};
 
 type InFlight = {
   roomKey: string;
   userId: number;
+  userName: string;
+  chartId: number;
+  chartName: string;
+  timestamp: number;
+  recordId: number;
+  path: string;
+  closed: boolean;
+  touchFrames: TouchFrame[];
+  judgeEvents: JudgeEvent[];
+};
+
+type ReplayFileInfo = {
+  userId: number;
   chartId: number;
   timestamp: number;
   path: string;
-  stream: WriteStream;
-  closed: boolean;
-  queue: Promise<void>;
 };
+
+const phiraRecordMagic = Buffer.from("PHIRAREC", "ascii");
+const phiraRecordVersion = 1;
+const compressionZstd = 0x01;
 
 export class ReplayRecorder {
   private readonly _baseDir: string;
   private readonly inflightByKey = new Map<string, InFlight>();
   private readonly keysByRoom = new Map<string, Set<string>>();
-  private readonly magicU16 = 0x504d;
+  private readonly completedFilesByRoom = new Map<string, ReplayFileInfo[]>();
   private readonly logger: Logger | null;
 
   constructor(baseDir: string, logger?: Logger) {
@@ -37,17 +57,23 @@ export class ReplayRecorder {
     this.logger?.log(level, `[Replay] ${message}`);
   }
 
-  async startRoom(roomId: RoomId, chartId: number, userIds: number[]): Promise<void> {
+  async startRoom(roomId: RoomId, chart: number | Chart, users: Array<number | ReplayParticipant>): Promise<void> {
     const roomKey = roomIdToString(roomId);
-    this.log("DEBUG", `startRoom: roomKey=${roomKey}, chartId=${chartId}, userIds=[${userIds.join(",")}]`);
+    const chartId = typeof chart === "number" ? chart : chart.id;
+    const chartName = typeof chart === "number" ? "" : chart.name;
+    const userIdsText = users.map((it) => typeof it === "number" ? String(it) : String(it.id)).join(",");
+    this.log("DEBUG", `startRoom: roomKey=${roomKey}, chartId=${chartId}, userIds=[${userIdsText}]`);
     const existing = this.keysByRoom.get(roomKey);
     if (existing && existing.size > 0) {
       this.log("DEBUG", `startRoom skipped: room already exists with ${existing.size} recordings`);
       return;
     }
 
+    this.completedFilesByRoom.delete(roomKey);
     const keys = new Set<string>();
-    for (const userId of userIds) {
+    for (const participant of users) {
+      const userId = typeof participant === "number" ? participant : participant.id;
+      const userName = typeof participant === "number" ? "" : (participant.name ?? "");
       if (!Number.isInteger(userId) || userId < 0) {
         this.log("DEBUG", `startRoom skipped userId=${userId}: invalid`);
         continue;
@@ -55,15 +81,21 @@ export class ReplayRecorder {
       const ts = Date.now();
       await ensureReplayDir(this._baseDir, userId, chartId);
       const path = replayFilePath(this._baseDir, userId, chartId, ts);
-      this.log("DEBUG", `Creating replay file: ${path}`);
-      const handle = await open(path, "w");
-      const header = this.buildHeader(chartId, userId, 0);
-      await handle.write(header, 0, 14, 0);
-      await handle.close();
-
-      const stream = createWriteStream(path, { flags: "a" });
+      this.log("DEBUG", `Preparing replay file: ${path}`);
       const key = `${roomKey}:${userId}`;
-      this.inflightByKey.set(key, { roomKey, userId, chartId, timestamp: ts, path, stream, closed: false, queue: Promise.resolve() });
+      this.inflightByKey.set(key, {
+        roomKey,
+        userId,
+        userName,
+        chartId,
+        chartName,
+        timestamp: ts,
+        recordId: 0,
+        path,
+        closed: false,
+        touchFrames: [],
+        judgeEvents: []
+      });
       keys.add(key);
       this.log("DEBUG", `Recording started for userId=${userId}`);
     }
@@ -76,18 +108,22 @@ export class ReplayRecorder {
     this.log("DEBUG", `endRoom: roomKey=${roomKey}`);
     const keys = this.keysByRoom.get(roomKey);
     if (!keys) {
-      this.log("DEBUG", `endRoom: no keys found for room`);
+      this.log("DEBUG", "endRoom: no keys found for room");
       return;
     }
     this.keysByRoom.delete(roomKey);
-    const tasks: Promise<void>[] = [];
+    const tasks: Promise<ReplayFileInfo>[] = [];
     for (const key of keys) {
       const it = this.inflightByKey.get(key);
       if (!it) continue;
       this.inflightByKey.delete(key);
-      tasks.push(this.closeInFlight(it));
+      tasks.push(this.closeInFlight(it).then(() => this.fileInfo(it)));
     }
-    await Promise.allSettled(tasks);
+    const results = await Promise.allSettled(tasks);
+    const completed = results
+      .filter((it): it is PromiseFulfilledResult<ReplayFileInfo> => it.status === "fulfilled")
+      .map((it) => it.value);
+    if (completed.length > 0) this.completedFilesByRoom.set(roomKey, completed);
     this.log("DEBUG", `endRoom completed: ${keys.size} recordings closed`);
   }
 
@@ -96,58 +132,38 @@ export class ReplayRecorder {
     const key = `${roomKey}:${userId}`;
     const it = this.inflightByKey.get(key);
     if (!it || it.closed) return;
-    const buf = Buffer.allocUnsafe(4);
-    buf.writeUInt32LE(recordId >>> 0, 0);
-    void it.queue.then(async () => {
-      const handle = await open(it.path, "r+");
-      try {
-        await handle.write(buf, 0, 4, 10);
-      } finally {
-        await handle.close();
-      }
-    }).catch(() => {});
+    it.recordId = recordId;
   }
 
   appendTouches(roomId: RoomId, userId: number, frames: TouchFrame[]): void {
     this.log("DEBUG", `appendTouches: roomId=${roomIdToString(roomId)}, userId=${userId}, frames=${frames.length}`);
     const it = this.get(roomId, userId);
     if (!it) return;
-    const cmd: ClientCommand = { type: "Touches", frames };
-    this.appendPacket(it, cmd);
+    this.appendPacket(it, { type: "Touches", frames });
   }
 
   appendJudges(roomId: RoomId, userId: number, judges: JudgeEvent[]): void {
     this.log("DEBUG", `appendJudges: roomId=${roomIdToString(roomId)}, userId=${userId}, judges=${judges.length}`);
     const it = this.get(roomId, userId);
     if (!it) return;
-    const cmd: ClientCommand = { type: "Judges", judges };
-    this.appendPacket(it, cmd);
+    this.appendPacket(it, { type: "Judges", judges });
   }
 
-  listRoomFiles(roomId: RoomId): Array<{ userId: number; chartId: number; timestamp: number; path: string }> {
+  listRoomFiles(roomId: RoomId): ReplayFileInfo[] {
     const roomKey = roomIdToString(roomId);
     const keys = this.keysByRoom.get(roomKey);
-    if (!keys) return [];
-    const out: Array<{ userId: number; chartId: number; timestamp: number; path: string }> = [];
+    if (!keys) return [...(this.completedFilesByRoom.get(roomKey) ?? [])];
+    const out: ReplayFileInfo[] = [];
     for (const key of keys) {
       const it = this.inflightByKey.get(key);
       if (!it) continue;
-      out.push({ userId: it.userId, chartId: it.chartId, timestamp: it.timestamp, path: it.path });
+      out.push(this.fileInfo(it));
     }
     return out;
   }
 
   fakeMonitorInfo(): UserInfo {
     return { id: 2_000_000_000, name: "回放录制器", monitor: true };
-  }
-
-  private buildHeader(chartId: number, userId: number, recordId: number): Buffer {
-    const buf = Buffer.allocUnsafe(14);
-    buf.writeUInt16LE(this.magicU16, 0);
-    buf.writeUInt32LE(chartId >>> 0, 2);
-    buf.writeUInt32LE(userId >>> 0, 6);
-    buf.writeUInt32LE(recordId >>> 0, 10);
-    return buf;
   }
 
   private get(roomId: RoomId, userId: number): InFlight | null {
@@ -158,39 +174,63 @@ export class ReplayRecorder {
     return it;
   }
 
-  private appendPacket(it: InFlight, cmd: ClientCommand): void {
-    const payload = encodePacket(cmd, encodeClientCommand);
-    const header = Buffer.allocUnsafe(4);
-    header.writeUInt32LE(payload.length >>> 0, 0);
-    const chunk = Buffer.concat([header, payload]);
-    void this.enqueueWrite(it, chunk).catch((err) => {
-      this.log("WARN", `appendPacket: write failed - ${err}`);
-    });
-  }
-
-  private enqueueWrite(it: InFlight, chunk: Buffer): Promise<void> {
-    it.queue = it.queue.then(() => this.writeChunk(it, chunk));
-    return it.queue;
-  }
-
-  private async writeChunk(it: InFlight, chunk: Buffer): Promise<void> {
-    if (it.closed) return;
-    await new Promise<void>((resolve, reject) => {
-      it.stream.write(chunk, (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
+  private appendPacket(it: InFlight, cmd: { type: "Touches"; frames: TouchFrame[] } | { type: "Judges"; judges: JudgeEvent[] }): void {
+    if (cmd.type === "Touches") {
+      it.touchFrames.push(...cmd.frames);
+      return;
+    }
+    it.judgeEvents.push(...cmd.judges);
   }
 
   private async closeInFlight(it: InFlight): Promise<void> {
     if (it.closed) return;
-    // BUG FIX: 必须先等待队列完成，再设置 closed 标志！
-    // 否则队列中等待的任务会因为 it.closed=true 而被跳过
-    await it.queue.catch(() => {});
     it.closed = true;
-    await new Promise<void>((resolve) => {
-      it.stream.end(() => resolve());
-    });
+    await this.writeRecordFile(it);
   }
+
+  private fileInfo(it: InFlight): ReplayFileInfo {
+    return { userId: it.userId, chartId: it.chartId, timestamp: it.timestamp, path: it.path };
+  }
+
+  private buildRecordContent(it: InFlight): Buffer {
+    const w = new BinaryWriter();
+    w.writeI32(it.recordId);
+    w.writeI64(BigInt(Math.trunc(it.timestamp)));
+    w.writeI32(it.chartId);
+    w.writeString(it.chartName);
+    w.writeI32(it.userId);
+    w.writeString(it.userName);
+    w.writeArray(it.touchFrames, encodeTouchFrame);
+    w.writeArray(it.judgeEvents, encodeJudgeEvent);
+    return w.toBuffer();
+  }
+
+  private async writeRecordFile(it: InFlight): Promise<void> {
+    const content = this.buildRecordContent(it);
+    const payload = zstdCompressSync(content);
+    const header = Buffer.allocUnsafe(13);
+    phiraRecordMagic.copy(header, 0);
+    header.writeInt32LE(phiraRecordVersion, 8);
+    header.writeUInt8(compressionZstd, 12);
+    await writeFile(it.path, Buffer.concat([header, payload]));
+  }
+}
+
+function encodeTouchFrame(w: BinaryWriter, v: TouchFrame): void {
+  w.writeF32(v.time);
+  w.writeArray(v.points, (ww, [id, pos]) => {
+    ww.writeI8(id);
+    encodeCompactPos(ww, pos);
+  });
+}
+
+function encodeCompactPos(w: BinaryWriter, v: CompactPos): void {
+  w.writeCompactPos(v);
+}
+
+function encodeJudgeEvent(w: BinaryWriter, v: JudgeEvent): void {
+  w.writeF32(v.time);
+  w.writeI32(v.line_id);
+  w.writeI32(v.note_id);
+  w.writeU8(v.judgement);
 }

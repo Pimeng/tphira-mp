@@ -5,7 +5,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Client } from "../src/client/client.js";
 import { startServer } from "../src/server/core/server.js";
-import { sleep, waitFor, setupMockFetch, parsePhiraRec, createTempDir, cleanupTempDir } from "./helpers.js";
+import { sleep, waitFor, setupMockFetch, parsePhiraRec, parsePhiraRecordV2, createTempDir, cleanupTempDir } from "./helpers.js";
 import type { JudgeEvent, TouchFrame } from "../src/common/commands.js";
 
 describe("回放录制", () => {
@@ -75,6 +75,19 @@ describe("回放录制", () => {
       expect(file).toBeTruthy();
 
       const buf = await readFile(join(recordDir, file!));
+      const record = parsePhiraRecordV2(buf);
+      expect(buf.subarray(0, 8).toString("ascii")).toBe("PHIRAREC");
+      expect(record.version).toBe(1);
+      expect(record.compression).toBe(0x01);
+      expect(record.recordId).toBe(1);
+      expect(record.timestamp).toBe(Number(file!.replace(/\.phirarec$/i, "")));
+      expect(record.chartId).toBe(1);
+      expect(record.chartName).toBe("Chart-1");
+      expect(record.userId).toBe(100);
+      expect(record.userName).toBe("Alice");
+      expect(record.touchFrames).toEqual(frames);
+      expect(record.judgeEvents).toEqual(judges);
+
       const cmds = parsePhiraRec(buf);
       expect(cmds.some((c) => c.type === "Touches")).toBe(true);
       expect(cmds.some((c) => c.type === "Judges")).toBe(true);
@@ -158,10 +171,16 @@ describe("回放录制", () => {
 
       const filePath = join(dir, files[0]!);
       const buf = await readFile(filePath);
-      expect(buf.readUInt16LE(0)).toBe(0x504d);
-      expect(buf.readUInt32LE(2)).toBe(1);
-      expect(buf.readUInt32LE(6)).toBe(100);
-      expect(buf.readUInt32LE(10)).toBe(1);
+      const record = parsePhiraRecordV2(buf);
+      expect(buf.subarray(0, 8).toString("ascii")).toBe("PHIRAREC");
+      expect(record.version).toBe(1);
+      expect(record.compression).toBe(0x01);
+      expect(record.recordId).toBe(1);
+      expect(record.timestamp).toBe(ts);
+      expect(record.chartId).toBe(1);
+      expect(record.chartName).toBe("Chart-1");
+      expect(record.userId).toBe(100);
+      expect(record.userName).toBe("Alice");
 
       const authRes = await originalFetch(`http://127.0.0.1:${httpPort}/replay/auth`, {
         method: "POST",
@@ -179,10 +198,11 @@ describe("回放录制", () => {
       const dl = await originalFetch(`http://127.0.0.1:${httpPort}/replay/download?sessionToken=${encodeURIComponent(authRes.sessionToken)}&chartId=1&timestamp=${ts}`);
       expect(dl.status).toBe(200);
       const dlBuf = Buffer.from(await dl.arrayBuffer());
-      expect(dlBuf.readUInt16LE(0)).toBe(0x504d);
-      expect(dlBuf.readUInt32LE(2)).toBe(1);
-      expect(dlBuf.readUInt32LE(6)).toBe(100);
-      expect(dlBuf.readUInt32LE(10)).toBe(1);
+      const dlRecord = parsePhiraRecordV2(dlBuf);
+      expect(dlRecord.recordId).toBe(1);
+      expect(dlRecord.timestamp).toBe(ts);
+      expect(dlRecord.chartId).toBe(1);
+      expect(dlRecord.userId).toBe(100);
 
       const delRes = await originalFetch(`http://127.0.0.1:${httpPort}/replay/delete`, {
         method: "POST",

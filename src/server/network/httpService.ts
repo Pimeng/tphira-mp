@@ -556,7 +556,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
         const uploadResult = await uploadToShareStation(
           fileBuffer,
           `${timestamp}.phirarec`,
-          { chartName: undefined, username: undefined }
+          { chartName: header.chartName, username: header.userName }
         );
 
         if (!uploadResult.success) {
@@ -1318,7 +1318,10 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           logRoomInfo(state.logger, state.serverLang, room.id, "log-room-game-start", { users: usersText, monitorsSuffix });
           await room.send((c) => broadcastRoomAll(room.id, c), { type: "StartPlaying" });
           room.resetGameTime((id) => state.users.get(id));
-          if (state.replayEnabled && room.replayEligible) await state.replayRecorder.startRoom(room.id, room.chart!.id, room.userIds());
+          if (state.replayEnabled && room.replayEligible) {
+            const users = room.userIds().map((id) => ({ id, name: state.users.get(id)?.name ?? String(id) }));
+            await state.replayRecorder.startRoom(room.id, room.chart!, users);
+          }
           room.state = { type: "Playing", results: new Map(), aborted: new Set() };
           await room.onStateChange((c) => broadcastRoomAll(room.id, c));
           await room.notifyWebSocket(state);
@@ -1503,7 +1506,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
       const uploadResult = await uploadToShareStation(
         fileBuffer,
         `${timestamp}.phirarec`,
-        { chartName: undefined, username: undefined }
+        { chartName: header.chartName, username: header.userName }
       );
 
       if (!uploadResult.success) {
