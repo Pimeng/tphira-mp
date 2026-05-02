@@ -185,9 +185,9 @@ HTTP_PORT: 12347
 
 #### LOG_LEVEL
 
-日志等级，控制写入日志文件的最小等级。
+日志等级，统一控制日志文件写入和终端输出的最小等级。
 
-Log level, controls the minimum level written to log files.
+Log level, uniformly controls the minimum level for both log files and terminal output.
 
 - 类型 / Type: `string`
 - 默认值 / Default: `"INFO"`
@@ -204,27 +204,6 @@ Log level, controls the minimum level written to log files.
 示例 / Example:
 ```yaml
 LOG_LEVEL: INFO
-```
-
-注意 / Note:
-- 控制台输出等级可通过环境变量 `CONSOLE_LOG_LEVEL` 单独设置
-- Console output level can be set separately via `CONSOLE_LOG_LEVEL` environment variable
-
-#### CONSOLE_LOG_LEVEL
-
-控制台输出日志等级，控制输出到终端的最小等级。
-
-Console output log level, controls the minimum level output to terminal.
-
-- 类型 / Type: `string`
-- 默认值 / Default: `"INFO"`
-- 可选值 / Options: `"DEBUG"`, `"INFO"`, `"MARK"`, `"WARN"`, `"ERROR"`
-- 环境变量 / Environment: `CONSOLE_LOG_LEVEL`
-- **注意 / Note: 仅支持环境变量，不支持配置文件 / Only supports environment variables, not configuration file**
-
-示例 / Example:
-```bash
-export CONSOLE_LOG_LEVEL=WARN
 ```
 
 ### 网络配置 / Network Configuration
@@ -523,9 +502,9 @@ SHARE_STATION:
 
 ## 环境变量配置 / Environment Variable Configuration
 
-大部分配置项可以通过环境变量设置，环境变量名与配置文件键名相同，均为全大写。以下配置项**仅支持环境变量**，不支持配置文件：`CONSOLE_LOG_LEVEL`、`PHIRA_MP_LANG`。
+大部分配置项可以通过环境变量设置，环境变量名与配置文件键名相同，均为全大写。以下配置项**仅支持环境变量**，不支持配置文件：`PHIRA_MP_LANG`。
 
-Most configuration options can be set via environment variables with the same uppercase name as config file keys. The following options **only support environment variables**, not configuration file: `CONSOLE_LOG_LEVEL`, `PHIRA_MP_LANG`.
+Most configuration options can be set via environment variables with the same uppercase name as config file keys. The following options **only support environment variables**, not configuration file: `PHIRA_MP_LANG`.
 
 示例 / Example:
 
@@ -536,7 +515,6 @@ export PORT=12346
 export HTTP_SERVICE=true
 export ADMIN_TOKEN="your_token"
 export MONITORS="2,100,200"
-export CONSOLE_LOG_LEVEL=INFO
 
 # Windows (PowerShell)
 $env:SERVER_NAME="My Server"
@@ -599,18 +577,17 @@ Specify directory containing `locales/` and `server_config.yml`.
 docker run -e PHIRA_MP_HOME=/app ghcr.io/pimeng/tphira-mp
 ```
 
-### LOG_LEVEL / CONSOLE_LOG_LEVEL
+### LOG_LEVEL
 
 Docker 容器中的日志配置。
 
 Log configuration in Docker container.
 
-- `LOG_LEVEL`: 写入日志文件的最小等级
-- `CONSOLE_LOG_LEVEL`: 输出到终端的最小等级
+- `LOG_LEVEL`: 统一控制日志文件与终端输出的最小等级
 
 示例 / Example:
 ```bash
-docker run -e LOG_LEVEL=INFO -e CONSOLE_LOG_LEVEL=WARN ghcr.io/pimeng/tphira-mp
+docker run -e LOG_LEVEL=INFO ghcr.io/pimeng/tphira-mp
 ```
 
 ## 配置验证 / Configuration Validation
@@ -690,7 +667,7 @@ ADMIN_TOKEN: "dev_token_not_secure"
 
 环境变量 / Environment variables:
 ```bash
-export CONSOLE_LOG_LEVEL=DEBUG
+export LOG_LEVEL=DEBUG
 export PHIRA_MP_LANG=en-US
 ```
 
@@ -713,7 +690,7 @@ ROOM_LIST_TIP: "欢迎！加入群：123456"
 环境变量 / Environment variables:
 ```bash
 export ADMIN_TOKEN="your_secure_token_here"
-export CONSOLE_LOG_LEVEL=INFO
+export LOG_LEVEL=INFO
 ```
 
 ### 高性能环境 / High-Performance Environment
@@ -733,7 +710,7 @@ TEST_ACCOUNT_IDS:
 
 环境变量 / Environment variables:
 ```bash
-export CONSOLE_LOG_LEVEL=WARN
+export LOG_LEVEL=WARN
 ```
 
 ### Docker 环境 / Docker Environment
@@ -751,7 +728,7 @@ ADMIN_DATA_PATH: "/data/admin_data.json"
 
 环境变量 / Environment variables:
 ```bash
-export CONSOLE_LOG_LEVEL=INFO
+export LOG_LEVEL=INFO
 ```
 
 配合 Docker Compose:

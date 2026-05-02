@@ -111,6 +111,39 @@ describe("Logger", () => {
     expect(stdout.includes("[INFO] i2")).toBe(true);
   });
 
+  test("未显式指定 consoleMinLevel 时跟随 minLevel，而不是读取 CONSOLE_LOG_LEVEL", () => {
+    const prevConsoleLogLevel = process.env.CONSOLE_LOG_LEVEL;
+    process.env.CONSOLE_LOG_LEVEL = "ERROR";
+    try {
+      const logsDir = makeTempDir("logger-default-console-minlevel");
+      const logger = new Logger({ logsDir, minLevel: "DEBUG" });
+      logger.debug("d3");
+      logger.close();
+
+      const stdout = stdoutChunks.join("");
+      expect(stdout.includes("[DEBUG] d3")).toBe(true);
+    } finally {
+      if (prevConsoleLogLevel === undefined) delete process.env.CONSOLE_LOG_LEVEL;
+      else process.env.CONSOLE_LOG_LEVEL = prevConsoleLogLevel;
+    }
+  });
+
+  test("meta 会以 JSON 形式写入日志", async () => {
+    const logsDir = makeTempDir("logger-meta");
+    const logger = new Logger({ logsDir, minLevel: "DEBUG", consoleMinLevel: "DEBUG" });
+    logger.debug("touch-data", { frames: [{ time: 1, points: [[0, { x: 0, y: 1 }]] }] });
+
+    await new Promise<void>((resolve) => {
+      logger.close();
+      setImmediate(() => setTimeout(resolve, 30));
+    });
+
+    const logPath = join(logsDir, `${formatLocalDateKey(new Date())}.log`);
+    const content = readFileSync(logPath, "utf8");
+    expect(content).toContain("[DEBUG] touch-data");
+    expect(content).toContain('"frames":[{"time":1,"points":[[0,{"x":0,"y":1}]]}]');
+  });
+
   describe("testAccountIds 与 context.userId（测试账号不写文件）", () => {
     function readLogFile(logsDir: string): string {
       const dateKey = formatLocalDateKey(new Date());

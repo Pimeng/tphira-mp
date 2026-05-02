@@ -4,7 +4,10 @@ import { existsSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Client } from "../src/client/client.js";
+import { parseRoomId } from "../src/common/roomId.js";
+import { ReplayRecorder } from "../src/server/replay/replayRecorder.js";
 import { startServer } from "../src/server/core/server.js";
+import { Logger } from "../src/server/utils/logger.js";
 import { sleep, waitFor, setupMockFetch, parsePhiraRec, parsePhiraRecordV2, createTempDir, cleanupTempDir } from "./helpers.js";
 import type { JudgeEvent, TouchFrame } from "../src/common/commands.js";
 
@@ -98,6 +101,54 @@ describe("回放录制", () => {
       await alice.close();
       await running.close();
     }
+  });
+
+  test("回放结束时会输出每个录制的触控/判定统计", async () => {
+    tempDir = await createTempDir("replay-test-log-summary");
+
+    const debugLogs: string[] = [];
+    const logger = new Logger({
+      logsDir: tempDir,
+      minLevel: "DEBUG",
+      consoleMinLevel: "ERROR",
+      onLog: (level, message) => {
+        if (level === "DEBUG") debugLogs.push(message);
+      }
+    });
+    const recorder = new ReplayRecorder(tempDir, logger);
+    const roomId = parseRoomId("room_log_summary");
+
+    await recorder.startRoom(roomId, 1, [{ id: 100, name: "Alice" }]);
+    recorder.setRecordId(roomId, 100, 1);
+    recorder.appendTouches(roomId, 100, [{ time: 1, points: [[0, { x: 0, y: 1 }]] }]);
+    recorder.appendJudges(roomId, 100, [{ time: 1, line_id: 1, note_id: 2, judgement: 0 }]);
+    await recorder.endRoom(roomId);
+    logger.close();
+
+    expect(debugLogs).toContain("[Replay] endRoom stats: roomKey=room_log_summary, userId=100, recordId=1, touchFrames=1, judgeEvents=1");
+  });
+
+  test("回放结束时即便没有触控/判定也会输出 0 统计", async () => {
+    tempDir = await createTempDir("replay-test-zero-summary");
+
+    const debugLogs: string[] = [];
+    const logger = new Logger({
+      logsDir: tempDir,
+      minLevel: "DEBUG",
+      consoleMinLevel: "ERROR",
+      onLog: (level, message) => {
+        if (level === "DEBUG") debugLogs.push(message);
+      }
+    });
+    const recorder = new ReplayRecorder(tempDir, logger);
+    const roomId = parseRoomId("room_zero_summary");
+
+    await recorder.startRoom(roomId, 1, [{ id: 100, name: "Alice" }]);
+    recorder.setRecordId(roomId, 100, 1);
+    await recorder.endRoom(roomId);
+    logger.close();
+
+    expect(debugLogs).toContain("[Replay] endRoom stats: roomKey=room_zero_summary, userId=100, recordId=1, touchFrames=0, judgeEvents=0");
   });
 
   test("回放录制：落盘、列表、下载", async () => {

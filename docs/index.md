@@ -218,8 +218,9 @@ Check documentation first, submit issues on GitHub, or join community discussion
 
 文档会随着项目更新而持续改进。主要更新：
 
+- 2026-05: 统一日志等级配置读取，移除 CONSOLE_LOG_LEVEL 单独配置说明
 - 2026-02: 添加配置参考、架构文档和文档中心
-- 2026-02: 优化配置文档，添加 CONSOLE_LOG_LEVEL 配置
+- 2026-02: 优化配置文档，补充日志等级说明
 - 2026-02: 优化架构文档，添加核心组件详细说明
 - 2026-02: 优化插件文档，添加多模块插件示例
 - 2024-02: 添加配置参考、架构文档和文档中心

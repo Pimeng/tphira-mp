@@ -45,6 +45,16 @@ function formatLocalTimestamp(d: Date): string {
   return `${formatLocalDateKey(d)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}.${pad3(d.getMilliseconds())}`;
 }
 
+function formatMeta(meta?: Record<string, unknown>): string {
+  if (!meta || Object.keys(meta).length === 0) return "";
+  try {
+    return ` ${JSON.stringify(meta)}`;
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    return ` [meta-unserializable:${reason}]`;
+  }
+}
+
 function parseLevel(input: string | undefined, fallback: LogLevel): LogLevel {
   if (!input) return fallback;
   const v = input.toUpperCase();
@@ -84,7 +94,7 @@ export class Logger {
   constructor(options: LoggerOptions = {}) {
     this.logsDir = options.logsDir ?? "logs";
     this.minLevel = parseLevel(options.minLevel as any, "INFO");
-    this.consoleMinLevel = options.consoleMinLevel ?? parseLevel(process.env.CONSOLE_LOG_LEVEL, "INFO");
+    this.consoleMinLevel = options.consoleMinLevel ?? this.minLevel;
     this.useColor = shouldUseColor();
     this.testAccountIds = new Set(options.testAccountIds ?? []);
     this.rateLimiter = options.enableRateLimiting ? new RateLimiter() : null;
@@ -200,8 +210,8 @@ export class Logger {
   private formatLine(now: Date, level: LogLevel, message: string, meta?: Record<string, unknown>): string {
     const ts = formatLocalTimestamp(now);
     const base = `[${ts}] [${level}] ${message}`;
-    void meta;
-    return `${base}\n`;
+    const metaText = formatMeta(meta);
+    return `${base}${metaText}\n`;
   }
 
   private formatConsoleLine(line: string, level: LogLevel): string {

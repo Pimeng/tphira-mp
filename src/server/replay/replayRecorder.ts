@@ -116,6 +116,7 @@ export class ReplayRecorder {
     for (const key of keys) {
       const it = this.inflightByKey.get(key);
       if (!it) continue;
+      this.log("DEBUG", `endRoom stats: roomKey=${roomKey}, userId=${it.userId}, recordId=${it.recordId}, touchFrames=${it.touchFrames.length}, judgeEvents=${it.judgeEvents.length}`);
       this.inflightByKey.delete(key);
       tasks.push(this.closeInFlight(it).then(() => this.fileInfo(it)));
     }
