@@ -1,6 +1,6 @@
 import net from "node:net";
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync, watch, type FSWatcher } from "node:fs";
+import { basename, dirname } from "node:path";
 import yaml from "js-yaml";
 import { newUuid } from "../../common/uuid.js";
 import { decodePacket, encodePacket } from "../../common/binary.js";
@@ -21,7 +21,7 @@ import { parseProxyProtocol } from "../network/proxyProtocol.js";
 import { startCli } from "../cli/cli.js";
 import { parseRoomId, type RoomId } from "../../common/roomId.js";
 
-export type StartServerOptions = { host?: string; port?: number; config?: Partial<ServerConfig> };
+export type StartServerOptions = { host?: string; port?: number; config?: Partial<ServerConfig>; configPath?: string; watchConfig?: boolean };
 
 export type RunningServer = {
   server: net.Server;
@@ -236,12 +236,135 @@ export function loadConfigFile(configPath: string): ServerConfig {
   return parseConfigText(text);
 }
 
-function loadConfig(): ServerConfig {
-  const { configPath } = getAppPaths();
+function loadConfig(configPath: string): ServerConfig {
   if (!existsSync(configPath)) {
     return { monitors: [2] };
   }
   return loadConfigFile(configPath);
+}
+
+const CONFIG_KEYS = [
+  ["monitors", "MONITORS"],
+  ["test_account_ids", "TEST_ACCOUNT_IDS"],
+  ["server_name", "SERVER_NAME"],
+  ["host", "HOST"],
+  ["port", "PORT"],
+  ["http_service", "HTTP_SERVICE"],
+  ["http_port", "HTTP_PORT"],
+  ["room_max_users", "ROOM_MAX_USERS"],
+  ["chat_enabled", "CHAT_ENABLED"],
+  ["replay_enabled", "REPLAY_ENABLED"],
+  ["replay_base_dir", "REPLAY_BASE_DIR"],
+  ["admin_token", "ADMIN_TOKEN"],
+  ["admin_data_path", "ADMIN_DATA_PATH"],
+  ["room_list_tip", "ROOM_LIST_TIP"],
+  ["log_level", "LOG_LEVEL"],
+  ["real_ip_header", "REAL_IP_HEADER"],
+  ["haproxy_protocol", "HAPROXY_PROTOCOL"],
+  ["phira_api_endpoint", "PHIRA_API_ENDPOINT"],
+  ["outbound_proxy", "OUTBOUND_PROXY"],
+  ["share_station", "SHARE_STATION"]
+] as const satisfies ReadonlyArray<readonly [keyof ServerConfig, string]>;
+
+const STARTUP_ONLY_CONFIG_KEYS = [
+  ["host", "HOST"],
+  ["port", "PORT"],
+  ["http_service", "HTTP_SERVICE"],
+  ["http_port", "HTTP_PORT"],
+  ["admin_data_path", "ADMIN_DATA_PATH"]
+] as const satisfies ReadonlyArray<readonly [keyof ServerConfig, string]>;
+
+type ConfigWatcher = { close: () => void };
+
+function sameConfigValue(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+function changedConfigKeys(prev: ServerConfig, next: ServerConfig): string[] {
+  const out: string[] = [];
+  for (const [key, name] of CONFIG_KEYS) {
+    if (!sameConfigValue(prev[key], next[key])) out.push(name);
+  }
+  return out;
+}
+
+function keepStartupOnlyConfig(prev: ServerConfig, next: ServerConfig): { config: ServerConfig; restartRequiredKeys: string[] } {
+  const config: ServerConfig = { ...next };
+  const restartRequiredKeys: string[] = [];
+  for (const [key, name] of STARTUP_ONLY_CONFIG_KEYS) {
+    if (!sameConfigValue(prev[key], next[key])) {
+      (config as Record<keyof ServerConfig, ServerConfig[keyof ServerConfig]>)[key] = prev[key];
+      restartRequiredKeys.push(name);
+    }
+  }
+  return { config, restartRequiredKeys };
+}
+
+function startConfigFileWatcher(opts: { configPath: string; logger: Logger; onReload: () => Promise<void> }): ConfigWatcher | null {
+  const dir = dirname(opts.configPath);
+  const fileName = basename(opts.configPath);
+  let watcher: FSWatcher;
+  let timer: NodeJS.Timeout | null = null;
+  let closed = false;
+  let reloading = false;
+  let reloadAgain = false;
+
+  const scheduleReload = () => {
+    if (closed) return;
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = null;
+      void runReload();
+    }, 200);
+    timer.unref?.();
+  };
+
+  const runReload = async () => {
+    if (closed) return;
+    if (reloading) {
+      reloadAgain = true;
+      return;
+    }
+    reloading = true;
+    try {
+      await opts.onReload();
+    } catch (e) {
+      opts.logger.warn(`Config reload failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      reloading = false;
+      if (reloadAgain) {
+        reloadAgain = false;
+        scheduleReload();
+      }
+    }
+  };
+
+  try {
+    watcher = watch(dir, (_eventType, filename) => {
+      if (closed) return;
+      if (filename && String(filename) !== fileName) return;
+      scheduleReload();
+    });
+    watcher.on("error", (e) => {
+      if (!closed) opts.logger.warn(`Config watcher error: ${e instanceof Error ? e.message : String(e)}`);
+    });
+    watcher.unref?.();
+  } catch (e) {
+    opts.logger.warn(`Failed to watch config file ${opts.configPath}: ${e instanceof Error ? e.message : String(e)}`);
+    return null;
+  }
+
+  opts.logger.debug(`Watching config file: ${opts.configPath}`);
+  return {
+    close: () => {
+      closed = true;
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      watcher.close();
+    }
+  };
 }
 
 const codec: StreamCodec<ServerCommand, ClientCommand> = {
@@ -260,14 +383,19 @@ function formatNodeVersion(v: string): string {
 
 export async function startServer(options: StartServerOptions): Promise<RunningServer> {
   const paths = getAppPaths();
-  const fileCfg = loadConfig();
-  const envCfg = loadEnvConfig();
+  const configPath = options.configPath ?? paths.configPath;
   const cliCfg: Partial<ServerConfig> = {
     ...(options.config ?? {}),
     ...(options.host !== undefined ? { host: options.host } : {}),
     ...(options.port !== undefined ? { port: options.port } : {})
   };
-  const mergedCfg = mergeConfig(mergeConfig(fileCfg, envCfg), cliCfg);
+  const loadMergedConfig = (): ServerConfig => {
+    const fileCfg = loadConfig(configPath);
+    const envCfg = loadEnvConfig();
+    return mergeConfig(mergeConfig(fileCfg, envCfg), cliCfg);
+  };
+  const mergedCfg = loadMergedConfig();
+  let currentConfig = mergedCfg;
   let broadcastRoomLog: ((roomId: RoomId, message: string, timestamp: Date) => void) | null = null;
   const logger = new Logger({
     logsDir: paths.logsDir,
@@ -302,7 +430,7 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
     let remotePort = socket.remotePort ?? 0;
 
     // 如果启用了 HAProxy PROXY Protocol，尝试解析
-    if (mergedCfg.haproxy_protocol) {
+    if (state.config.haproxy_protocol) {
       try {
         const proxyInfo = await parseProxyProtocol(socket, 5000);
         if (proxyInfo) {
@@ -352,6 +480,35 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
   });
 
   let httpService: HttpService | null = null;
+  let configWatcher: ConfigWatcher | null = null;
+  const reloadRuntimeConfig = async (): Promise<void> => {
+    let nextConfig: ServerConfig;
+    try {
+      nextConfig = loadMergedConfig();
+    } catch (e) {
+      logger.warn(`Config reload skipped: ${e instanceof Error ? e.message : String(e)}`);
+      return;
+    }
+
+    const { config: effectiveConfig, restartRequiredKeys } = keepStartupOnlyConfig(currentConfig, nextConfig);
+    const changedKeys = changedConfigKeys(currentConfig, effectiveConfig);
+    if (changedKeys.length === 0 && restartRequiredKeys.length === 0) return;
+
+    state.applyConfig(effectiveConfig);
+    logger.updateOptions({
+      minLevel: effectiveConfig.log_level as any,
+      testAccountIds: effectiveConfig.test_account_ids ?? [1739989]
+    });
+    currentConfig = effectiveConfig;
+
+    if (changedKeys.length > 0) {
+      logger.mark(`Config reloaded: ${changedKeys.join(", ")}`);
+    }
+    if (restartRequiredKeys.length > 0) {
+      logger.warn(`Config changes require restart to take effect: ${restartRequiredKeys.join(", ")}`);
+    }
+  };
+
   try {
     await new Promise<void>((resolve, reject) => {
       const onError = (err: Error) => {
@@ -377,7 +534,11 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
         void httpService?.ws.broadcastRoomLog(roomId, message, timestamp).catch(() => {});
       };
     }
+    if (options.watchConfig !== false) {
+      configWatcher = startConfigFileWatcher({ configPath, logger, onReload: reloadRuntimeConfig });
+    }
   } catch (e) {
+    configWatcher?.close();
     replayCleanup.stop();
     if (httpService) await httpService.close().catch(() => {});
     if (server.listening) {
@@ -427,6 +588,7 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
     address: () => server.address() as net.AddressInfo,
     close: async () => {
       try {
+        configWatcher?.close();
         stopCli();
         broadcastRoomLog = null;
         if (httpService) await httpService.close();

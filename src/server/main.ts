@@ -18,7 +18,7 @@ function parsePort(value: string): number | null {
 function parseRoomMaxUsers(value: string): number | null {
   const n = Number(value);
   if (!Number.isInteger(n) || n < 1) return null;
-  return Math.min(n, 64);
+  return n;
 }
 
 function parseMonitors(value: string): number[] | null {

@@ -38,7 +38,7 @@ const phiraRecordVersion = 1;
 const compressionZstd = 0x01;
 
 export class ReplayRecorder {
-  private readonly _baseDir: string;
+  private _baseDir: string;
   private readonly inflightByKey = new Map<string, InFlight>();
   private readonly keysByRoom = new Map<string, Set<string>>();
   private readonly completedFilesByRoom = new Map<string, ReplayFileInfo[]>();
@@ -51,6 +51,10 @@ export class ReplayRecorder {
 
   get baseDir(): string {
     return this._baseDir;
+  }
+
+  setBaseDir(baseDir: string): void {
+    this._baseDir = baseDir;
   }
 
   private log(level: "DEBUG" | "INFO" | "WARN" | "ERROR", message: string): void {

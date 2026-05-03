@@ -80,10 +80,10 @@ function colorForLevel(level: LogLevel): string | null {
 
 export class Logger {
   private readonly logsDir: string;
-  private readonly minLevel: LogLevel;
-  private readonly consoleMinLevel: LogLevel;
+  private minLevel: LogLevel;
+  private consoleMinLevel: LogLevel;
   private readonly useColor: boolean;
-  private readonly testAccountIds: ReadonlySet<number>;
+  private testAccountIds: ReadonlySet<number>;
   private readonly rateLimiter: RateLimiter | null;
   private readonly onLog?: (level: LogLevel, message: string, timestamp: Date, context?: LogContext) => void;
   private readonly onInfoLog?: (message: string, timestamp: Date, context?: LogContext) => void;
@@ -147,6 +147,21 @@ export class Logger {
   /** 获取当前日志频率（条/秒） */
   getCurrentRate(): number {
     return this.rateLimiter?.getCurrentRate() ?? 0;
+  }
+
+  updateOptions(options: Pick<LoggerOptions, "minLevel" | "consoleMinLevel" | "testAccountIds">): void {
+    const hasMinLevel = Object.prototype.hasOwnProperty.call(options, "minLevel");
+    const hasConsoleMinLevel = Object.prototype.hasOwnProperty.call(options, "consoleMinLevel");
+    if (hasMinLevel) {
+      this.minLevel = parseLevel(options.minLevel as any, "INFO");
+      if (!hasConsoleMinLevel) this.consoleMinLevel = this.minLevel;
+    }
+    if (hasConsoleMinLevel && options.consoleMinLevel !== undefined) {
+      this.consoleMinLevel = parseLevel(options.consoleMinLevel as any, this.consoleMinLevel);
+    }
+    if (Object.prototype.hasOwnProperty.call(options, "testAccountIds") && options.testAccountIds !== undefined) {
+      this.testAccountIds = new Set(options.testAccountIds);
+    }
   }
 
   close(): void {

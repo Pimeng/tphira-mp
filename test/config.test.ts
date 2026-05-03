@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { loadConfigFile, parseConfigText } from "../src/server/core/server.js";
+import { loadConfigFile, parseConfigText, startServer } from "../src/server/core/server.js";
+import { waitFor } from "./helpers.js";
 
 describe("配置文件解析", () => {
   let tempDir: string;
@@ -138,5 +139,49 @@ MONITORS:
     expect(config.server_name).toBe("测试服务器");
     expect(config.room_list_tip).toBe("欢迎加入交流群");
     expect(config.monitors).toEqual([2]);
+  });
+
+  it("watches config file changes and updates runtime config", async () => {
+    writeFileSync(
+      configPath,
+      `
+SERVER_NAME: "Before"
+MONITORS:
+  - 2
+ROOM_MAX_USERS: 8
+REPLAY_ENABLED: false
+REPLAY_BASE_DIR: "./record-before"
+`,
+      "utf8"
+    );
+
+    const running = await startServer({ port: 0, configPath });
+    try {
+      expect(running.state.serverName).toBe("Before");
+      expect(running.state.config.monitors).toEqual([2]);
+      expect(running.state.replayEnabled).toBe(false);
+      expect(running.state.replayRecorder.baseDir).toBe("./record-before");
+
+      writeFileSync(
+        configPath,
+        `
+SERVER_NAME: "After"
+MONITORS:
+  - 123
+ROOM_MAX_USERS: 3
+REPLAY_ENABLED: true
+REPLAY_BASE_DIR: "./record-after"
+`,
+        "utf8"
+      );
+
+      await waitFor(() => running.state.serverName === "After", 3000);
+      expect(running.state.config.monitors).toEqual([123]);
+      expect(running.state.config.room_max_users).toBe(3);
+      expect(running.state.replayEnabled).toBe(true);
+      expect(running.state.replayRecorder.baseDir).toBe("./record-after");
+    } finally {
+      await running.close();
+    }
   });
 });

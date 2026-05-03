@@ -29,9 +29,9 @@ type AutoUploadDataFile = {
 
 export class ServerState {
   readonly mutex = new Mutex();
-  readonly config: ServerConfig;
+  config: ServerConfig;
   readonly logger: Logger;
-  readonly serverName: string;
+  serverName: string;
   readonly serverLang: Language;
   readonly adminDataPath: string;
   replayEnabled: boolean;
@@ -82,6 +82,13 @@ export class ServerState {
     this.roomCreationEnabled = true;
     const replayBaseDir = config.replay_base_dir ?? defaultReplayBaseDir();
     this.replayRecorder = new ReplayRecorder(replayBaseDir, logger);
+  }
+
+  applyConfig(config: ServerConfig): void {
+    this.config = config;
+    this.serverName = config.server_name || "Phira MP";
+    this.replayEnabled = Boolean(config.replay_enabled);
+    this.replayRecorder.setBaseDir(config.replay_base_dir ?? defaultReplayBaseDir());
   }
 
   private snapshotAdminData(): AdminDataFile {
