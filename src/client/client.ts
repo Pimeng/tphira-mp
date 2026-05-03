@@ -24,7 +24,11 @@ type Pending<T> = {
   timer: NodeJS.Timeout;
 };
 
-type RCallback<T> = Pending<StringResult<T>> | null;
+/** 服务端会以同名 type 回包的 RPC 命令；用作回调表的 key */
+type RpcReplyType =
+  | "Authenticate" | "Chat" | "CreateRoom" | "JoinRoom" | "LeaveRoom"
+  | "LockRoom" | "CycleRoom" | "SelectChart" | "RequestStart"
+  | "Ready" | "CancelReady" | "Played" | "Abort";
 
 export type LivePlayer = {
   touch_frames: TouchFrame[];
@@ -44,23 +48,10 @@ export class Client {
   private readonly timeoutMs: number;
   private stream: Stream<ClientCommand, ServerCommand> | null = null;
   private pingTimer: NodeJS.Timeout | null = null;
-  private lastPingAt: number | null = null;
 
   private pongWaiter: Pending<void> | null = null;
-
-  private cbAuthenticate: RCallback<[UserInfo, ClientRoomState | null]> = null;
-  private cbChat: RCallback<Record<never, never>> = null;
-  private cbCreateRoom: RCallback<Record<never, never>> = null;
-  private cbJoinRoom: RCallback<JoinRoomResponse> = null;
-  private cbLeaveRoom: RCallback<Record<never, never>> = null;
-  private cbLockRoom: RCallback<Record<never, never>> = null;
-  private cbCycleRoom: RCallback<Record<never, never>> = null;
-  private cbSelectChart: RCallback<Record<never, never>> = null;
-  private cbRequestStart: RCallback<Record<never, never>> = null;
-  private cbReady: RCallback<Record<never, never>> = null;
-  private cbCancelReady: RCallback<Record<never, never>> = null;
-  private cbPlayed: RCallback<Record<never, never>> = null;
-  private cbAbort: RCallback<Record<never, never>> = null;
+  /** key 是 RpcReplyType,即等待回包的命令类型 */
+  private readonly callbacks = new Map<RpcReplyType, Pending<StringResult<unknown>>>();
 
   private meValue: UserInfo | null = null;
   private roomValue: ClientRoomState | null = null;
@@ -152,10 +143,7 @@ export class Client {
   }
 
   async authenticate(token: string): Promise<void> {
-    const res = await this.rcall<[UserInfo, ClientRoomState | null]>(
-      { type: "Authenticate", token },
-      (p) => (this.cbAuthenticate = p)
-    );
+    const res = await this.rcall<[UserInfo, ClientRoomState | null]>("Authenticate", { type: "Authenticate", token });
     if (!res.ok) throw new Error(res.error);
     const [me, room] = res.value;
     this.meValue = me;
@@ -163,12 +151,12 @@ export class Client {
   }
 
   async chat(message: string): Promise<void> {
-    await this.rcallUnit({ type: "Chat", message }, (p) => (this.cbChat = p));
+    await this.rcallUnit("Chat", { type: "Chat", message });
   }
 
   async createRoom(id: string): Promise<void> {
     const roomId = parseRoomId(id);
-    await this.rcallUnit({ type: "CreateRoom", id: roomId }, (p) => (this.cbCreateRoom = p));
+    await this.rcallUnit("CreateRoom", { type: "CreateRoom", id: roomId });
     const me = this.meValue;
     if (!me) return;
     const users = new Map<number, UserInfo>();
@@ -187,7 +175,7 @@ export class Client {
 
   async joinRoom(id: string, monitor: boolean): Promise<JoinRoomResponse> {
     const roomId = parseRoomId(id);
-    const res = await this.rcall<JoinRoomResponse>({ type: "JoinRoom", id: roomId, monitor }, (p) => (this.cbJoinRoom = p));
+    const res = await this.rcall<JoinRoomResponse>("JoinRoom", { type: "JoinRoom", id: roomId, monitor });
     if (!res.ok) throw new Error(res.error);
     const users = new Map<number, UserInfo>();
     for (const u of res.value.users) users.set(u.id, u);
@@ -205,44 +193,44 @@ export class Client {
   }
 
   async leaveRoom(): Promise<void> {
-    await this.rcallUnit({ type: "LeaveRoom" }, (p) => (this.cbLeaveRoom = p));
+    await this.rcallUnit("LeaveRoom", { type: "LeaveRoom" });
     this.roomValue = null;
   }
 
   async lockRoom(lock: boolean): Promise<void> {
-    await this.rcallUnit({ type: "LockRoom", lock }, (p) => (this.cbLockRoom = p));
+    await this.rcallUnit("LockRoom", { type: "LockRoom", lock });
     if (this.roomValue) this.roomValue.locked = lock;
   }
 
   async cycleRoom(cycle: boolean): Promise<void> {
-    await this.rcallUnit({ type: "CycleRoom", cycle }, (p) => (this.cbCycleRoom = p));
+    await this.rcallUnit("CycleRoom", { type: "CycleRoom", cycle });
     if (this.roomValue) this.roomValue.cycle = cycle;
   }
 
   async selectChart(id: number): Promise<void> {
-    await this.rcallUnit({ type: "SelectChart", id }, (p) => (this.cbSelectChart = p));
+    await this.rcallUnit("SelectChart", { type: "SelectChart", id });
   }
 
   async requestStart(): Promise<void> {
-    await this.rcallUnit({ type: "RequestStart" }, (p) => (this.cbRequestStart = p));
+    await this.rcallUnit("RequestStart", { type: "RequestStart" });
   }
 
   async ready(): Promise<void> {
-    await this.rcallUnit({ type: "Ready" }, (p) => (this.cbReady = p));
+    await this.rcallUnit("Ready", { type: "Ready" });
     if (this.roomValue) this.roomValue.is_ready = true;
   }
 
   async cancelReady(): Promise<void> {
-    await this.rcallUnit({ type: "CancelReady" }, (p) => (this.cbCancelReady = p));
+    await this.rcallUnit("CancelReady", { type: "CancelReady" });
     if (this.roomValue) this.roomValue.is_ready = false;
   }
 
   async played(id: number): Promise<void> {
-    await this.rcallUnit({ type: "Played", id }, (p) => (this.cbPlayed = p));
+    await this.rcallUnit("Played", { type: "Played", id });
   }
 
   async abort(): Promise<void> {
-    await this.rcallUnit({ type: "Abort" }, (p) => (this.cbAbort = p));
+    await this.rcallUnit("Abort", { type: "Abort" });
   }
 
   async sendTouches(frames: TouchFrame[]): Promise<void> {
@@ -314,53 +302,30 @@ export class Client {
       this.pongWaiter = null;
       pong.reject(e);
     }
-
-    this.rejectCb(this.cbAuthenticate, (v) => (this.cbAuthenticate = v), e);
-    this.rejectCb(this.cbChat, (v) => (this.cbChat = v), e);
-    this.rejectCb(this.cbCreateRoom, (v) => (this.cbCreateRoom = v), e);
-    this.rejectCb(this.cbJoinRoom, (v) => (this.cbJoinRoom = v), e);
-    this.rejectCb(this.cbLeaveRoom, (v) => (this.cbLeaveRoom = v), e);
-    this.rejectCb(this.cbLockRoom, (v) => (this.cbLockRoom = v), e);
-    this.rejectCb(this.cbCycleRoom, (v) => (this.cbCycleRoom = v), e);
-    this.rejectCb(this.cbSelectChart, (v) => (this.cbSelectChart = v), e);
-    this.rejectCb(this.cbRequestStart, (v) => (this.cbRequestStart = v), e);
-    this.rejectCb(this.cbReady, (v) => (this.cbReady = v), e);
-    this.rejectCb(this.cbCancelReady, (v) => (this.cbCancelReady = v), e);
-    this.rejectCb(this.cbPlayed, (v) => (this.cbPlayed = v), e);
-    this.rejectCb(this.cbAbort, (v) => (this.cbAbort = v), e);
+    for (const [, cb] of this.callbacks) {
+      clearTimeout(cb.timer);
+      cb.reject(e);
+    }
+    this.callbacks.clear();
   }
 
-  private rejectCb<T>(cb: RCallback<T>, set: (v: RCallback<T>) => void, e: Error): void {
-    if (!cb) return;
-    clearTimeout(cb.timer);
-    set(null);
-    cb.reject(e);
-  }
-
-  private makePending<T>(timeoutMs: number, onTimeout: () => void): Pending<T> {
-    const pending = {
-      resolve: (_: T) => {},
-      reject: (_: Error) => {},
-      timer: setTimeout(() => {
-        onTimeout();
-        pending.reject(new Error("client-timeout"));
-      }, timeoutMs)
-    };
-    return pending;
-  }
-
-  private async rcall<T>(cmd: ClientCommand, setCb: (p: Pending<StringResult<T>>) => void): Promise<StringResult<T>> {
+  private async rcall<T>(replyType: RpcReplyType, cmd: ClientCommand): Promise<StringResult<T>> {
     await this.send(cmd);
-    const pending = this.makePending<StringResult<T>>(this.timeoutMs, () => {});
-    setCb(pending);
     return await new Promise<StringResult<T>>((resolve, reject) => {
-      pending.resolve = resolve;
-      pending.reject = reject;
+      const timer = setTimeout(() => {
+        this.callbacks.delete(replyType);
+        reject(new Error("client-timeout"));
+      }, this.timeoutMs);
+      this.callbacks.set(replyType, {
+        timer,
+        resolve: resolve as (v: StringResult<unknown>) => void,
+        reject
+      });
     });
   }
 
-  private async rcallUnit(cmd: ClientCommand, setCb: (p: Pending<StringResult<Record<never, never>>>) => void): Promise<void> {
-    const res = await this.rcall<Record<never, never>>(cmd, setCb);
+  private async rcallUnit(replyType: RpcReplyType, cmd: ClientCommand): Promise<void> {
+    const res = await this.rcall<Record<never, never>>(replyType, cmd);
     if (!res.ok) throw new Error(res.error);
   }
 
@@ -368,45 +333,6 @@ export class Client {
     switch (cmd.type) {
       case "Pong":
         this.resolvePongWaiter();
-        return;
-      case "Authenticate":
-        this.finishCb(this.cbAuthenticate, cmd.result, (p) => (this.cbAuthenticate = p));
-        return;
-      case "Chat":
-        this.finishCb(this.cbChat, cmd.result, (p) => (this.cbChat = p));
-        return;
-      case "CreateRoom":
-        this.finishCb(this.cbCreateRoom, cmd.result, (p) => (this.cbCreateRoom = p));
-        return;
-      case "JoinRoom":
-        this.finishCb(this.cbJoinRoom, cmd.result, (p) => (this.cbJoinRoom = p));
-        return;
-      case "LeaveRoom":
-        this.finishCb(this.cbLeaveRoom, cmd.result, (p) => (this.cbLeaveRoom = p));
-        return;
-      case "LockRoom":
-        this.finishCb(this.cbLockRoom, cmd.result, (p) => (this.cbLockRoom = p));
-        return;
-      case "CycleRoom":
-        this.finishCb(this.cbCycleRoom, cmd.result, (p) => (this.cbCycleRoom = p));
-        return;
-      case "SelectChart":
-        this.finishCb(this.cbSelectChart, cmd.result, (p) => (this.cbSelectChart = p));
-        return;
-      case "RequestStart":
-        this.finishCb(this.cbRequestStart, cmd.result, (p) => (this.cbRequestStart = p));
-        return;
-      case "Ready":
-        this.finishCb(this.cbReady, cmd.result, (p) => (this.cbReady = p));
-        return;
-      case "CancelReady":
-        this.finishCb(this.cbCancelReady, cmd.result, (p) => (this.cbCancelReady = p));
-        return;
-      case "Played":
-        this.finishCb(this.cbPlayed, cmd.result, (p) => (this.cbPlayed = p));
-        return;
-      case "Abort":
-        this.finishCb(this.cbAbort, cmd.result, (p) => (this.cbAbort = p));
         return;
       case "Message":
         this.messages.push(cmd.message);
@@ -438,14 +364,29 @@ export class Client {
         p.judge_events.push(...cmd.judges);
         return;
       }
+      case "Authenticate":
+      case "Chat":
+      case "CreateRoom":
+      case "JoinRoom":
+      case "LeaveRoom":
+      case "LockRoom":
+      case "CycleRoom":
+      case "SelectChart":
+      case "RequestStart":
+      case "Ready":
+      case "CancelReady":
+      case "Played":
+      case "Abort":
+        this.finishCallback(cmd.type, cmd.result);
+        return;
     }
   }
 
-  private finishCb<T>(cb: RCallback<T>, value: StringResult<T>, set: (v: RCallback<T>) => void): void {
-    const pending = cb;
-    if (!pending) return;
-    clearTimeout(pending.timer);
-    set(null);
-    pending.resolve(value);
+  private finishCallback(replyType: RpcReplyType, value: StringResult<unknown>): void {
+    const cb = this.callbacks.get(replyType);
+    if (!cb) return;
+    this.callbacks.delete(replyType);
+    clearTimeout(cb.timer);
+    cb.resolve(value);
   }
 }

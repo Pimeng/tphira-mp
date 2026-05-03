@@ -2,9 +2,8 @@ import type net from "node:net";
 import { err, ok, type StringResult } from "../../common/binary.js";
 import type { ClientCommand, ClientRoomState, JoinRoomResponse, ServerCommand } from "../../common/commands.js";
 import { HEARTBEAT_DISCONNECT_TIMEOUT_MS } from "../../common/commands.js";
-import { parseRoomId } from "../../common/roomId.js";
 import type { Stream } from "../../common/stream.js";
-import { fetchWithTimeout, fetchWithRetry } from "../../common/http.js";
+import { fetchWithRetry } from "../../common/http.js";
 import type { Room } from "../game/room.js";
 import { Room as RoomClass } from "../game/room.js";
 import { refreshRoomLive as refreshRoomLiveState } from "../game/roomUtils.js";
@@ -13,7 +12,7 @@ import type { Chart, RecordData } from "../core/types.js";
 import { User } from "../game/user.js";
 import { tl, type Language } from "../utils/l10n.js";
 import { chartCache } from "../utils/cache.js";
-import { getHitokotoCached, type HitokotoValue } from "../utils/hitokotoCache.js";
+import { getHitokotoCached } from "../utils/hitokotoCache.js";
 import { logRoomInfo, logRoomMark, logRoomWarn } from "../utils/logUtils.js";
 
 const DEFAULT_PHIRA_API_ENDPOINT = "https://phira.5wyxi.com";
@@ -176,9 +175,7 @@ export class Session {
       await this.trySend({ type: "Authenticate", result: ok([user.toInfo(), roomState]) });
       
       // 立即刷新发送批量，确保认证响应快速发送
-      if (this.stream) {
-        await (this.stream as any).flushSendBatch?.();
-      }
+      await this.stream?.flushSendBatch();
       
       this.waitingForAuthenticate = false;
 
@@ -203,9 +200,7 @@ export class Session {
       await this.trySend({ type: "Authenticate", result: err(localized) });
       
       // 立即刷新发送批量
-      if (this.stream) {
-        await (this.stream as any).flushSendBatch?.();
-      }
+      await this.stream?.flushSendBatch();
       
       this.panicked = true;
       await this.markLost();

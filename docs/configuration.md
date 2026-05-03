@@ -328,19 +328,23 @@ Base directory for replay recording files.
 REPLAY_BASE_DIR: "./record"
 ```
 
-#### PHIRA_MP_LANG
+#### LANG
 
-服务器默认语言。
+服务器默认语言，影响日志、CLI 控制台、HTTP 默认输出语言。
 
-Server default language.
+Server default language. Affects logs, CLI console, and default HTTP output language.
 
 - 类型 / Type: `string`
-- 默认值 / Default: `"zh-CN"`（自动检测系统语言 / Auto-detect system language）
+- 默认值 / Default: `"zh-CN"`（按 ENV/系统区域协商；不识别时回退 / Negotiated against ENV and system locale, falls back when unknown）
 - 可选值 / Options: `"zh-CN"`, `"en-US"`
-- 环境变量 / Environment: `PHIRA_MP_LANG` 或 `LANG`
-- **注意 / Note: 仅支持环境变量，不支持配置文件 / Only supports environment variables, not configuration file**
+- 环境变量 / Environment: `PHIRA_MP_LANG`（优先）或 `LANG` / `PHIRA_MP_LANG` (preferred) or `LANG`
+- 优先级 / Priority: `PHIRA_MP_LANG` ENV > `LANG` ENV > 配置文件 / config file > 默认 / default
+- 兼容 POSIX 形式（如 `en_US.UTF-8` 自动归一为 `en-US`）/ POSIX style accepted (e.g. `en_US.UTF-8` is normalized to `en-US`)
 
 示例 / Example:
+```yaml
+LANG: en-US
+```
 ```bash
 export PHIRA_MP_LANG=en-US
 ```
@@ -541,9 +545,9 @@ SHARE_STATION:
 
 ## 环境变量配置 / Environment Variable Configuration
 
-大部分配置项可以通过环境变量设置，环境变量名与配置文件键名相同，均为全大写。以下配置项**仅支持环境变量**，不支持配置文件：`PHIRA_MP_LANG`。
+所有配置项均可通过环境变量设置，环境变量名与配置文件键名相同，均为全大写。语言项 `LANG` 在 ENV 中可用 `PHIRA_MP_LANG` 作为更明确的别名（优先于系统 `LANG`）。
 
-Most configuration options can be set via environment variables with the same uppercase name as config file keys. The following options **only support environment variables**, not configuration file: `PHIRA_MP_LANG`.
+All configuration options can be set via environment variables with the same uppercase name as config file keys. For the language option `LANG`, the more specific alias `PHIRA_MP_LANG` is also accepted (preferred over the system `LANG`).
 
 示例 / Example:
 

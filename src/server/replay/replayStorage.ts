@@ -1,7 +1,12 @@
 import { mkdir, open, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { deflateSync, inflateSync, zstdCompressSync, zstdDecompressSync } from "node:zlib";
 import { BinaryReader } from "../../common/binary.js";
+import {
+  PHIRA_RECORD_HEADER_SIZE,
+  decodePhiraRecordPayload,
+  encodePhiraRecordPayload,
+  isPhiraRecordV2
+} from "./replayFormat.js";
 
 export type ReplayHeader = {
   chartId: number;
@@ -20,12 +25,6 @@ export type ReplayEntry = {
   recordId: number;
   path: string;
 };
-
-const phiraRecordMagic = Buffer.from("PHIRAREC", "ascii");
-const phiraRecordHeaderSize = 13;
-const compressionNone = 0x00;
-const compressionZstd = 0x01;
-const compressionDeflate = 0x02;
 
 export function defaultReplayBaseDir(): string {
   return join(process.cwd(), "record");
@@ -74,10 +73,6 @@ export async function readReplayHeader(filePath: string): Promise<ReplayHeader |
   return { chartId, userId, recordId };
 }
 
-function isPhiraRecordV2(buf: Buffer): boolean {
-  return buf.length >= phiraRecordHeaderSize && buf.subarray(0, 8).equals(phiraRecordMagic);
-}
-
 function readPhiraRecordV2Header(buf: Buffer): ReplayHeader | null {
   const version = buf.readInt32LE(8);
   if (version !== 1) return null;
@@ -92,34 +87,6 @@ function readPhiraRecordV2Header(buf: Buffer): ReplayHeader | null {
   const userId = r.readI32();
   const userName = r.readString();
   return { chartId, userId, recordId, timestamp, chartName, userName, version, compression };
-}
-
-function decodePhiraRecordPayload(buf: Buffer): Buffer {
-  const compression = buf.readUInt8(12);
-  const payload = buf.subarray(phiraRecordHeaderSize);
-  switch (compression) {
-    case compressionNone:
-      return payload;
-    case compressionDeflate:
-      return inflateSync(payload);
-    case compressionZstd:
-      return zstdDecompressSync(payload);
-    default:
-      throw new Error(`replay-compression-unsupported:${compression}`);
-  }
-}
-
-function encodePhiraRecordPayload(content: Buffer, compression: number): Buffer {
-  switch (compression) {
-    case compressionNone:
-      return content;
-    case compressionDeflate:
-      return deflateSync(content);
-    case compressionZstd:
-      return zstdCompressSync(content);
-    default:
-      throw new Error(`replay-compression-unsupported:${compression}`);
-  }
 }
 
 function parseTimestampFromName(name: string): number | null {
@@ -239,7 +206,7 @@ export async function patchReplayRecordId(filePath: string, recordId: number): P
     const compression = file.readUInt8(12);
     const content = Buffer.from(decodePhiraRecordPayload(file));
     content.writeInt32LE(recordId | 0, 0);
-    const header = Buffer.from(file.subarray(0, phiraRecordHeaderSize));
+    const header = Buffer.from(file.subarray(0, PHIRA_RECORD_HEADER_SIZE));
     const payload = encodePhiraRecordPayload(content, compression);
     await writeFile(filePath, Buffer.concat([header, payload]));
     return;

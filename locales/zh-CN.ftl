@@ -157,3 +157,131 @@ room-disbanded-by-admin = 房间已被管理员解散
 
 log-websocket-connected = WebSocket 客户端已连接，当前连接数：{ $total }
 log-websocket-disconnected = WebSocket 客户端已断开，当前连接数：{ $total }
+
+# ====== CLI 控制台 ======
+
+cli-bad-user-id = 无效的用户ID
+cli-bad-room-id = 无效的房间ID
+cli-message-empty = 消息不能为空
+cli-message-too-long = 消息过长（最多 { $max } 字符）
+
+cli-stop-hint = 使用 Ctrl+C 停止服务器
+cli-unknown-command = 未知命令：{ $cmd }。输入 'help' 查看可用命令
+cli-command-failed = 命令执行失败：{ $reason }
+
+cli-help =
+
+    === Phira MP 服务器命令 ===
+    help                          - 显示此帮助信息
+    list, rooms                   - 列出所有房间
+    users                         - 列出所有在线用户
+    user <id>                     - 查看用户信息
+    kick <userId> [preserve]      - 踢出用户（preserve=true 保留房间槽位）
+    ban <userId>                  - 在服务器封禁用户
+    unban <userId>                - 解封用户
+    banlist                       - 查看封禁列表
+    banroom <userId> <roomId>     - 禁止用户进入房间
+    unbanroom <userId> <roomId>   - 解除房间禁入
+    broadcast <message>           - 全服广播
+    say <message>                 - 全服广播（broadcast 别名）
+    roomsay <roomId> <message>    - 向指定房间发送消息
+    maxusers <roomId> <count>     - 设置房间最大人数
+    disband <roomId>              - 解散房间
+    replay <on|off|status>        - 回放录制开关
+    roomcreation <on|off|status>  - 房间创建开关
+    contest <roomId> <subcommand> - 比赛房间管理
+      contest <roomId> enable [userIds...]    - 启用比赛模式
+      contest <roomId> disable                - 禁用比赛模式
+      contest <roomId> whitelist <userIds...> - 设置白名单
+      contest <roomId> start [force]          - 手动开始比赛
+    ipblacklist <list|remove|clear> - IP 黑名单管理
+
+cli-no-rooms = 当前没有房间
+cli-rooms-total = 房间总数：{ $count }
+cli-room-line = [{ $id }] { $state } | 玩家：{ $users }/{ $maxUsers } | 观战：{ $monitors } | 谱面：{ $chart } | 锁定：{ $locked } | 循环：{ $cycle } | 比赛：{ $contest }
+
+cli-no-users = 当前没有在线用户
+cli-users-total = 在线用户总数：{ $count }
+cli-user-line = [{ $id }] { $name } | { $status } | { $role } | 房间：{ $room }{ $bannedTag }
+cli-user-status-online = 在线
+cli-user-status-offline = 离线
+cli-user-role-monitor = 观战
+cli-user-role-player = 玩家
+cli-user-banned-tag =  [已封禁]
+cli-none = 无
+cli-yes = 是
+cli-no = 否
+cli-state-on = 开启
+cli-state-off = 关闭
+cli-room-state-playing = 游戏中
+cli-room-state-waiting = 等待准备
+cli-room-state-select = 选择谱面
+cli-bool-yes = 是
+cli-bool-no = 否
+
+cli-usage-user = 用法：user <userId>
+cli-usage-kick = 用法：kick <userId> [preserve]
+cli-usage-ban = 用法：ban <userId>
+cli-usage-unban = 用法：unban <userId>
+cli-usage-banroom = 用法：banroom <userId> <roomId>
+cli-usage-unbanroom = 用法：unbanroom <userId> <roomId>
+cli-usage-broadcast = 用法：broadcast <message>
+cli-usage-roomsay = 用法：roomsay <roomId> <message>
+cli-usage-maxusers = 用法：maxusers <roomId> <count>
+cli-usage-disband = 用法：disband <roomId>
+cli-usage-replay = 用法：replay <on|off|status>
+cli-usage-roomcreation = 用法：roomcreation <on|off|status>
+cli-usage-contest = 用法：contest <roomId> <enable|disable|whitelist|start>
+cli-usage-ipblacklist = 用法：ipblacklist <list|remove|clear>
+cli-usage-ipblacklist-remove = 用法：ipblacklist remove <ip>
+
+cli-user-not-found = 用户不存在：{ $id }
+cli-user-info-header = 用户信息：
+cli-user-info-id =   ID：{ $id }
+cli-user-info-name =   名称：{ $name }
+cli-user-info-status =   状态：{ $status }
+cli-user-info-role =   角色：{ $role }
+cli-user-info-room =   房间：{ $room }
+cli-user-info-banned =   封禁：{ $banned }
+cli-user-info-game-time =   游戏时间：{ $time }
+cli-user-info-language =   语言：{ $lang }
+
+cli-user-not-connected = 用户未连接：{ $id }
+cli-user-kicked = 已踢出用户：{ $id }
+cli-user-banned = 已封禁用户：{ $id }
+cli-user-unbanned = 已解封用户：{ $id }
+cli-no-banned-users = 当前没有被封禁的用户
+cli-banned-list-header = 封禁用户列表（共 { $count } 个）：
+cli-room-user-banned = 已禁止用户 { $userId } 进入房间 { $room }
+cli-room-user-unbanned = 已解除用户 { $userId } 对房间 { $room } 的禁入
+cli-broadcast-sent = 已向 { $count } 个房间广播消息
+cli-room-not-found = 房间不存在
+cli-room-not-found-named = 房间不存在：{ $room }
+cli-room-message-sent = 已向房间 { $room } 发送消息
+cli-bad-max-users = 无效的人数（1-64）
+cli-room-max-users-set = 已设置房间 { $room } 最大人数为 { $count }
+cli-room-disbanded = 已解散房间 { $room }
+
+cli-replay-status = 回放录制状态：{ $state }
+cli-replay-toggled-on = 回放录制已开启
+cli-replay-toggled-off = 回放录制已关闭
+cli-room-creation-status = 房间创建状态：{ $state }
+cli-room-creation-toggled-on = 房间创建已开启
+cli-room-creation-toggled-off = 房间创建已关闭
+
+cli-contest-enabled = 已启用房间 { $room } 的比赛模式
+cli-contest-disabled = 已禁用房间 { $room } 的比赛模式
+cli-contest-no-user-id = 请提供至少一个用户ID
+cli-contest-not-enabled = 房间不存在或未启用比赛模式
+cli-contest-whitelist-updated = 已更新房间 { $room } 的白名单
+cli-contest-cannot-start = 无法开始比赛：{ $reason }
+cli-contest-started = 已开始房间 { $room } 的比赛
+cli-contest-unknown-subcommand = 未知子命令。可用：enable、disable、whitelist、start
+
+cli-blacklist-empty = IP 黑名单为空
+cli-blacklist-header = IP 黑名单（共 { $count } 个）：
+cli-blacklist-line =   { $ip }（{ $minutes } 分钟后过期）
+cli-blacklist-removed = 已从黑名单移除：{ $ip }
+cli-blacklist-cleared = 已清空 IP 黑名单
+cli-ipblacklist-unknown-subcommand = 未知子命令。可用：list、remove、clear
+

@@ -21,18 +21,12 @@ export type AutoUploadConfig = {
   show: boolean;
 };
 
-/** 自动上传数据文件格式 */
-type AutoUploadDataFile = { 
-  version: 1; 
-  configs: Record<string, AutoUploadConfig>; // key: userId.toString()
-};
-
 export class ServerState {
   readonly mutex = new Mutex();
   config: ServerConfig;
   readonly logger: Logger;
   serverName: string;
-  readonly serverLang: Language;
+  serverLang: Language;
   readonly adminDataPath: string;
   replayEnabled: boolean;
   roomCreationEnabled: boolean;
@@ -76,7 +70,7 @@ export class ServerState {
     this.config = config;
     this.logger = logger;
     this.serverName = serverName;
-    this.serverLang = new Language(process.env.PHIRA_MP_LANG?.trim() || process.env.LANG?.trim() || "");
+    this.serverLang = new Language(config.lang ?? "");
     this.adminDataPath = adminDataPath;
     this.replayEnabled = Boolean(config.replay_enabled);
     this.roomCreationEnabled = true;
@@ -87,6 +81,7 @@ export class ServerState {
   applyConfig(config: ServerConfig): void {
     this.config = config;
     this.serverName = config.server_name || "Phira MP";
+    this.serverLang = new Language(config.lang ?? "");
     this.replayEnabled = Boolean(config.replay_enabled);
     this.replayRecorder.setBaseDir(config.replay_base_dir ?? defaultReplayBaseDir());
   }

@@ -1,32 +1,36 @@
 import http from "node:http";
 import type net from "node:net";
 import { once } from "node:events";
-import { createReadStream, createWriteStream } from "node:fs";
-import { stat, readFile, unlink, mkdir, writeFile } from "node:fs/promises";
-import { pipeline } from "node:stream/promises";
-import { dirname, join } from "node:path";
-import { parseRoomId, roomIdToString, type RoomId } from "../../common/roomId.js";
+import { createReadStream } from "node:fs";
+import { stat, readFile, writeFile } from "node:fs/promises";
+import { roomIdToString, type RoomId } from "../../common/roomId.js";
 import { newUuid } from "../../common/uuid.js";
-import { 
-  getClientIp, 
-  applyCors, 
-  writeJson, 
-  readJson, 
+import {
+  getClientIp,
+  applyCors,
+  writeJson,
+  readJson,
   extractAdminToken,
   handleOptionsRequest,
   fetchWithTimeout,
   fetchWithRetry
 } from "../../common/http.js";
-import { cleanupExpiredSessions } from "../../common/utils.js";
 import type { ServerState } from "../core/state.js";
 import { Language, tl } from "../utils/l10n.js";
 import type { ServerCommand } from "../../common/commands.js";
-import { defaultReplayBaseDir, deleteReplayForUser, listReplaysForUser, readReplayHeader, replayFilePath } from "../replay/replayStorage.js";
-import type { AutoUploadConfig } from "../core/state.js";
+import { deleteReplayForUser, listReplaysForUser, readReplayHeader, replayFilePath } from "../replay/replayStorage.js";
 import { startWebSocketService, type WebSocketService } from "../network/websocketService.js";
 import { getAppPaths } from "../utils/appPaths.js";
 import { logRoomInfo } from "../utils/logUtils.js";
 import { refreshRoomLive } from "../game/roomUtils.js";
+import { buildAdminRoomsData } from "../game/adminViews.js";
+import {
+  abortPlayingUserAndCheckReady,
+  cleanupExpiringMaps,
+  encodeMultipartFormData,
+  parseRoomIdOrWriteError,
+  verifyUserTokenViaApi
+} from "./httpHelpers.js";
 import yaml from "js-yaml";
 
 export type HttpService = {
@@ -62,20 +66,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
   /**
    * 验证用户TOKEN并获取用户ID
    */
-  const verifyUserToken = async (token: string): Promise<number | null> => {
-    const phiraApiEndpoint = state.config.phira_api_endpoint || "https://phira.5wyxi.com";
-    try {
-      const resp = await fetchWithRetry(`${phiraApiEndpoint}/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-        proxy: state.config.outbound_proxy
-      }, 8000);
-      if (!resp.ok) return null;
-      const data = await resp.json() as { id: number };
-      return Number.isInteger(data.id) ? data.id : null;
-    } catch {
-      return null;
-    }
-  };
+  const verifyUserToken = (token: string): Promise<number | null> => verifyUserTokenViaApi(state, token);
 
   /**
    * 上传文件到分享站（内部函数）
@@ -93,82 +84,37 @@ export async function startHttpService(opts: { state: ServerState; host: string;
     const uploadUrl = `${shareStation.url}/upload_direct`;
 
     try {
-      // 创建 multipart/form-data
-      const boundary = `----FormBoundary${Date.now()}`;
-      const chunks: Buffer[] = [];
-
-      // 添加 file 字段
-      const fileHeader = Buffer.from(
-        `--${boundary}\r\n` +
-        `Content-Disposition: form-data; name="file"; filename="${filename}"\r\n` +
-        `Content-Type: application/octet-stream\r\n\r\n`,
-        'utf-8'
-      );
-      chunks.push(fileHeader);
-      chunks.push(fileBuffer);
-      chunks.push(Buffer.from('\r\n', 'utf-8'));
-
-      // 添加可选字段
-      if (options?.chartName) {
-        chunks.push(Buffer.from(
-          `--${boundary}\r\n` +
-          `Content-Disposition: form-data; name="chart_name"\r\n\r\n` +
-          `${options.chartName}\r\n`,
-          'utf-8'
-        ));
-      }
-      if (options?.username) {
-        chunks.push(Buffer.from(
-          `--${boundary}\r\n` +
-          `Content-Disposition: form-data; name="username"\r\n\r\n` +
-          `${options.username}\r\n`,
-          'utf-8'
-        ));
-      }
-      if (options?.illustration) {
-        chunks.push(Buffer.from(
-          `--${boundary}\r\n` +
-          `Content-Disposition: form-data; name="illustration"\r\n\r\n` +
-          `${options.illustration}\r\n`,
-          'utf-8'
-        ));
-      }
-      if (options?.chartLink) {
-        chunks.push(Buffer.from(
-          `--${boundary}\r\n` +
-          `Content-Disposition: form-data; name="chart_link"\r\n\r\n` +
-          `${options.chartLink}\r\n`,
-          'utf-8'
-        ));
-      }
-
-      // 结束 boundary
-      chunks.push(Buffer.from(`--${boundary}--\r\n`, 'utf-8'));
-
-      const body = Buffer.concat(chunks);
+      const fields: Parameters<typeof encodeMultipartFormData>[0] = [
+        { name: "file", value: fileBuffer, filename }
+      ];
+      if (options?.chartName) fields.push({ name: "chart_name", value: options.chartName });
+      if (options?.username) fields.push({ name: "username", value: options.username });
+      if (options?.illustration) fields.push({ name: "illustration", value: options.illustration });
+      if (options?.chartLink) fields.push({ name: "chart_link", value: options.chartLink });
+      const { body, contentType } = encodeMultipartFormData(fields);
 
       const response = await fetchWithTimeout(uploadUrl, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Authorization': `Bearer ${shareStation.token}`,
-          'Content-Type': `multipart/form-data; boundary=${boundary}`,
-          'Content-Length': body.length.toString()
+          Authorization: `Bearer ${shareStation.token}`,
+          "Content-Type": contentType,
+          "Content-Length": body.length.toString()
         },
         body,
         proxy: state.config.outbound_proxy
       }, 60000);
 
       if (!response.ok) {
-        const errorText = await response.text().catch(() => 'unknown error');
+        const errorText = await response.text().catch(() => "unknown error");
         return { success: false, message: `upload-failed: ${errorText}` };
       }
 
       // 按 API 文档，/upload_direct 响应仅保证返回 replay_id（success/message 为 x-apifox-ignore-properties，不实际返回）
-      const result = await response.json() as { replay_id?: string };
+      const result = (await response.json()) as { replay_id?: string };
 
       // 解析 replay_id 获取 score_id
       // 格式为 "{user_id}_{chart_id}_{score_id}.phirarec"（分享站约定格式）
-      const replayId = result.replay_id || '';
+      const replayId = result.replay_id || "";
       const scoreIdMatch = /_(\d+)\.phirarec$/.exec(replayId);
       const scoreId = scoreIdMatch ? parseInt(scoreIdMatch[1]!, 10) : undefined;
 
@@ -231,10 +177,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
       const reqAdminToken = extractAdminToken(req, url);
       
       // 清理过期的临时TOKEN和OTP
-      const cleanupExpired = () => {
-        cleanupExpiredSessions(state.tempAdminTokens);
-        cleanupExpiredSessions(otpSessions);
-      };
+      const cleanupExpired = () => cleanupExpiringMaps(state.tempAdminTokens, otpSessions);
 
       const requireAdmin = () => {
         // 调试输出
@@ -373,9 +316,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           return;
         }
 
-        for (const [k, v] of replaySessions) {
-          if (Date.now() > v.expiresAt) replaySessions.delete(k);
-        }
+        cleanupExpiringMaps(replaySessions);
 
         const phiraApiEndpoint = state.config.phira_api_endpoint || "https://phira.5wyxi.com";
         const me = await fetchWithRetry(`${phiraApiEndpoint}/me`, {
@@ -416,9 +357,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           return;
         }
 
-        for (const [k, v] of replaySessions) {
-          if (Date.now() > v.expiresAt) replaySessions.delete(k);
-        }
+        cleanupExpiringMaps(replaySessions);
 
         const sess = replaySessions.get(sessionToken);
         if (!sess || Date.now() > sess.expiresAt) {
@@ -473,9 +412,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           return;
         }
 
-        for (const [k, v] of replaySessions) {
-          if (Date.now() > v.expiresAt) replaySessions.delete(k);
-        }
+        cleanupExpiringMaps(replaySessions);
 
         const sess = replaySessions.get(sessionToken);
         if (!sess || Date.now() > sess.expiresAt) {
@@ -837,102 +774,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
         }
 
         if (req.method === "GET" && url.pathname === "/admin/rooms") {
-          // 优化：不使用 mutex，直接读取
-          const rooms = [...state.rooms.entries()].map(([rid, room]) => {
-            const roomid = roomIdToString(rid);
-            const hostUser = state.users.get(room.hostId);
-            const hostName = hostUser?.name ?? String(room.hostId);
-            const hostConnected = Boolean(hostUser?.session);
-            
-            // 状态详细信息
-            const stateStr =
-              room.state.type === "Playing" ? "playing" : room.state.type === "WaitForReady" ? "waiting_for_ready" : "select_chart";
-            
-            let stateDetails: any = { type: stateStr };
-            if (room.state.type === "WaitForReady") {
-              stateDetails.ready_users = Array.from(room.state.started);
-              stateDetails.ready_count = room.state.started.size;
-            } else if (room.state.type === "Playing") {
-              stateDetails.results_count = room.state.results.size;
-              stateDetails.aborted_count = room.state.aborted.size;
-              stateDetails.finished_users = Array.from(room.state.results.keys());
-              stateDetails.aborted_users = Array.from(room.state.aborted);
-            }
-            
-            // 谱面信息
-            const chart = room.chart ? { 
-              name: room.chart.name, 
-              id: room.chart.id
-            } : null;
-            
-            // 用户详细信息
-            const users = room.userIds().map((id) => {
-              const u = state.users.get(id);
-              const userInfo: any = { 
-                id, 
-                name: u?.name ?? String(id), 
-                connected: Boolean(u?.session),
-                is_host: id === room.hostId,
-                game_time: u?.gameTime ?? Number.NEGATIVE_INFINITY,
-                language: u?.lang.lang ?? "unknown"
-              };
-              
-              // 如果房间在进行中，添加玩家的游玩状态和成绩ID
-              if (room.state.type === "Playing") {
-                const isFinished = room.state.results.has(id);
-                const isAborted = room.state.aborted.has(id);
-                userInfo.finished = isFinished || isAborted;
-                userInfo.aborted = isAborted;
-                if (isFinished) {
-                  const record = room.state.results.get(id);
-                  userInfo.record_id = record?.id ?? null;
-                }
-              }
-              
-              return userInfo;
-            });
-            
-            // 观察者详细信息
-            const monitors = room.monitorIds().map((id) => {
-              const u = state.users.get(id);
-              return { 
-                id, 
-                name: u?.name ?? String(id), 
-                connected: Boolean(u?.session),
-                language: u?.lang.lang ?? "unknown"
-              };
-            });
-            
-            // 比赛模式信息
-            const contest = room.contest ? {
-              whitelist_count: room.contest.whitelist.size,
-              whitelist: Array.from(room.contest.whitelist),
-              manual_start: room.contest.manualStart,
-              auto_disband: room.contest.autoDisband
-            } : null;
-            
-            return {
-              roomid,
-              max_users: room.maxUsers,
-              current_users: users.length,
-              current_monitors: monitors.length,
-              replay_eligible: room.replayEligible,
-              live: room.live,
-              locked: room.locked,
-              cycle: room.cycle,
-              host: { 
-                id: room.hostId, 
-                name: hostName,
-                connected: hostConnected
-              },
-              state: stateDetails,
-              chart,
-              contest,
-              users,
-              monitors
-            };
-          });
-          rooms.sort((a, b) => a.roomid.localeCompare(b.roomid));
+          const rooms = buildAdminRoomsData(state);
           write(200, { ok: true, total_rooms: rooms.length, rooms });
           return;
         }
@@ -940,13 +782,8 @@ export async function startHttpService(opts: { state: ServerState; host: string;
         const mRoomMaxUsers = /^\/admin\/rooms\/(.+)\/max_users$/.exec(url.pathname);
         if (req.method === "POST" && mRoomMaxUsers) {
           const roomIdText = decodeURIComponent(mRoomMaxUsers[1]!);
-          let rid: RoomId;
-          try {
-            rid = parseRoomId(roomIdText);
-          } catch {
-            write(400, { ok: false, error: "bad-room-id" });
-            return;
-          }
+          const rid = parseRoomIdOrWriteError(roomIdText, res);
+          if (!rid) return;
           const body = await read();
           const raw = (body ?? {}) as { maxUsers?: unknown };
           const maxUsers = Number(raw.maxUsers);
@@ -971,13 +808,8 @@ export async function startHttpService(opts: { state: ServerState; host: string;
         const mRoomDisband = /^\/admin\/rooms\/(.+)\/disband$/.exec(url.pathname);
         if (req.method === "POST" && mRoomDisband) {
           const roomIdText = decodeURIComponent(mRoomDisband[1]!);
-          let rid: RoomId;
-          try {
-            rid = parseRoomId(roomIdText);
-          } catch {
-            write(400, { ok: false, error: "bad-room-id" });
-            return;
-          }
+          const rid = parseRoomIdOrWriteError(roomIdText, res);
+          if (!rid) return;
 
           const room = await state.mutex.runExclusive(async () => state.rooms.get(rid) ?? null);
           if (!room) {
@@ -1057,19 +889,8 @@ export async function startHttpService(opts: { state: ServerState; host: string;
             const sessionToDisconnect = await state.mutex.runExclusive(async () => state.users.get(userId)?.session ?? null);
             if (sessionToDisconnect) {
               const u = sessionToDisconnect.user;
-              const roomId = u?.room?.id ?? null;
-              if (roomId && u && u.room && u.room.state.type === "Playing") {
-                u.room.state.aborted.add(u.id);
-                await broadcastRoomAll(roomId, { type: "Message", message: { type: "Abort", user: u.id } });
-                await u.room.checkAllReady({
-                  usersById: (id) => state.users.get(id),
-                  broadcast: (cmd) => broadcastRoomAll(roomId, cmd),
-                  broadcastToMonitors: (cmd) => broadcastRoomAll(roomId, cmd),
-                  pickRandomUserId,
-                  lang: state.serverLang,
-                  logger: state.logger,
-                  wsService: state.wsService
-                });
+              if (u && u.room) {
+                await abortPlayingUserAndCheckReady({ state, user: u, room: u.room, broadcastRoomAll, pickRandomUserId });
               }
               await sessionToDisconnect.adminDisconnect({ preserveRoom: true });
             }
@@ -1084,13 +905,8 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           const raw = (body ?? {}) as { userId?: unknown; roomId?: unknown; banned?: unknown };
           const userId = Number(raw.userId);
           const roomIdText = typeof raw.roomId === "string" ? raw.roomId : String(raw.roomId ?? "");
-          let rid: RoomId;
-          try {
-            rid = parseRoomId(roomIdText);
-          } catch {
-            write(400, { ok: false, error: "bad-room-id" });
-            return;
-          }
+          const rid = parseRoomIdOrWriteError(roomIdText, res);
+          if (!rid) return;
           const banned = Boolean(raw.banned);
           if (!Number.isInteger(userId)) {
             write(400, { ok: false, error: "bad-user-id" });
@@ -1118,19 +934,8 @@ export async function startHttpService(opts: { state: ServerState; host: string;
             return;
           }
           const u = target.user;
-          const roomId = u?.room?.id ?? null;
-          if (roomId && u && u.room && u.room.state.type === "Playing") {
-            u.room.state.aborted.add(u.id);
-            await broadcastRoomAll(roomId, { type: "Message", message: { type: "Abort", user: u.id } });
-            await u.room.checkAllReady({
-              usersById: (id) => state.users.get(id),
-              broadcast: (cmd) => broadcastRoomAll(roomId, cmd),
-              broadcastToMonitors: (cmd) => broadcastRoomAll(roomId, cmd),
-              pickRandomUserId,
-              lang: state.serverLang,
-              logger: state.logger,
-              wsService: state.wsService
-            });
+          if (u && u.room) {
+            await abortPlayingUserAndCheckReady({ state, user: u, room: u.room, broadcastRoomAll, pickRandomUserId });
           }
           await target.adminDisconnect({ preserveRoom: false });
           write(200, { ok: true });
@@ -1143,13 +948,8 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           const body = await read();
           const raw = (body ?? {}) as { roomId?: unknown; monitor?: unknown };
           const roomIdText = typeof raw.roomId === "string" ? raw.roomId : String(raw.roomId ?? "");
-          let rid: RoomId;
-          try {
-            rid = parseRoomId(roomIdText);
-          } catch {
-            write(400, { ok: false, error: "bad-room-id" });
-            return;
-          }
+          const rid = parseRoomIdOrWriteError(roomIdText, res);
+          if (!rid) return;
           const monitor = Boolean(raw.monitor);
 
           const u = await state.mutex.runExclusive(async () => state.users.get(userId) ?? null);
@@ -1218,13 +1018,8 @@ export async function startHttpService(opts: { state: ServerState; host: string;
         const mContestConfig = /^\/admin\/contest\/rooms\/(.+)\/config$/.exec(url.pathname);
         if (req.method === "POST" && mContestConfig) {
           const roomIdText = decodeURIComponent(mContestConfig[1]!);
-          let rid: RoomId;
-          try {
-            rid = parseRoomId(roomIdText);
-          } catch {
-            write(400, { ok: false, error: "bad-room-id" });
-            return;
-          }
+          const rid = parseRoomIdOrWriteError(roomIdText, res);
+          if (!rid) return;
           const body = await read();
           const raw = (body ?? {}) as { enabled?: unknown; whitelist?: unknown };
           const enabled = raw.enabled === undefined ? true : Boolean(raw.enabled);
@@ -1251,13 +1046,8 @@ export async function startHttpService(opts: { state: ServerState; host: string;
         const mContestWhitelist = /^\/admin\/contest\/rooms\/(.+)\/whitelist$/.exec(url.pathname);
         if (req.method === "POST" && mContestWhitelist) {
           const roomIdText = decodeURIComponent(mContestWhitelist[1]!);
-          let rid: RoomId;
-          try {
-            rid = parseRoomId(roomIdText);
-          } catch {
-            write(400, { ok: false, error: "bad-room-id" });
-            return;
-          }
+          const rid = parseRoomIdOrWriteError(roomIdText, res);
+          if (!rid) return;
           const body = await read();
           const raw = (body ?? {}) as { userIds?: unknown };
           const userIds = Array.isArray(raw.userIds) ? raw.userIds.map((it) => Number(it)).filter((n) => Number.isInteger(n)) : null;
@@ -1280,13 +1070,8 @@ export async function startHttpService(opts: { state: ServerState; host: string;
         const mContestStart = /^\/admin\/contest\/rooms\/(.+)\/start$/.exec(url.pathname);
         if (req.method === "POST" && mContestStart) {
           const roomIdText = decodeURIComponent(mContestStart[1]!);
-          let rid: RoomId;
-          try {
-            rid = parseRoomId(roomIdText);
-          } catch {
-            write(400, { ok: false, error: "bad-room-id" });
-            return;
-          }
+          const rid = parseRoomIdOrWriteError(roomIdText, res);
+          if (!rid) return;
           const body = await read();
           const raw = (body ?? {}) as { force?: unknown };
           const force = Boolean(raw.force);
@@ -1360,13 +1145,8 @@ export async function startHttpService(opts: { state: ServerState; host: string;
         const mRoomChat = /^\/admin\/rooms\/(.+)\/chat$/.exec(url.pathname);
         if (req.method === "POST" && mRoomChat) {
           const roomIdText = decodeURIComponent(mRoomChat[1]!);
-          let rid: RoomId;
-          try {
-            rid = parseRoomId(roomIdText);
-          } catch {
-            write(400, { ok: false, error: "bad-room-id" });
-            return;
-          }
+          const rid = parseRoomIdOrWriteError(roomIdText, res);
+          if (!rid) return;
 
           const body = await read();
           const raw = (body ?? {}) as { message?: unknown };

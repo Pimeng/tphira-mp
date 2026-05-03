@@ -1,10 +1,15 @@
 import { writeFile } from "node:fs/promises";
-import { zstdCompressSync } from "node:zlib";
 import { BinaryWriter } from "../../common/binary.js";
-import type { CompactPos, JudgeEvent, TouchFrame, UserInfo } from "../../common/commands.js";
+import { encodeTouchFrame, type JudgeEvent, type TouchFrame, type UserInfo } from "../../common/commands.js";
 import { roomIdToString, type RoomId } from "../../common/roomId.js";
 import type { Chart } from "../core/types.js";
 import { ensureReplayDir, replayFilePath } from "../replay/replayStorage.js";
+import {
+  COMPRESSION_ZSTD,
+  buildPhiraRecordHeader,
+  encodePhiraRecordPayload,
+  encodeReplayJudgeEvent
+} from "./replayFormat.js";
 import type { Logger } from "../utils/logger.js";
 
 type ReplayParticipant = {
@@ -32,10 +37,6 @@ type ReplayFileInfo = {
   timestamp: number;
   path: string;
 };
-
-const phiraRecordMagic = Buffer.from("PHIRAREC", "ascii");
-const phiraRecordVersion = 1;
-const compressionZstd = 0x01;
 
 export class ReplayRecorder {
   private _baseDir: string;
@@ -144,14 +145,14 @@ export class ReplayRecorder {
     this.log("DEBUG", `appendTouches: roomId=${roomIdToString(roomId)}, userId=${userId}, frames=${frames.length}`);
     const it = this.get(roomId, userId);
     if (!it) return;
-    this.appendPacket(it, { type: "Touches", frames });
+    it.touchFrames.push(...frames);
   }
 
   appendJudges(roomId: RoomId, userId: number, judges: JudgeEvent[]): void {
     this.log("DEBUG", `appendJudges: roomId=${roomIdToString(roomId)}, userId=${userId}, judges=${judges.length}`);
     const it = this.get(roomId, userId);
     if (!it) return;
-    this.appendPacket(it, { type: "Judges", judges });
+    it.judgeEvents.push(...judges);
   }
 
   listRoomFiles(roomId: RoomId): ReplayFileInfo[] {
@@ -179,14 +180,6 @@ export class ReplayRecorder {
     return it;
   }
 
-  private appendPacket(it: InFlight, cmd: { type: "Touches"; frames: TouchFrame[] } | { type: "Judges"; judges: JudgeEvent[] }): void {
-    if (cmd.type === "Touches") {
-      it.touchFrames.push(...cmd.frames);
-      return;
-    }
-    it.judgeEvents.push(...cmd.judges);
-  }
-
   private async closeInFlight(it: InFlight): Promise<void> {
     if (it.closed) return;
     it.closed = true;
@@ -206,36 +199,14 @@ export class ReplayRecorder {
     w.writeI32(it.userId);
     w.writeString(it.userName);
     w.writeArray(it.touchFrames, encodeTouchFrame);
-    w.writeArray(it.judgeEvents, encodeJudgeEvent);
+    w.writeArray(it.judgeEvents, encodeReplayJudgeEvent);
     return w.toBuffer();
   }
 
   private async writeRecordFile(it: InFlight): Promise<void> {
     const content = this.buildRecordContent(it);
-    const payload = zstdCompressSync(content);
-    const header = Buffer.allocUnsafe(13);
-    phiraRecordMagic.copy(header, 0);
-    header.writeInt32LE(phiraRecordVersion, 8);
-    header.writeUInt8(compressionZstd, 12);
+    const payload = encodePhiraRecordPayload(content, COMPRESSION_ZSTD);
+    const header = buildPhiraRecordHeader(COMPRESSION_ZSTD);
     await writeFile(it.path, Buffer.concat([header, payload]));
   }
-}
-
-function encodeTouchFrame(w: BinaryWriter, v: TouchFrame): void {
-  w.writeF32(v.time);
-  w.writeArray(v.points, (ww, [id, pos]) => {
-    ww.writeI8(id);
-    encodeCompactPos(ww, pos);
-  });
-}
-
-function encodeCompactPos(w: BinaryWriter, v: CompactPos): void {
-  w.writeCompactPos(v);
-}
-
-function encodeJudgeEvent(w: BinaryWriter, v: JudgeEvent): void {
-  w.writeF32(v.time);
-  w.writeI32(v.line_id);
-  w.writeI32(v.note_id);
-  w.writeU8(v.judgement);
 }

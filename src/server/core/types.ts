@@ -29,6 +29,8 @@ export type ServerConfig = {
   real_ip_header?: string;
   /** 是否启用 HAProxy PROXY Protocol 支持 */
   haproxy_protocol?: boolean;
+  /** 服务端语言，影响日志/CLI/HTTP 默认输出语言，支持 zh-CN、en-US；未设置则按 PHIRA_MP_LANG / LANG 协商 */
+  lang?: string;
   /** Phira API 端点地址，默认 https://phira.5wyxi.com */
   phira_api_endpoint?: string;
   /** 服务端出站代理配置：false 表示强制直连，字符串表示使用指定代理 */

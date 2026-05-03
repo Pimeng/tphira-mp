@@ -4,13 +4,26 @@ logs/
 dist-bundle/
 dist-sea/
 release/
-.trae/
+
 package-lock.json
 
 # 用户插件（保留示例插件）
 plugins/*
 !plugins/README.md
 !plugins/virtualRoom.js
+
+# IDE
+.trae/
+.kiro/
+.vscode/
+.claude/
+.codebuddy/
+.idea/
+
+# 系统
+.DS_Store
+Thumbs.db
+$RECYCLE.BIN/
 
 # 临时文件
 data/tmp/*

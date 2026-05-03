@@ -6,9 +6,6 @@ import type { Logger, LogContext, LogLevel } from "../utils/logger.js";
 import type { Language } from "../utils/l10n.js";
 import { tl } from "../utils/l10n.js";
 
-// 导出通用终端日志函数（已迁移到 common）
-export { debugLog, infoLog, warnLog, errorLog } from "../../common/console.js";
-
 export type LogParams = Record<string, FluentVariable>;
 export type RoomLogContext = Omit<LogContext, "roomId">;
 

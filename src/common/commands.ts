@@ -122,7 +122,7 @@ function decodeCompactPos(r: BinaryReader): CompactPos {
   return r.readCompactPos();
 }
 
-function encodeTouchFrame(w: BinaryWriter, v: TouchFrame): void {
+export function encodeTouchFrame(w: BinaryWriter, v: TouchFrame): void {
   w.writeF32(v.time);
   w.writeArray(v.points, (ww, [id, pos]) => {
     ww.writeI8(id);
@@ -130,7 +130,7 @@ function encodeTouchFrame(w: BinaryWriter, v: TouchFrame): void {
   });
 }
 
-function decodeTouchFrame(r: BinaryReader): TouchFrame {
+export function decodeTouchFrame(r: BinaryReader): TouchFrame {
   const time = r.readF32();
   const points = r.readArray((rr) => {
     const id = rr.readI8();
@@ -148,14 +148,14 @@ function decodeJudgement(r: BinaryReader): Judgement {
   return r.readU8() as Judgement;
 }
 
-function encodeJudgeEvent(w: BinaryWriter, v: JudgeEvent): void {
+export function encodeJudgeEvent(w: BinaryWriter, v: JudgeEvent): void {
   w.writeF32(v.time);
   w.writeU32(v.line_id);
   w.writeU32(v.note_id);
   encodeJudgement(w, v.judgement);
 }
 
-function decodeJudgeEvent(r: BinaryReader): JudgeEvent {
+export function decodeJudgeEvent(r: BinaryReader): JudgeEvent {
   const time = r.readF32();
   const line_id = r.readU32();
   const note_id = r.readU32();

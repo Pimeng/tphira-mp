@@ -1,37 +1,38 @@
 import { parseArgs } from "node:util";
+import { existsSync, readFileSync } from "node:fs";
+import yaml from "js-yaml";
 import { startServer } from "./core/server.js";
+import {
+  buildConfigFromRecord,
+  parseBoolValue,
+  parseIntegerListValue,
+  parsePortValue,
+  parseRoomMaxUsersValue
+} from "./core/configValues.js";
 import { Language, tl } from "./utils/l10n.js";
+import { getAppPaths } from "./utils/appPaths.js";
 
-function parseBool(value: string): boolean | null {
-  const v = value.trim().toLowerCase();
-  if (v === "1" || v === "true" || v === "yes" || v === "on") return true;
-  if (v === "0" || v === "false" || v === "no" || v === "off") return false;
-  return null;
-}
-
-function parsePort(value: string): number | null {
-  const port = Number(value);
-  if (!Number.isInteger(port) || port <= 0 || port > 65535) return null;
-  return port;
-}
-
-function parseRoomMaxUsers(value: string): number | null {
-  const n = Number(value);
-  if (!Number.isInteger(n) || n < 1) return null;
-  return n;
-}
-
-function parseMonitors(value: string): number[] | null {
-  const ids = value
-    .split(",")
-    .map((it) => Number(it.trim()))
-    .filter((it) => Number.isInteger(it));
-  if (ids.length === 0) return null;
-  return ids;
+/**
+ * 启动期解析语言：用于 CLI 参数校验错误的本地化。
+ * 优先级与运行时一致：CLI(--) 暂无 → ENV PHIRA_MP_LANG → ENV LANG → 配置文件 LANG → 空（默认 zh-CN）。
+ */
+function resolveStartupLang(): Language {
+  const envLang = process.env.PHIRA_MP_LANG?.trim() || process.env.LANG?.trim();
+  if (envLang) return new Language(envLang);
+  try {
+    const { configPath } = getAppPaths();
+    if (existsSync(configPath)) {
+      const cfg = buildConfigFromRecord(yaml.load(readFileSync(configPath, "utf8")));
+      if (cfg.lang) return new Language(cfg.lang);
+    }
+  } catch {
+    // 配置文件读取失败时静默回退（main 阶段不应因此中断）
+  }
+  return new Language("");
 }
 
 async function main(): Promise<void> {
-  const lang = new Language(process.env.PHIRA_MP_LANG?.trim() || process.env.LANG?.trim() || "");
+  const lang = resolveStartupLang();
   const { values } = parseArgs({
     args: process.argv.slice(2),
     options: {
@@ -46,44 +47,20 @@ async function main(): Promise<void> {
     allowPositionals: true
   });
 
+  const requireParse = <T>(raw: string | undefined, parser: (v: unknown) => T | undefined, errorKey: string): T | undefined => {
+    if (raw === undefined) return undefined;
+    const out = parser(raw);
+    if (out === undefined) throw new Error(tl(lang, errorKey));
+    return out;
+  };
+
   const host = values.host?.trim() || undefined;
-
-  let port: number | undefined;
-  if (values.port !== undefined) {
-    const p = parsePort(values.port);
-    if (p === null) throw new Error(tl(lang, "cli-invalid-port"));
-    port = p;
-  }
-
-  let http_service: boolean | undefined;
-  if (values.httpService !== undefined) {
-    const v = parseBool(values.httpService);
-    if (v === null) throw new Error(tl(lang, "cli-invalid-http-service"));
-    http_service = v;
-  }
-
-  let http_port: number | undefined;
-  if (values.httpPort !== undefined) {
-    const p = parsePort(values.httpPort);
-    if (p === null) throw new Error(tl(lang, "cli-invalid-http-port"));
-    http_port = p;
-  }
-
-  let room_max_users: number | undefined;
-  if (values.roomMaxUsers !== undefined) {
-    const n = parseRoomMaxUsers(values.roomMaxUsers);
-    if (n === null) throw new Error(tl(lang, "cli-invalid-room-max-users"));
-    room_max_users = n;
-  }
-
+  const port = requireParse(values.port, parsePortValue, "cli-invalid-port");
+  const http_service = requireParse(values.httpService, parseBoolValue, "cli-invalid-http-service");
+  const http_port = requireParse(values.httpPort, parsePortValue, "cli-invalid-http-port");
+  const room_max_users = requireParse(values.roomMaxUsers, parseRoomMaxUsersValue, "cli-invalid-room-max-users");
   const server_name = values.serverName?.trim() || undefined;
-
-  let monitors: number[] | undefined;
-  if (values.monitors !== undefined) {
-    const ids = parseMonitors(values.monitors);
-    if (ids === null) throw new Error(tl(lang, "cli-invalid-monitors"));
-    monitors = ids;
-  }
+  const monitors = requireParse(values.monitors, parseIntegerListValue, "cli-invalid-monitors");
 
   const running = await startServer({
     host,

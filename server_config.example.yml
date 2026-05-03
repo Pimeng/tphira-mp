@@ -11,6 +11,10 @@ HTTP_PORT: 12347
 # 日志等级：DEBUG、INFO、MARK、WARN、ERROR，默认 INFO
 LOG_LEVEL: INFO
 
+# 服务端语言：zh-CN、en-US，影响日志/CLI/HTTP 默认输出语言
+# 优先级：ENV PHIRA_MP_LANG > ENV LANG > 此项 > 默认（zh-CN）
+LANG: zh-CN
+
 # 真实 IP 头名称，用于反向代理场景，默认 X-Forwarded-For
 # 可选值例如：X-Forwarded-For、X-Real-IP、CF-Connecting-IP
 # 注意：这里只对 HTTP 服务生效

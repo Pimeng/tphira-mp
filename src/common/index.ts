@@ -1,6 +1,5 @@
 export * from "./binary.js";
 export * from "./commands.js";
-export * from "./console.js";
 export * from "./framing.js";
 export * from "./half.js";
 export * from "./http.js";

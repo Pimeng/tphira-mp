@@ -148,18 +148,19 @@ export class Stream<S, R> {
     }
   }
   
-  private async flushSendBatch(): Promise<void> {
+  /** 立即把累计的发送批次写入 socket（认证响应等需要绕过批量延迟的场景使用） */
+  async flushSendBatch(): Promise<void> {
     if (this.sendBatchTimer) {
       clearTimeout(this.sendBatchTimer);
       this.sendBatchTimer = null;
     }
-    
+
     if (this.sendBatch.length === 0 || this.sending) return;
-    
+
     const batch = this.sendBatch;
     this.sendBatch = [];
     this.sending = true;
-    
+
     try {
       const combined = Buffer.concat(batch);
       await new Promise<void>((resolve, reject) => {

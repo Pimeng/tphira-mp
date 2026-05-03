@@ -157,3 +157,131 @@ room-disbanded-by-admin = Room has been disbanded by administrator
 
 log-websocket-connected = WebSocket client connected, total connections: { $total }
 log-websocket-disconnected = WebSocket client disconnected, total connections: { $total }
+
+# ====== CLI console ======
+
+cli-bad-user-id = Invalid user ID
+cli-bad-room-id = Invalid room ID
+cli-message-empty = Message cannot be empty
+cli-message-too-long = Message too long (max { $max } characters)
+
+cli-stop-hint = Use Ctrl+C to stop the server
+cli-unknown-command = Unknown command: { $cmd }. Type 'help' for available commands
+cli-command-failed = Command failed: { $reason }
+
+cli-help =
+
+    === Phira MP Server Commands ===
+    help                          - Show this help
+    list, rooms                   - List all rooms
+    users                         - List all online users
+    user <id>                     - View user info
+    kick <userId> [preserve]      - Kick user (preserve=true to keep room slot)
+    ban <userId>                  - Ban user from server
+    unban <userId>                - Unban user
+    banlist                       - View ban list
+    banroom <userId> <roomId>     - Ban user from room
+    unbanroom <userId> <roomId>   - Unban user from room
+    broadcast <message>           - Broadcast message
+    say <message>                 - Broadcast (alias of broadcast)
+    roomsay <roomId> <message>    - Send message to room
+    maxusers <roomId> <count>     - Set room max users
+    disband <roomId>              - Disband room
+    replay <on|off|status>        - Replay recording toggle
+    roomcreation <on|off|status>  - Room creation toggle
+    contest <roomId> <subcommand> - Contest room management
+      contest <roomId> enable [userIds...]    - Enable contest mode
+      contest <roomId> disable                - Disable contest mode
+      contest <roomId> whitelist <userIds...> - Set whitelist
+      contest <roomId> start [force]          - Start contest
+    ipblacklist <list|remove|clear> - IP blacklist management
+
+cli-no-rooms = No rooms currently
+cli-rooms-total = Total rooms: { $count }
+cli-room-line = [{ $id }] { $state } | Players: { $users }/{ $maxUsers } | Monitors: { $monitors } | Chart: { $chart } | Locked: { $locked } | Cycle: { $cycle } | Contest: { $contest }
+
+cli-no-users = No users online
+cli-users-total = Total users: { $count }
+cli-user-line = [{ $id }] { $name } | { $status } | { $role } | Room: { $room }{ $bannedTag }
+cli-user-status-online = Online
+cli-user-status-offline = Offline
+cli-user-role-monitor = Monitor
+cli-user-role-player = Player
+cli-user-banned-tag =  [BANNED]
+cli-none = None
+cli-yes = Yes
+cli-no = No
+cli-state-on = Enabled
+cli-state-off = Disabled
+cli-room-state-playing = Playing
+cli-room-state-waiting = WaitForReady
+cli-room-state-select = SelectChart
+cli-bool-yes = Yes
+cli-bool-no = No
+
+cli-usage-user = Usage: user <userId>
+cli-usage-kick = Usage: kick <userId> [preserve]
+cli-usage-ban = Usage: ban <userId>
+cli-usage-unban = Usage: unban <userId>
+cli-usage-banroom = Usage: banroom <userId> <roomId>
+cli-usage-unbanroom = Usage: unbanroom <userId> <roomId>
+cli-usage-broadcast = Usage: broadcast <message>
+cli-usage-roomsay = Usage: roomsay <roomId> <message>
+cli-usage-maxusers = Usage: maxusers <roomId> <count>
+cli-usage-disband = Usage: disband <roomId>
+cli-usage-replay = Usage: replay <on|off|status>
+cli-usage-roomcreation = Usage: roomcreation <on|off|status>
+cli-usage-contest = Usage: contest <roomId> <enable|disable|whitelist|start>
+cli-usage-ipblacklist = Usage: ipblacklist <list|remove|clear>
+cli-usage-ipblacklist-remove = Usage: ipblacklist remove <ip>
+
+cli-user-not-found = User not found: { $id }
+cli-user-info-header = User info:
+cli-user-info-id =   ID: { $id }
+cli-user-info-name =   Name: { $name }
+cli-user-info-status =   Status: { $status }
+cli-user-info-role =   Role: { $role }
+cli-user-info-room =   Room: { $room }
+cli-user-info-banned =   Banned: { $banned }
+cli-user-info-game-time =   Game time: { $time }
+cli-user-info-language =   Language: { $lang }
+
+cli-user-not-connected = User not connected: { $id }
+cli-user-kicked = Kicked user: { $id }
+cli-user-banned = Banned user: { $id }
+cli-user-unbanned = Unbanned user: { $id }
+cli-no-banned-users = No banned users
+cli-banned-list-header = Banned users ({ $count }):
+cli-room-user-banned = Banned user { $userId } from room { $room }
+cli-room-user-unbanned = Unbanned user { $userId } from room { $room }
+cli-broadcast-sent = Broadcast to { $count } rooms
+cli-room-not-found = Room not found
+cli-room-not-found-named = Room not found: { $room }
+cli-room-message-sent = Message sent to room { $room }
+cli-bad-max-users = Invalid count (1-64)
+cli-room-max-users-set = Set room { $room } max users to { $count }
+cli-room-disbanded = Disbanded room { $room }
+
+cli-replay-status = Replay recording: { $state }
+cli-replay-toggled-on = Replay recording enabled
+cli-replay-toggled-off = Replay recording disabled
+cli-room-creation-status = Room creation: { $state }
+cli-room-creation-toggled-on = Room creation enabled
+cli-room-creation-toggled-off = Room creation disabled
+
+cli-contest-enabled = Enabled contest mode for room { $room }
+cli-contest-disabled = Disabled contest mode for room { $room }
+cli-contest-no-user-id = Please provide at least one user ID
+cli-contest-not-enabled = Room not found or contest mode not enabled
+cli-contest-whitelist-updated = Updated whitelist for room { $room }
+cli-contest-cannot-start = Cannot start contest: { $reason }
+cli-contest-started = Started contest for room { $room }
+cli-contest-unknown-subcommand = Unknown subcommand. Available: enable, disable, whitelist, start
+
+cli-blacklist-empty = IP blacklist is empty
+cli-blacklist-header = IP Blacklist ({ $count }):
+cli-blacklist-line =   { $ip } (expires in { $minutes } minutes)
+cli-blacklist-removed = Removed from blacklist: { $ip }
+cli-blacklist-cleared = Cleared IP blacklist
+cli-ipblacklist-unknown-subcommand = Unknown subcommand. Available: list, remove, clear
+

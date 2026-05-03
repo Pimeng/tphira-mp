@@ -24,7 +24,8 @@ export class Language {
   readonly lang: SupportedLang;
 
   constructor(lang: string) {
-    const resolved = negotiateLanguages([lang], SUPPORTED_LANGS, { defaultLocale: "zh-CN" });
+    const normalized = normalizeLocaleHint(lang);
+    const resolved = negotiateLanguages([normalized], SUPPORTED_LANGS, { defaultLocale: "zh-CN" });
     this.lang = (resolved[0] as SupportedLang) ?? "zh-CN";
   }
 
@@ -38,6 +39,18 @@ export class Language {
     const out = bundle.formatPattern(msg.value, args ?? null, errors);
     return out;
   }
+}
+
+/**
+ * 把 POSIX 形式的 locale 提示（如 "en_US.UTF-8"、"zh_CN"）规范成 BCP 47 风格
+ * （"en-US"、"zh-CN"），方便 negotiateLanguages 协商。空字符串原样返回。
+ */
+function normalizeLocaleHint(hint: string): string {
+  const trimmed = hint.trim();
+  if (!trimmed) return "";
+  // 去掉编码后缀（@... 或 .UTF-8 等）
+  const base = trimmed.split(/[.@]/, 1)[0] ?? trimmed;
+  return base.replace(/_/g, "-");
 }
 
 export function tl(lang: Language, key: string, args?: Record<string, FluentVariable>): string {

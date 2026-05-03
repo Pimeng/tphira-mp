@@ -1,11 +1,21 @@
 import * as readline from "node:readline";
+import type { FluentVariable } from "@fluent/bundle";
 import type { ServerState } from "../core/state.js";
 import type { Logger } from "../utils/logger.js";
-import { parseRoomId, roomIdToString, type RoomId } from "../../common/roomId.js";
+import { roomIdToString, type RoomId } from "../../common/roomId.js";
 import type { ServerCommand } from "../../common/commands.js";
 import { tl } from "../utils/l10n.js";
 import { logRoomInfo } from "../utils/logUtils.js";
 import { refreshRoomLive } from "../game/roomUtils.js";
+import { abortPlayingUserAndCheckReady } from "../network/httpHelpers.js";
+import {
+  makePrinter,
+  parseBoundedIntArg,
+  parseRoomIdArg,
+  parseToggleArg,
+  parseUserIdArg,
+  validateChatMessage
+} from "./cliHelpers.js";
 
 export type CliContext = {
   state: ServerState;
@@ -21,21 +31,10 @@ export function startCli(ctx: CliContext): () => void {
     prompt: ""
   });
 
-  const print = (msg: string) => {
-    process.stdout.write(`${msg}\n`);
-  };
-
-  const printError = (msg: string) => {
-    process.stderr.write(`\x1b[31m${msg}\x1b[0m\n`);
-  };
-
-  const printSuccess = (msg: string) => {
-    process.stdout.write(`\x1b[32m${msg}\x1b[0m\n`);
-  };
-
-  const printInfo = (msg: string) => {
-    process.stdout.write(`\x1b[36m${msg}\x1b[0m\n`);
-  };
+  const { print, printError, printSuccess, printInfo } = makePrinter();
+  // 每次调用都从 ctx.state 取最新的 serverLang——配置 reload 时它会被替换。
+  const getLang = () => ctx.state.serverLang;
+  const t = (key: string, args?: Record<string, FluentVariable>): string => tl(getLang(), key, args);
 
   rl.on("line", async (line) => {
     const input = line.trim();
@@ -105,76 +104,60 @@ export function startCli(ctx: CliContext): () => void {
           break;
         case "stop":
         case "shutdown":
-          printInfo("使用 Ctrl+C 停止服务器 / Use Ctrl+C to stop the server");
+          printInfo(t("cli-stop-hint"));
           break;
         default:
-          printError(`未知命令: ${cmd}。输入 'help' 查看可用命令 / Unknown command: ${cmd}. Type 'help' for available commands`);
+          printError(t("cli-unknown-command", { cmd: cmd ?? "" }));
       }
     } catch (e) {
-      printError(`命令执行失败 / Command failed: ${e instanceof Error ? e.message : String(e)}`);
+      printError(t("cli-command-failed", { reason: e instanceof Error ? e.message : String(e) }));
     }
   });
 
   const handleHelp = async () => {
-    print("\n=== Phira MP 服务器命令 / Server Commands ===");
-    print("help                          - 显示此帮助信息 / Show this help");
-    print("list, rooms                   - 列出所有房间 / List all rooms");
-    print("users                         - 列出所有在线用户 / List all online users");
-    print("user <id>                     - 查看用户信息 / View user info");
-    print("kick <userId> [preserve]      - 踢出用户 / Kick user (preserve=true to keep room slot)");
-    print("ban <userId>                  - 封禁用户 / Ban user from server");
-    print("unban <userId>                - 解封用户 / Unban user");
-    print("banlist                       - 查看封禁列表 / View ban list");
-    print("banroom <userId> <roomId>     - 禁止用户进入房间 / Ban user from room");
-    print("unbanroom <userId> <roomId>   - 解除房间禁入 / Unban user from room");
-    print("broadcast <message>           - 全服广播 / Broadcast message");
-    print("say <message>                 - 全服广播（同broadcast） / Broadcast (alias)");
-    print("roomsay <roomId> <message>    - 向指定房间发送消息 / Send message to room");
-    print("maxusers <roomId> <count>     - 设置房间最大人数 / Set room max users");
-    print("disband <roomId>              - 解散房间 / Disband room");
-    print("replay <on|off|status>        - 回放录制开关 / Replay recording toggle");
-    print("roomcreation <on|off|status>  - 房间创建开关 / Room creation toggle");
-    print("contest <roomId> <subcommand> - 比赛房间管理 / Contest room management");
-    print("  contest <roomId> enable [userIds...]  - 启用比赛模式 / Enable contest mode");
-    print("  contest <roomId> disable              - 禁用比赛模式 / Disable contest mode");
-    print("  contest <roomId> whitelist <userIds...> - 设置白名单 / Set whitelist");
-    print("  contest <roomId> start [force]        - 手动开始比赛 / Start contest");
-    print("ipblacklist <list|remove|clear> - IP黑名单管理 / IP blacklist management\n");
+    print(t("cli-help"));
+  };
+
+  const stateLabel = (type: string): string => {
+    if (type === "Playing") return t("cli-room-state-playing");
+    if (type === "WaitForReady") return t("cli-room-state-waiting");
+    return t("cli-room-state-select");
   };
 
   const handleListRooms = async () => {
     const rooms = await ctx.state.mutex.runExclusive(async () => {
-      return [...ctx.state.rooms.entries()].map(([rid, room]) => {
-        const roomid = roomIdToString(rid);
-        const users = room.userIds();
-        const monitors = room.monitorIds();
-        const stateStr =
-          room.state.type === "Playing" ? "Playing" : room.state.type === "WaitForReady" ? "WaitForReady" : "SelectChart";
-        return {
-          roomid,
-          state: stateStr,
-          users: users.length,
-          monitors: monitors.length,
-          maxUsers: room.maxUsers,
-          locked: room.locked,
-          cycle: room.cycle,
-          chart: room.chart?.name ?? "None",
-          contest: room.contest ? "Yes" : "No"
-        };
-      });
+      return [...ctx.state.rooms.entries()].map(([rid, room]) => ({
+        roomid: roomIdToString(rid),
+        state: stateLabel(room.state.type),
+        users: room.userIds().length,
+        monitors: room.monitorIds().length,
+        maxUsers: room.maxUsers,
+        locked: room.locked ? t("cli-bool-yes") : t("cli-bool-no"),
+        cycle: room.cycle ? t("cli-bool-yes") : t("cli-bool-no"),
+        chart: room.chart?.name ?? t("cli-none"),
+        contest: room.contest ? t("cli-bool-yes") : t("cli-bool-no")
+      }));
     });
 
     if (rooms.length === 0) {
-      printInfo("当前没有房间 / No rooms currently");
+      printInfo(t("cli-no-rooms"));
       return;
     }
 
-    print(`\n房间总数 / Total rooms: ${rooms.length}`);
+    print("");
+    print(t("cli-rooms-total", { count: rooms.length }));
     for (const r of rooms) {
-      print(
-        `[${r.roomid}] ${r.state} | 玩家/Players: ${r.users}/${r.maxUsers} | 观战/Monitors: ${r.monitors} | ` +
-          `谱面/Chart: ${r.chart} | 锁定/Locked: ${r.locked} | 循环/Cycle: ${r.cycle} | 比赛/Contest: ${r.contest}`
-      );
+      print(t("cli-room-line", {
+        id: r.roomid,
+        state: r.state,
+        users: r.users,
+        maxUsers: r.maxUsers,
+        monitors: r.monitors,
+        chart: r.chart,
+        locked: r.locked,
+        cycle: r.cycle,
+        contest: r.contest
+      }));
     }
     print("");
   };
@@ -192,31 +175,32 @@ export function startCli(ctx: CliContext): () => void {
     });
 
     if (users.length === 0) {
-      printInfo("当前没有在线用户 / No users online");
+      printInfo(t("cli-no-users"));
       return;
     }
 
-    print(`\n在线用户总数 / Total users: ${users.length}`);
+    print("");
+    print(t("cli-users-total", { count: users.length }));
     for (const u of users) {
-      const status = u.connected ? "在线/Online" : "离线/Offline";
-      const role = u.monitor ? "观战/Monitor" : "玩家/Player";
-      const banned = u.banned ? " [已封禁/BANNED]" : "";
-      print(`[${u.id}] ${u.name} | ${status} | ${role} | 房间/Room: ${u.room ?? "None"}${banned}`);
+      print(t("cli-user-line", {
+        id: u.id,
+        name: u.name,
+        status: u.connected ? t("cli-user-status-online") : t("cli-user-status-offline"),
+        role: u.monitor ? t("cli-user-role-monitor") : t("cli-user-role-player"),
+        room: u.room ?? t("cli-none"),
+        bannedTag: u.banned ? t("cli-user-banned-tag") : ""
+      }));
     }
     print("");
   };
 
   const handleUserInfo = async (args: string[]) => {
     if (args.length === 0) {
-      printError("用法 / Usage: user <userId>");
+      printError(t("cli-usage-user"));
       return;
     }
-
-    const userId = Number(args[0]);
-    if (!Number.isInteger(userId)) {
-      printError("无效的用户ID / Invalid user ID");
-      return;
-    }
+    const userId = parseUserIdArg(args[0], getLang(), printError);
+    if (userId === null) return;
 
     const info = await ctx.state.mutex.runExclusive(async () => {
       const u = ctx.state.users.get(userId);
@@ -234,102 +218,87 @@ export function startCli(ctx: CliContext): () => void {
     });
 
     if (!info) {
-      printError(`用户不存在 / User not found: ${userId}`);
+      printError(t("cli-user-not-found", { id: userId }));
       return;
     }
 
-    print(`\n用户信息 / User Info:`);
-    print(`  ID: ${info.id}`);
-    print(`  名称/Name: ${info.name}`);
-    print(`  状态/Status: ${info.connected ? "在线/Online" : "离线/Offline"}`);
-    print(`  角色/Role: ${info.monitor ? "观战/Monitor" : "玩家/Player"}`);
-    print(`  房间/Room: ${info.room ?? "None"}`);
-    print(`  封禁/Banned: ${info.banned ? "是/Yes" : "否/No"}`);
-    print(`  游戏时间/Game Time: ${info.gameTime}`);
-    print(`  语言/Language: ${info.lang}\n`);
+    print("");
+    print(t("cli-user-info-header"));
+    print(t("cli-user-info-id", { id: info.id }));
+    print(t("cli-user-info-name", { name: info.name }));
+    print(t("cli-user-info-status", { status: info.connected ? t("cli-user-status-online") : t("cli-user-status-offline") }));
+    print(t("cli-user-info-role", { role: info.monitor ? t("cli-user-role-monitor") : t("cli-user-role-player") }));
+    print(t("cli-user-info-room", { room: info.room ?? t("cli-none") }));
+    print(t("cli-user-info-banned", { banned: info.banned ? t("cli-yes") : t("cli-no") }));
+    print(t("cli-user-info-game-time", { time: info.gameTime }));
+    print(t("cli-user-info-language", { lang: info.lang }));
+    print("");
   };
 
   const handleKick = async (args: string[]) => {
     if (args.length === 0) {
-      printError("用法 / Usage: kick <userId> [preserve]");
+      printError(t("cli-usage-kick"));
       return;
     }
 
-    const userId = Number(args[0]);
-    if (!Number.isInteger(userId)) {
-      printError("无效的用户ID / Invalid user ID");
-      return;
-    }
+    const userId = parseUserIdArg(args[0], getLang(), printError);
+    if (userId === null) return;
 
     const preserveRoom = args[1] === "true" || args[1] === "preserve";
 
     const session = await ctx.state.mutex.runExclusive(async () => ctx.state.users.get(userId)?.session ?? null);
     if (!session) {
-      printError(`用户未连接 / User not connected: ${userId}`);
+      printError(t("cli-user-not-connected", { id: userId }));
       return;
     }
 
     const u = session.user;
-    const roomId = u?.room?.id ?? null;
-    if (preserveRoom && roomId && u && u.room && u.room.state.type === "Playing") {
-      u.room.state.aborted.add(u.id);
-      await ctx.broadcastRoomAll(roomId, { type: "Message", message: { type: "Abort", user: u.id } });
-      await u.room.checkAllReady({
-        usersById: (id) => ctx.state.users.get(id),
-        broadcast: (cmd) => ctx.broadcastRoomAll(roomId, cmd),
-        broadcastToMonitors: (cmd) => ctx.broadcastRoomAll(roomId, cmd),
-        pickRandomUserId: ctx.pickRandomUserId,
-        lang: ctx.state.serverLang,
-        logger: ctx.logger
+    if (preserveRoom && u && u.room) {
+      await abortPlayingUserAndCheckReady({
+        state: ctx.state,
+        user: u,
+        room: u.room,
+        broadcastRoomAll: ctx.broadcastRoomAll,
+        pickRandomUserId: ctx.pickRandomUserId
       });
     }
 
     await session.adminDisconnect({ preserveRoom });
-    printSuccess(`已踢出用户 / Kicked user: ${userId}`);
+    printSuccess(t("cli-user-kicked", { id: userId }));
   };
 
   const handleBan = async (args: string[]) => {
     if (args.length === 0) {
-      printError("用法 / Usage: ban <userId>");
+      printError(t("cli-usage-ban"));
       return;
     }
 
-    const userId = Number(args[0]);
-    if (!Number.isInteger(userId)) {
-      printError("无效的用户ID / Invalid user ID");
-      return;
-    }
+    const userId = parseUserIdArg(args[0], getLang(), printError);
+    if (userId === null) return;
 
-    // Add user to ban list
     await ctx.state.mutex.runExclusive(async () => {
       ctx.state.bannedUsers.add(userId);
     });
 
     await ctx.state.saveAdminData();
-
-    // Banned users will be blocked from operations when they try to perform them
-    // They can stay connected but cannot perform any actions
-    printSuccess(`已封禁用户 / Banned user: ${userId}`);
+    printSuccess(t("cli-user-banned", { id: userId }));
   };
 
   const handleUnban = async (args: string[]) => {
     if (args.length === 0) {
-      printError("用法 / Usage: unban <userId>");
+      printError(t("cli-usage-unban"));
       return;
     }
 
-    const userId = Number(args[0]);
-    if (!Number.isInteger(userId)) {
-      printError("无效的用户ID / Invalid user ID");
-      return;
-    }
+    const userId = parseUserIdArg(args[0], getLang(), printError);
+    if (userId === null) return;
 
     await ctx.state.mutex.runExclusive(async () => {
       ctx.state.bannedUsers.delete(userId);
     });
 
     await ctx.state.saveAdminData();
-    printSuccess(`已解封用户 / Unbanned user: ${userId}`);
+    printSuccess(t("cli-user-unbanned", { id: userId }));
   };
 
   const handleBanList = async () => {
@@ -338,36 +307,27 @@ export function startCli(ctx: CliContext): () => void {
     });
 
     if (banned.length === 0) {
-      printInfo("当前没有被封禁的用户 / No banned users");
+      printInfo(t("cli-no-banned-users"));
       return;
     }
 
-    print(`\n封禁用户列表 / Banned users (${banned.length}):`);
-    for (const id of banned) {
-      print(`  ${id}`);
-    }
+    print("");
+    print(t("cli-banned-list-header", { count: banned.length }));
+    for (const id of banned) print(`  ${id}`);
     print("");
   };
 
   const handleBanRoom = async (args: string[]) => {
     if (args.length < 2) {
-      printError("用法 / Usage: banroom <userId> <roomId>");
+      printError(t("cli-usage-banroom"));
       return;
     }
 
-    const userId = Number(args[0]);
-    if (!Number.isInteger(userId)) {
-      printError("无效的用户ID / Invalid user ID");
-      return;
-    }
+    const userId = parseUserIdArg(args[0], getLang(), printError);
+    if (userId === null) return;
 
-    let rid: RoomId;
-    try {
-      rid = parseRoomId(args[1]!);
-    } catch {
-      printError("无效的房间ID / Invalid room ID");
-      return;
-    }
+    const rid = parseRoomIdArg(args[1], getLang(), printError);
+    if (!rid) return;
 
     await ctx.state.mutex.runExclusive(async () => {
       const set = ctx.state.bannedRoomUsers.get(rid) ?? new Set<number>();
@@ -376,28 +336,20 @@ export function startCli(ctx: CliContext): () => void {
     });
 
     await ctx.state.saveAdminData();
-    printSuccess(`已禁止用户 ${userId} 进入房间 ${args[1]} / Banned user ${userId} from room ${args[1]}`);
+    printSuccess(t("cli-room-user-banned", { userId, room: args[1]! }));
   };
 
   const handleUnbanRoom = async (args: string[]) => {
     if (args.length < 2) {
-      printError("用法 / Usage: unbanroom <userId> <roomId>");
+      printError(t("cli-usage-unbanroom"));
       return;
     }
 
-    const userId = Number(args[0]);
-    if (!Number.isInteger(userId)) {
-      printError("无效的用户ID / Invalid user ID");
-      return;
-    }
+    const userId = parseUserIdArg(args[0], getLang(), printError);
+    if (userId === null) return;
 
-    let rid: RoomId;
-    try {
-      rid = parseRoomId(args[1]!);
-    } catch {
-      printError("无效的房间ID / Invalid room ID");
-      return;
-    }
+    const rid = parseRoomIdArg(args[1], getLang(), printError);
+    if (!rid) return;
 
     await ctx.state.mutex.runExclusive(async () => {
       const set = ctx.state.bannedRoomUsers.get(rid);
@@ -408,20 +360,17 @@ export function startCli(ctx: CliContext): () => void {
     });
 
     await ctx.state.saveAdminData();
-    printSuccess(`已解除用户 ${userId} 对房间 ${args[1]} 的禁入 / Unbanned user ${userId} from room ${args[1]}`);
+    printSuccess(t("cli-room-user-unbanned", { userId, room: args[1]! }));
   };
 
   const handleBroadcast = async (args: string[]) => {
     if (args.length === 0) {
-      printError("用法 / Usage: broadcast <message>");
+      printError(t("cli-usage-broadcast"));
       return;
     }
 
-    const message = args.join(" ");
-    if (message.length > 200) {
-      printError("消息过长（最多200字符） / Message too long (max 200 characters)");
-      return;
-    }
+    const message = validateChatMessage(args.join(" "), getLang(), printError);
+    if (message === null) return;
 
     const snapshot = await ctx.state.mutex.runExclusive(async () => {
       return [...ctx.state.rooms.keys()];
@@ -433,63 +382,44 @@ export function startCli(ctx: CliContext): () => void {
     }
     await Promise.allSettled(tasks);
 
-    ctx.logger.info(tl(ctx.state.serverLang, "log-admin-broadcast", { message, rooms: String(snapshot.length) }));
-    printSuccess(`已向 ${snapshot.length} 个房间广播消息 / Broadcast to ${snapshot.length} rooms`);
+    ctx.logger.info(t("log-admin-broadcast", { message, rooms: String(snapshot.length) }));
+    printSuccess(t("cli-broadcast-sent", { count: snapshot.length }));
   };
 
   const handleRoomSay = async (args: string[]) => {
     if (args.length < 2) {
-      printError("用法 / Usage: roomsay <roomId> <message>");
+      printError(t("cli-usage-roomsay"));
       return;
     }
 
-    let rid: RoomId;
-    try {
-      rid = parseRoomId(args[0]!);
-    } catch {
-      printError("无效的房间ID / Invalid room ID");
-      return;
-    }
+    const rid = parseRoomIdArg(args[0], getLang(), printError);
+    if (!rid) return;
 
-    const message = args.slice(1).join(" ");
-    if (message.length > 200) {
-      printError("消息过长（最多200字符） / Message too long (max 200 characters)");
-      return;
-    }
+    const message = validateChatMessage(args.slice(1).join(" "), getLang(), printError);
+    if (message === null) return;
 
-    const roomExists = await ctx.state.mutex.runExclusive(async () => {
-      return ctx.state.rooms.has(rid);
-    });
-
+    const roomExists = await ctx.state.mutex.runExclusive(async () => ctx.state.rooms.has(rid));
     if (!roomExists) {
-      printError(`房间不存在 / Room not found: ${args[0]}`);
+      printError(t("cli-room-not-found-named", { room: args[0]! }));
       return;
     }
 
     await ctx.broadcastRoomAll(rid, { type: "Message", message: { type: "Chat", user: 0, content: message } });
-    logRoomInfo(ctx.logger, ctx.state.serverLang, rid, "log-admin-room-message", { message });
-    printSuccess(`已向房间 ${args[0]} 发送消息 / Message sent to room ${args[0]}`);
+    logRoomInfo(ctx.logger, getLang(), rid, "log-admin-room-message", { message });
+    printSuccess(t("cli-room-message-sent", { room: args[0]! }));
   };
 
   const handleMaxUsers = async (args: string[]) => {
     if (args.length < 2) {
-      printError("用法 / Usage: maxusers <roomId> <count>");
+      printError(t("cli-usage-maxusers"));
       return;
     }
 
-    let rid: RoomId;
-    try {
-      rid = parseRoomId(args[0]!);
-    } catch {
-      printError("无效的房间ID / Invalid room ID");
-      return;
-    }
+    const rid = parseRoomIdArg(args[0], getLang(), printError);
+    if (!rid) return;
 
-    const maxUsers = Number(args[1]);
-    if (!Number.isInteger(maxUsers) || maxUsers < 1 || maxUsers > 64) {
-      printError("无效的人数（1-64） / Invalid count (1-64)");
-      return;
-    }
+    const maxUsers = parseBoundedIntArg(args[1], 1, 64, "cli-bad-max-users", getLang(), printError);
+    if (maxUsers === null) return;
 
     const updated = await ctx.state.mutex.runExclusive(async () => {
       const room = ctx.state.rooms.get(rid);
@@ -499,70 +429,60 @@ export function startCli(ctx: CliContext): () => void {
     });
 
     if (!updated) {
-      printError("房间不存在 / Room not found");
+      printError(t("cli-room-not-found"));
       return;
     }
 
-    printSuccess(`已设置房间 ${updated} 最大人数为 ${maxUsers} / Set room ${updated} max users to ${maxUsers}`);
+    printSuccess(t("cli-room-max-users-set", { room: updated, count: maxUsers }));
   };
 
   const handleDisband = async (args: string[]) => {
     if (args.length === 0) {
-      printError("用法 / Usage: disband <roomId>");
+      printError(t("cli-usage-disband"));
       return;
     }
 
-    let rid: RoomId;
-    try {
-      rid = parseRoomId(args[0]!);
-    } catch {
-      printError("无效的房间ID / Invalid room ID");
-      return;
-    }
+    const rid = parseRoomIdArg(args[0], getLang(), printError);
+    if (!rid) return;
 
     const room = await ctx.state.mutex.runExclusive(async () => ctx.state.rooms.get(rid) ?? null);
     if (!room) {
-      printError("房间不存在 / Room not found");
+      printError(t("cli-room-not-found"));
       return;
     }
 
-    // 通知所有用户房间已解散
     const allIds = [...room.userIds(), ...room.monitorIds()];
     const tasks: Promise<void>[] = [];
     for (const id of allIds) {
       const u = ctx.state.users.get(id);
-      if (u) tasks.push(u.trySend({ type: "Message", message: { type: "Chat", user: 0, content: tl(ctx.state.serverLang, "room-disbanded-by-admin") } }));
+      if (u) tasks.push(u.trySend({ type: "Message", message: { type: "Chat", user: 0, content: t("room-disbanded-by-admin") } }));
     }
     await Promise.allSettled(tasks);
 
-    // 删除房间
     await ctx.state.mutex.runExclusive(async () => {
       ctx.state.rooms.delete(rid);
     });
 
-    // 结束回放录制
     if (ctx.state.replayEnabled && room.replayEligible) {
       await ctx.state.replayRecorder.endRoom(rid);
     }
 
-    logRoomInfo(ctx.logger, ctx.state.serverLang, rid, "log-room-disbanded-by-admin");
-    printSuccess(`已解散房间 ${args[0]} / Disbanded room ${args[0]}`);
+    logRoomInfo(ctx.logger, getLang(), rid, "log-room-disbanded-by-admin");
+    printSuccess(t("cli-room-disbanded", { room: args[0]! }));
   };
 
   const handleReplay = async (args: string[]) => {
-    if (args.length === 0 || args[0] === "status") {
-      const enabled = ctx.state.replayEnabled;
-      printInfo(`回放录制状态 / Replay recording: ${enabled ? "开启/Enabled" : "关闭/Disabled"}`);
+    const toggle = parseToggleArg(args[0]);
+    if (toggle === null) {
+      printError(t("cli-usage-replay"));
+      return;
+    }
+    if (toggle === "status") {
+      printInfo(t("cli-replay-status", { state: ctx.state.replayEnabled ? t("cli-state-on") : t("cli-state-off") }));
       return;
     }
 
-    const action = args[0]?.toLowerCase();
-    if (action !== "on" && action !== "off") {
-      printError("用法 / Usage: replay <on|off|status>");
-      return;
-    }
-
-    const enabled = action === "on";
+    const enabled = toggle === "on";
     const snapshot = await ctx.state.mutex.runExclusive(async () => {
       ctx.state.replayEnabled = enabled;
       const roomIds = enabled ? [] : [...ctx.state.rooms.keys()];
@@ -575,43 +495,36 @@ export function startCli(ctx: CliContext): () => void {
       await Promise.allSettled(tasks);
     }
 
-    printSuccess(`回放录制已${enabled ? "开启" : "关闭"} / Replay recording ${enabled ? "enabled" : "disabled"}`);
+    printSuccess(enabled ? t("cli-replay-toggled-on") : t("cli-replay-toggled-off"));
   };
 
   const handleRoomCreation = async (args: string[]) => {
-    if (args.length === 0 || args[0] === "status") {
-      const enabled = ctx.state.roomCreationEnabled;
-      printInfo(`房间创建状态 / Room creation: ${enabled ? "开启/Enabled" : "关闭/Disabled"}`);
+    const toggle = parseToggleArg(args[0]);
+    if (toggle === null) {
+      printError(t("cli-usage-roomcreation"));
+      return;
+    }
+    if (toggle === "status") {
+      printInfo(t("cli-room-creation-status", { state: ctx.state.roomCreationEnabled ? t("cli-state-on") : t("cli-state-off") }));
       return;
     }
 
-    const action = args[0]?.toLowerCase();
-    if (action !== "on" && action !== "off") {
-      printError("用法 / Usage: roomcreation <on|off|status>");
-      return;
-    }
-
-    const enabled = action === "on";
+    const enabled = toggle === "on";
     await ctx.state.mutex.runExclusive(async () => {
       ctx.state.roomCreationEnabled = enabled;
     });
 
-    printSuccess(`房间创建已${enabled ? "开启" : "关闭"} / Room creation ${enabled ? "enabled" : "disabled"}`);
+    printSuccess(enabled ? t("cli-room-creation-toggled-on") : t("cli-room-creation-toggled-off"));
   };
 
   const handleContest = async (args: string[]) => {
     if (args.length < 2) {
-      printError("用法 / Usage: contest <roomId> <enable|disable|whitelist|start>");
+      printError(t("cli-usage-contest"));
       return;
     }
 
-    let rid: RoomId;
-    try {
-      rid = parseRoomId(args[0]!);
-    } catch {
-      printError("无效的房间ID / Invalid room ID");
-      return;
-    }
+    const rid = parseRoomIdArg(args[0], getLang(), printError);
+    if (!rid) return;
 
     const subCmd = args[1]?.toLowerCase();
 
@@ -628,10 +541,10 @@ export function startCli(ctx: CliContext): () => void {
       });
 
       if (!ok) {
-        printError("房间不存在 / Room not found");
+        printError(t("cli-room-not-found"));
         return;
       }
-      printSuccess(`已启用房间 ${args[0]} 的比赛模式 / Enabled contest mode for room ${args[0]}`);
+      printSuccess(t("cli-contest-enabled", { room: args[0]! }));
     } else if (subCmd === "disable") {
       const ok = await ctx.state.mutex.runExclusive(async () => {
         const room = ctx.state.rooms.get(rid);
@@ -641,14 +554,14 @@ export function startCli(ctx: CliContext): () => void {
       });
 
       if (!ok) {
-        printError("房间不存在 / Room not found");
+        printError(t("cli-room-not-found"));
         return;
       }
-      printSuccess(`已禁用房间 ${args[0]} 的比赛模式 / Disabled contest mode for room ${args[0]}`);
+      printSuccess(t("cli-contest-disabled", { room: args[0]! }));
     } else if (subCmd === "whitelist") {
       const userIds = args.slice(2).map((id) => Number(id)).filter((n) => Number.isInteger(n));
       if (userIds.length === 0) {
-        printError("请提供至少一个用户ID / Please provide at least one user ID");
+        printError(t("cli-contest-no-user-id"));
         return;
       }
 
@@ -662,10 +575,10 @@ export function startCli(ctx: CliContext): () => void {
       });
 
       if (!ok) {
-        printError("房间不存在或未启用比赛模式 / Room not found or contest mode not enabled");
+        printError(t("cli-contest-not-enabled"));
         return;
       }
-      printSuccess(`已更新房间 ${args[0]} 的白名单 / Updated whitelist for room ${args[0]}`);
+      printSuccess(t("cli-contest-whitelist-updated", { room: args[0]! }));
     } else if (subCmd === "start") {
       const force = args[2] === "force";
 
@@ -682,18 +595,18 @@ export function startCli(ctx: CliContext): () => void {
       });
 
       if (!result.ok) {
-        printError(`无法开始比赛 / Cannot start contest: ${result.error}`);
+        printError(t("cli-contest-cannot-start", { reason: result.error }));
         return;
       }
 
       const room = result.room;
       const users = room.userIds();
       const monitors = room.monitorIds();
-      const sep = ctx.state.serverLang.lang === "zh-CN" ? "、" : ", ";
+      const sep = getLang().lang === "zh-CN" ? "、" : ", ";
       const usersText = users.join(sep);
       const monitorsText = monitors.join(sep);
-      const monitorsSuffix = monitors.length > 0 ? tl(ctx.state.serverLang, "log-room-game-start-monitors", { monitors: monitorsText }) : "";
-      logRoomInfo(ctx.logger, ctx.state.serverLang, room.id, "log-room-game-start", { users: usersText, monitorsSuffix });
+      const monitorsSuffix = monitors.length > 0 ? t("log-room-game-start-monitors", { monitors: monitorsText }) : "";
+      logRoomInfo(ctx.logger, getLang(), room.id, "log-room-game-start", { users: usersText, monitorsSuffix });
       await room.send((c) => ctx.broadcastRoomAll(room.id, c), { type: "StartPlaying" });
       room.resetGameTime((id) => ctx.state.users.get(id));
       if (ctx.state.replayEnabled && room.replayEligible) {
@@ -703,15 +616,15 @@ export function startCli(ctx: CliContext): () => void {
       room.state = { type: "Playing", results: new Map(), aborted: new Set() };
       await room.onStateChange((c) => ctx.broadcastRoomAll(room.id, c));
 
-      printSuccess(`已开始房间 ${args[0]} 的比赛 / Started contest for room ${args[0]}`);
+      printSuccess(t("cli-contest-started", { room: args[0]! }));
     } else {
-      printError("未知子命令 / Unknown subcommand. Use: enable, disable, whitelist, start");
+      printError(t("cli-contest-unknown-subcommand"));
     }
   };
 
   const handleIpBlacklist = async (args: string[]) => {
     if (args.length === 0) {
-      printError("用法 / Usage: ipblacklist <list|remove|clear>");
+      printError(t("cli-usage-ipblacklist"));
       return;
     }
 
@@ -720,30 +633,30 @@ export function startCli(ctx: CliContext): () => void {
     if (subCmd === "list") {
       const blacklist = ctx.logger.getBlacklistedIps();
       if (blacklist.length === 0) {
-        printInfo("IP黑名单为空 / IP blacklist is empty");
+        printInfo(t("cli-blacklist-empty"));
         return;
       }
 
-      print(`\nIP黑名单 / IP Blacklist (${blacklist.length}):`);
+      print("");
+      print(t("cli-blacklist-header", { count: blacklist.length }));
       for (const item of blacklist) {
         const expiresInMin = Math.ceil(item.expiresIn / 60000);
-        print(`  ${item.ip} (过期/expires in ${expiresInMin} 分钟/minutes)`);
+        print(t("cli-blacklist-line", { ip: item.ip, minutes: expiresInMin }));
       }
       print("");
     } else if (subCmd === "remove") {
       if (args.length < 2) {
-        printError("用法 / Usage: ipblacklist remove <ip>");
+        printError(t("cli-usage-ipblacklist-remove"));
         return;
       }
-
       const ip = args[1]!;
       ctx.logger.removeFromBlacklist(ip);
-      printSuccess(`已从黑名单移除 / Removed from blacklist: ${ip}`);
+      printSuccess(t("cli-blacklist-removed", { ip }));
     } else if (subCmd === "clear") {
       ctx.logger.clearBlacklist();
-      printSuccess("已清空IP黑名单 / Cleared IP blacklist");
+      printSuccess(t("cli-blacklist-cleared"));
     } else {
-      printError("未知子命令 / Unknown subcommand. Use: list, remove, clear");
+      printError(t("cli-ipblacklist-unknown-subcommand"));
     }
   };
 
