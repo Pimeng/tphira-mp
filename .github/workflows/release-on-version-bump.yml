@@ -134,9 +134,74 @@ jobs:
           path: |
             phira-mp-*.zip
 
+  build-freebsd:
+    needs: [check-version, test]
+    if: needs.check-version.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 在 FreeBSD 上构建
+        uses: vmactions/freebsd-vm@v1
+        with:
+          usesh: true
+          prepare: |
+            pkg install -y node22 npm-node22 zip
+            npm install -g pnpm@10.29.3
+          run: |
+            pnpm install --frozen-lockfile
+            pnpm run package:sea
+            cd release && zip -r ../phira-mp-freebsd-x64.zip .
+
+      - name: 上传压缩包
+        uses: actions/upload-artifact@v4
+        with:
+          name: phira-mp-FreeBSD-X64
+          path: phira-mp-freebsd-x64.zip
+
+  build-bundle:
+    needs: [check-version, test]
+    if: needs.check-version.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: 设置 pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: "10.29.3"
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 构建 Bundle
+        run: pnpm run bundle:server
+
+      - name: 制作压缩包
+        shell: bash
+        run: |
+          mkdir -p phira-mp-nodejs
+          cp dist-bundle/server.cjs phira-mp-nodejs/server.js
+          cp -r locales phira-mp-nodejs/locales
+          cp server_config.example.yml phira-mp-nodejs/server_config.yml
+          zip -r phira-mp-nodejs.zip phira-mp-nodejs
+
+      - name: 上传压缩包
+        uses: actions/upload-artifact@v4
+        with:
+          name: phira-mp-nodejs-bundle
+          path: phira-mp-nodejs.zip
+
   release:
     if: startsWith(github.ref, 'refs/tags/') || needs.check-version.outputs.should_release == 'true'
-    needs: [check-version, build]
+    needs: [check-version, build, build-freebsd, build-bundle]
     runs-on: ubuntu-latest
     steps:
       - name: 检出代码
@@ -252,6 +317,8 @@ jobs:
             artifacts/phira-mp-Linux-X64/*.zip
             artifacts/phira-mp-Windows-X64/*.zip
             artifacts/phira-mp-macOS-ARM64/*.zip
+            artifacts/phira-mp-FreeBSD-X64/*.zip
+            artifacts/phira-mp-nodejs-bundle/*.zip
           body: ${{ steps.notes.outputs.release_notes }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
