@@ -15,7 +15,7 @@ import {
   fetchWithTimeout,
   fetchWithRetry
 } from "../../common/http.js";
-import type { ServerState } from "../core/state.js";
+import { OTP_TTL_MS, TEMP_TOKEN_TTL_MS, type ServerState } from "../core/state.js";
 import { Language, tl } from "../utils/l10n.js";
 import type { ServerCommand } from "../../common/commands.js";
 import { deleteReplayForUser, listReplaysForUser, readReplayHeader, replayFilePath } from "../replay/replayStorage.js";
@@ -53,8 +53,6 @@ export async function startHttpService(opts: { state: ServerState; host: string;
   const replaySessions = new Map<string, { userId: number; expiresAt: number }>();
 
   // 临时管理员TOKEN管理常量
-  const TEMP_TOKEN_TTL_MS = 4 * 60 * 60 * 1000; // 4小时
-  const OTP_TTL_MS = 5 * 60 * 1000; // 验证码 5 分钟有效
   const otpSessions = new Map<string, { otp: string; expiresAt: number }>();
 
   // OTP验证尝试限制
@@ -177,7 +175,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
       const reqAdminToken = extractAdminToken(req, url);
       
       // 清理过期的临时TOKEN和OTP
-      const cleanupExpired = () => cleanupExpiringMaps(state.tempAdminTokens, otpSessions);
+      const cleanupExpired = () => cleanupExpiringMaps(state.tempAdminTokens, otpSessions, state.cliApprovalSessions);
 
       const requireAdmin = () => {
         // 调试输出
@@ -609,17 +607,49 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           return;
         }
 
+        // 读取可选 body 以获取 mode 参数
+        let mode = "otp";
+        try {
+          const body = await read();
+          const raw = (body ?? {}) as { mode?: unknown };
+          if (typeof raw.mode === "string") {
+            const m = raw.mode.trim().toLowerCase();
+            if (m === "cli" || m === "otp") mode = m;
+          }
+        } catch {
+          // body 读取失败时按默认 otp 处理
+        }
+
         cleanupExpired();
         const ssid = newUuid();
-        const otp = newUuid().slice(0, 8); // 8位验证码
         const expiresAt = Date.now() + OTP_TTL_MS;
+
+        if (mode === "cli") {
+          // CLI 批准模式：在终端打印提权请求并等待管理员处理
+          state.cliApprovalSessions.set(ssid, {
+            ip: clientIp,
+            expiresAt,
+            status: "pending",
+            requestedAt: Date.now()
+          });
+
+          const shortSsid = ssid.slice(0, 8);
+          const message = `[OTP CLI Request] 收到管理员提权申请，请求IP: ${clientIp}，会话ID: ${ssid}（短码: ${shortSsid}），1分钟内有效。使用 'approve ${shortSsid}' 批准或 'deny ${shortSsid}' 拒绝`;
+          process.stdout.write(`\x1b[33m[${new Date().toISOString()}] [INFO] ${message}\x1b[0m\n`);
+
+          write(200, { ok: true, ssid, expiresIn: OTP_TTL_MS, mode: "cli" });
+          return;
+        }
+
+        // 默认 OTP 模式
+        const otp = newUuid().slice(0, 8); // 8位验证码
         otpSessions.set(ssid, { otp, expiresAt });
 
         // 输出到终端（INFO级别，强制输出，不写入文件）
-        const message = `[OTP Request] 您正在尝试请求验证码登录管理员后台 API，本次请求的验证码是 ${otp}，会话ID: ${ssid}, 5分钟内有效`;
+        const message = `[OTP Request] 您正在尝试请求验证码登录管理员后台 API，本次请求的验证码是 ${otp}，会话ID: ${ssid}, 1分钟内有效`;
         process.stdout.write(`\x1b[32m[${new Date().toISOString()}] [INFO] ${message}\x1b[0m\n`);
 
-        write(200, { ok: true, ssid, expiresIn: OTP_TTL_MS });
+        write(200, { ok: true, ssid, expiresIn: OTP_TTL_MS, mode: "otp" });
         return;
       }
 
@@ -632,11 +662,67 @@ export async function startHttpService(opts: { state: ServerState; host: string;
         }
 
         const body = await read();
-        const raw = (body ?? {}) as { ssid?: unknown; otp?: unknown };
+        const raw = (body ?? {}) as { ssid?: unknown; otp?: unknown; mode?: unknown };
         const ssid = typeof raw.ssid === "string" ? raw.ssid.trim() : "";
-        const otp = typeof raw.otp === "string" ? raw.otp.trim() : "";
+        let mode = "otp";
+        if (typeof raw.mode === "string") {
+          const m = raw.mode.trim().toLowerCase();
+          if (m === "cli" || m === "otp") mode = m;
+        }
 
-        if (!ssid || !otp) {
+        if (!ssid) {
+          write(400, { ok: false, error: "bad-request" });
+          return;
+        }
+
+        cleanupExpired();
+
+        // CLI 批准模式：检查批准状态并返回 token（如果已批准）
+        if (mode === "cli") {
+          const session = state.cliApprovalSessions.get(ssid);
+          if (!session || Date.now() > session.expiresAt) {
+            state.cliApprovalSessions.delete(ssid);
+            write(401, { ok: false, error: "invalid-or-expired-session" });
+            return;
+          }
+          // 仅允许同 IP 轮询
+          if (session.ip !== clientIp) {
+            write(403, { ok: false, error: "ip-mismatch" });
+            return;
+          }
+          if (session.status === "pending") {
+            write(202, { ok: false, error: "pending-approval", status: "pending" });
+            return;
+          }
+          if (session.status === "denied") {
+            state.cliApprovalSessions.delete(ssid);
+            write(403, { ok: false, error: "approval-denied", status: "denied" });
+            return;
+          }
+          // approved
+          const token = session.token;
+          const tokenExpiresAt = session.tokenExpiresAt;
+          if (!token || !tokenExpiresAt) {
+            // 状态异常，清理后报错
+            state.cliApprovalSessions.delete(ssid);
+            write(500, { ok: false, error: "token-not-issued" });
+            return;
+          }
+          // 一次性会话：取出后立即清理
+          state.cliApprovalSessions.delete(ssid);
+          write(200, {
+            ok: true,
+            token,
+            expiresAt: tokenExpiresAt,
+            expiresIn: Math.max(0, tokenExpiresAt - Date.now()),
+            mode: "cli"
+          });
+          return;
+        }
+
+        // 默认 OTP 验证模式
+        const otp = typeof raw.otp === "string" ? raw.otp.trim() : "";
+        if (!otp) {
           write(400, { ok: false, error: "bad-request" });
           return;
         }
@@ -651,7 +737,6 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           return;
         }
 
-        cleanupExpired();
         const otpData = otpSessions.get(ssid);
         if (!otpData || Date.now() > otpData.expiresAt) {
           write(401, { ok: false, error: "invalid-or-expired-otp" });
@@ -662,7 +747,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           // 记录失败尝试
           const ipAttempts = (otpAttemptsByIp.get(clientIp) || 0) + 1;
           const ssidAttempts = (otpAttemptsBySsid.get(ssid) || 0) + 1;
-          
+
           otpAttemptsByIp.set(clientIp, ipAttempts);
           otpAttemptsBySsid.set(ssid, ssidAttempts);
 

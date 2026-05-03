@@ -43,7 +43,8 @@ describe("OTP临时TOKEN功能测试", () => {
       expect(data.ok).toBe(true);
       expect(data.ssid).toBeDefined();
       expect(typeof data.ssid).toBe("string");
-      expect(data.expiresIn).toBe(5 * 60 * 1000); // 5分钟
+      expect(data.expiresIn).toBe(60 * 1000); // 1分钟
+      expect(data.mode).toBe("otp");
 
       const stdout = stdoutChunks.join("");
       expect(stdout).toContain("管理员后台 API");
@@ -141,10 +142,144 @@ describe("OTP临时TOKEN功能测试", () => {
       headers: { "X-Admin-Token": "any-token" }
     });
     const data = await res.json() as any;
-    
+
     // 因为没有配置ADMIN_TOKEN，且没有有效的临时TOKEN
     expect(res.status).toBe(403);
     expect(data.ok).toBe(false);
+  });
+
+  test("CLI 批准模式：请求时返回 mode=cli 且不打印验证码", async () => {
+    const stdoutChunks: string[] = [];
+    const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(((chunk: any) => {
+      stdoutChunks.push(String(chunk));
+      return true;
+    }) as any);
+
+    try {
+      const res = await fetch(`${baseUrl}/admin/otp/request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "cli" })
+      });
+      const data = await res.json() as any;
+
+      expect(res.status).toBe(200);
+      expect(data.ok).toBe(true);
+      expect(data.mode).toBe("cli");
+      expect(typeof data.ssid).toBe("string");
+      expect(data.expiresIn).toBe(60 * 1000);
+
+      const stdout = stdoutChunks.join("");
+      expect(stdout).toContain("CLI Request");
+      expect(stdout).toContain("approve");
+      expect(stdout).not.toContain("验证码是");
+    } finally {
+      stdoutSpy.mockRestore();
+    }
+  });
+
+  test("CLI 批准模式：未批准前 verify 应返回 202 pending-approval", async () => {
+    const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation((() => true) as any);
+    try {
+      const reqRes = await fetch(`${baseUrl}/admin/otp/request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "cli" })
+      });
+      const { ssid } = (await reqRes.json()) as any;
+
+      const verifyRes = await fetch(`${baseUrl}/admin/otp/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ssid, mode: "cli" })
+      });
+      const verifyData = (await verifyRes.json()) as any;
+
+      expect(verifyRes.status).toBe(202);
+      expect(verifyData.ok).toBe(false);
+      expect(verifyData.error).toBe("pending-approval");
+      expect(verifyData.status).toBe("pending");
+    } finally {
+      stdoutSpy.mockRestore();
+    }
+  });
+
+  test("CLI 批准模式：管理员批准后 verify 应返回 token", async () => {
+    const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation((() => true) as any);
+    try {
+      const reqRes = await fetch(`${baseUrl}/admin/otp/request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "cli" })
+      });
+      const { ssid } = (await reqRes.json()) as any;
+
+      // 模拟 CLI 管理员批准：直接操作 state
+      const sess = server.state.cliApprovalSessions.get(ssid)!;
+      expect(sess).toBeDefined();
+      const tokenExpiresAt = Date.now() + 4 * 60 * 60 * 1000;
+      sess.status = "approved";
+      sess.token = "test-cli-token-uuid";
+      sess.tokenExpiresAt = tokenExpiresAt;
+      server.state.tempAdminTokens.set("test-cli-token-uuid", {
+        ip: sess.ip,
+        expiresAt: tokenExpiresAt,
+        banned: false
+      });
+
+      const verifyRes = await fetch(`${baseUrl}/admin/otp/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ssid, mode: "cli" })
+      });
+      const verifyData = (await verifyRes.json()) as any;
+
+      expect(verifyRes.status).toBe(200);
+      expect(verifyData.ok).toBe(true);
+      expect(verifyData.mode).toBe("cli");
+      expect(verifyData.token).toBe("test-cli-token-uuid");
+      expect(typeof verifyData.expiresAt).toBe("number");
+
+      // 一次性会话：再次取应失败
+      const verify2 = await fetch(`${baseUrl}/admin/otp/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ssid, mode: "cli" })
+      });
+      const verify2Data = (await verify2.json()) as any;
+      expect(verify2.status).toBe(401);
+      expect(verify2Data.error).toBe("invalid-or-expired-session");
+    } finally {
+      stdoutSpy.mockRestore();
+    }
+  });
+
+  test("CLI 批准模式：管理员拒绝后 verify 应返回 403 approval-denied", async () => {
+    const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation((() => true) as any);
+    try {
+      const reqRes = await fetch(`${baseUrl}/admin/otp/request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "cli" })
+      });
+      const { ssid } = (await reqRes.json()) as any;
+
+      const sess = server.state.cliApprovalSessions.get(ssid)!;
+      sess.status = "denied";
+
+      const verifyRes = await fetch(`${baseUrl}/admin/otp/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ssid, mode: "cli" })
+      });
+      const verifyData = (await verifyRes.json()) as any;
+
+      expect(verifyRes.status).toBe(403);
+      expect(verifyData.error).toBe("approval-denied");
+      expect(verifyData.status).toBe("denied");
+    } finally {
+      stdoutSpy.mockRestore();
+    }
   });
 });
 

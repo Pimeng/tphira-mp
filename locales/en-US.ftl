@@ -195,6 +195,9 @@ cli-help =
       contest <roomId> whitelist <userIds...> - Set whitelist
       contest <roomId> start [force]          - Start contest
     ipblacklist <list|remove|clear> - IP blacklist management
+    pending                       - List all pending CLI elevation requests
+    approve <ssid>                - Approve a CLI elevation request and issue a temp TOKEN (accepts ssid prefix)
+    deny <ssid>                   - Deny a CLI elevation request (accepts ssid prefix)
 
 cli-no-rooms = No rooms currently
 cli-rooms-total = Total rooms: { $count }
@@ -284,4 +287,16 @@ cli-blacklist-line =   { $ip } (expires in { $minutes } minutes)
 cli-blacklist-removed = Removed from blacklist: { $ip }
 cli-blacklist-cleared = Cleared IP blacklist
 cli-ipblacklist-unknown-subcommand = Unknown subcommand. Available: list, remove, clear
+
+cli-usage-approve = Usage: approve <ssid> (full ssid or prefix shortcode)
+cli-usage-deny = Usage: deny <ssid> (full ssid or prefix shortcode)
+cli-approve-not-found = No pending elevation request matched: { $input }
+cli-approve-ambiguous = Shortcode { $input } matches multiple elevation requests; please use a longer prefix
+cli-approve-expired = Elevation request { $ssid } has expired
+cli-approve-already-handled = Elevation request { $ssid } is already in { $status } state and cannot be handled again
+cli-approve-success = Approved elevation request { $ssid } (requester IP: { $ip }); temporary TOKEN issued
+cli-deny-success = Denied elevation request { $ssid } (requester IP: { $ip })
+cli-pending-empty = No pending CLI elevation requests
+cli-pending-header = Pending CLI elevation requests ({ $count }):
+cli-pending-line =   [{ $ssid }] full ssid: { $full } | IP: { $ip } | remaining { $seconds }s
 

@@ -579,6 +579,81 @@ ipblacklist clear
 
 ---
 
+## CLI 提权批准 / CLI Elevation Approval
+
+当前端通过 `POST /admin/otp/request {"mode":"cli"}` 发起 CLI 直接批准模式的提权申请时，服务器会在终端打印一条申请日志，并等待管理员在 CLI 中以下列命令处理。详见 `docs/api.md` 中 “临时管理员TOKEN（OTP方式）” 章节。
+
+When a frontend issues `POST /admin/otp/request {"mode":"cli"}`, the server prints a request line in the terminal and waits for an operator to handle it via the commands below. See `docs/api.md` "Temporary Admin TOKEN (OTP)" for the protocol.
+
+### pending
+列出所有待处理的 CLI 提权申请（仅状态为 `pending` 的会话）。
+
+List all pending CLI elevation requests (sessions with status `pending`).
+
+**用法 / Usage:**
+```
+pending
+```
+
+**显示信息 / Information shown:**
+- 短码 ssid 与完整 ssid / Shortcode ssid and full ssid
+- 请求方 IP / Requester IP
+- 剩余有效秒数 / Remaining seconds before expiry
+
+---
+
+### approve
+批准一条 CLI 提权申请，立即签发临时管理员 TOKEN。前端再次轮询 `/admin/otp/verify` 即可取走 TOKEN。
+
+Approve a CLI elevation request and immediately issue a temporary admin TOKEN. The frontend will receive it via its next poll to `/admin/otp/verify`.
+
+**用法 / Usage:**
+```
+approve <ssid>
+```
+
+**参数 / Parameters:**
+- `ssid`: 完整 ssid 或可唯一识别的前缀短码 / full ssid or a unique prefix shortcode
+
+**示例 / Examples:**
+```
+approve a1b2c3d4
+approve a1b2c3d4-e5f6-7890-1234-56789abcdef0
+```
+
+**注意 / Notes:**
+- 申请会话有效期 1 分钟，过期后无法批准
+- Request sessions are valid for 1 minute; expired sessions cannot be approved
+- 批准后的临时 TOKEN 有效期 4 小时，与 OTP 模式签发的 TOKEN 完全一致
+- The issued temporary TOKEN is valid for 4 hours, identical to OTP-mode tokens
+- 临时 TOKEN 绑定请求 IP，仅该 IP 可使用
+- The temporary TOKEN is bound to the requester IP and only usable from there
+
+---
+
+### deny
+拒绝一条 CLI 提权申请，前端轮询时会立即收到 `approval-denied` 响应。
+
+Deny a CLI elevation request; the frontend receives an immediate `approval-denied` on its next poll.
+
+**用法 / Usage:**
+```
+deny <ssid>
+```
+
+**参数 / Parameters:**
+- `ssid`: 完整 ssid 或可唯一识别的前缀短码 / full ssid or a unique prefix shortcode
+
+**别名 / Alias:** `reject`
+
+**示例 / Examples:**
+```
+deny a1b2c3d4
+reject a1b2c3d4
+```
+
+---
+
 ## 服务器控制 / Server Control
 
 ### stop / shutdown

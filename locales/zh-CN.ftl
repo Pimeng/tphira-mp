@@ -195,6 +195,9 @@ cli-help =
       contest <roomId> whitelist <userIds...> - 设置白名单
       contest <roomId> start [force]          - 手动开始比赛
     ipblacklist <list|remove|clear> - IP 黑名单管理
+    pending                       - 列出所有待处理的 CLI 提权申请
+    approve <ssid>                - 批准 CLI 提权申请并签发临时 TOKEN（支持 ssid 前缀短码）
+    deny <ssid>                   - 拒绝 CLI 提权申请（支持 ssid 前缀短码）
 
 cli-no-rooms = 当前没有房间
 cli-rooms-total = 房间总数：{ $count }
@@ -284,4 +287,16 @@ cli-blacklist-line =   { $ip }（{ $minutes } 分钟后过期）
 cli-blacklist-removed = 已从黑名单移除：{ $ip }
 cli-blacklist-cleared = 已清空 IP 黑名单
 cli-ipblacklist-unknown-subcommand = 未知子命令。可用：list、remove、clear
+
+cli-usage-approve = 用法：approve <ssid>（支持完整 ssid 或前缀短码）
+cli-usage-deny = 用法：deny <ssid>（支持完整 ssid 或前缀短码）
+cli-approve-not-found = 未找到匹配的提权申请：{ $input }
+cli-approve-ambiguous = 短码 { $input } 匹配到多个提权申请，请提供更长的前缀
+cli-approve-expired = 提权申请 { $ssid } 已过期
+cli-approve-already-handled = 提权申请 { $ssid } 已处于 { $status } 状态，无法再次处理
+cli-approve-success = 已批准提权申请 { $ssid }（请求IP：{ $ip }），临时 TOKEN 已签发
+cli-deny-success = 已拒绝提权申请 { $ssid }（请求IP：{ $ip }）
+cli-pending-empty = 当前没有待处理的 CLI 提权申请
+cli-pending-header = 待处理的 CLI 提权申请（共 { $count } 个）：
+cli-pending-line =   [{ $ssid }] 完整 ssid: { $full } | 请求IP: { $ip } | 剩余 { $seconds } 秒
 

@@ -1,6 +1,8 @@
 import * as readline from "node:readline";
 import type { FluentVariable } from "@fluent/bundle";
 import type { ServerState } from "../core/state.js";
+import { TEMP_TOKEN_TTL_MS } from "../core/state.js";
+import { newUuid } from "../../common/uuid.js";
 import type { Logger } from "../utils/logger.js";
 import { roomIdToString, type RoomId } from "../../common/roomId.js";
 import type { ServerCommand } from "../../common/commands.js";
@@ -101,6 +103,16 @@ export function startCli(ctx: CliContext): () => void {
           break;
         case "ipblacklist":
           await handleIpBlacklist(args);
+          break;
+        case "approve":
+          await handleApprove(args);
+          break;
+        case "deny":
+        case "reject":
+          await handleDeny(args);
+          break;
+        case "pending":
+          await handlePending();
           break;
         case "stop":
         case "shutdown":
@@ -658,6 +670,125 @@ export function startCli(ctx: CliContext): () => void {
     } else {
       printError(t("cli-ipblacklist-unknown-subcommand"));
     }
+  };
+
+  /** 通过完整 ssid 或前缀短码，唯一定位一个 CLI 提权会话；歧义时返回 "ambiguous"。 */
+  const findApprovalSsid = (input: string): string | "ambiguous" | null => {
+    const sessions = ctx.state.cliApprovalSessions;
+    if (sessions.has(input)) return input;
+    let found: string | null = null;
+    for (const ssid of sessions.keys()) {
+      if (ssid.startsWith(input)) {
+        if (found !== null) return "ambiguous";
+        found = ssid;
+      }
+    }
+    return found;
+  };
+
+  const handleApprove = async (args: string[]) => {
+    if (args.length === 0) {
+      printError(t("cli-usage-approve"));
+      return;
+    }
+    const input = args[0]!.trim();
+    if (!input) {
+      printError(t("cli-usage-approve"));
+      return;
+    }
+
+    const result = findApprovalSsid(input);
+    if (result === "ambiguous") {
+      printError(t("cli-approve-ambiguous", { input }));
+      return;
+    }
+    if (!result) {
+      printError(t("cli-approve-not-found", { input }));
+      return;
+    }
+
+    const session = ctx.state.cliApprovalSessions.get(result)!;
+    if (Date.now() > session.expiresAt) {
+      ctx.state.cliApprovalSessions.delete(result);
+      printError(t("cli-approve-expired", { ssid: result.slice(0, 8) }));
+      return;
+    }
+    if (session.status !== "pending") {
+      printError(t("cli-approve-already-handled", { ssid: result.slice(0, 8), status: session.status }));
+      return;
+    }
+
+    // 生成临时 TOKEN，并放入 tempAdminTokens（与 OTP 流程产物一致）
+    const token = newUuid();
+    const tokenExpiresAt = Date.now() + TEMP_TOKEN_TTL_MS;
+    ctx.state.tempAdminTokens.set(token, { ip: session.ip, expiresAt: tokenExpiresAt, banned: false });
+
+    session.status = "approved";
+    session.token = token;
+    session.tokenExpiresAt = tokenExpiresAt;
+
+    ctx.logger.info(`[OTP CLI Approve] 会话 ${result.slice(0, 8)} 已批准，签发临时TOKEN ${token.slice(0, 8)}... (IP: ${session.ip})`);
+    printSuccess(t("cli-approve-success", { ssid: result.slice(0, 8), ip: session.ip }));
+  };
+
+  const handleDeny = async (args: string[]) => {
+    if (args.length === 0) {
+      printError(t("cli-usage-deny"));
+      return;
+    }
+    const input = args[0]!.trim();
+    if (!input) {
+      printError(t("cli-usage-deny"));
+      return;
+    }
+
+    const result = findApprovalSsid(input);
+    if (result === "ambiguous") {
+      printError(t("cli-approve-ambiguous", { input }));
+      return;
+    }
+    if (!result) {
+      printError(t("cli-approve-not-found", { input }));
+      return;
+    }
+
+    const session = ctx.state.cliApprovalSessions.get(result)!;
+    if (session.status !== "pending") {
+      printError(t("cli-approve-already-handled", { ssid: result.slice(0, 8), status: session.status }));
+      return;
+    }
+
+    session.status = "denied";
+    ctx.logger.info(`[OTP CLI Deny] 会话 ${result.slice(0, 8)} 已被拒绝 (IP: ${session.ip})`);
+    printSuccess(t("cli-deny-success", { ssid: result.slice(0, 8), ip: session.ip }));
+  };
+
+  const handlePending = async () => {
+    const now = Date.now();
+    // 顺便清理过期项
+    for (const [ssid, sess] of ctx.state.cliApprovalSessions) {
+      if (now > sess.expiresAt) ctx.state.cliApprovalSessions.delete(ssid);
+    }
+
+    const items = [...ctx.state.cliApprovalSessions.entries()]
+      .filter(([, s]) => s.status === "pending")
+      .map(([ssid, s]) => ({
+        ssid,
+        ip: s.ip,
+        remainingSec: Math.max(0, Math.ceil((s.expiresAt - now) / 1000))
+      }));
+
+    if (items.length === 0) {
+      printInfo(t("cli-pending-empty"));
+      return;
+    }
+
+    print("");
+    print(t("cli-pending-header", { count: items.length }));
+    for (const it of items) {
+      print(t("cli-pending-line", { ssid: it.ssid.slice(0, 8), full: it.ssid, ip: it.ip, seconds: it.remainingSec }));
+    }
+    print("");
   };
 
   return () => {

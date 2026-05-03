@@ -15,6 +15,11 @@ import type { WebSocketService } from "../network/websocketService.js";
 
 type AdminDataFile = { version: 1; bannedUsers: number[]; bannedRoomUsers: Record<string, number[]> };
 
+/** 临时管理员 TOKEN 的有效期（4 小时） */
+export const TEMP_TOKEN_TTL_MS = 4 * 60 * 60 * 1000;
+/** OTP / CLI 提权会话的有效期（1 分钟） */
+export const OTP_TTL_MS = 1 * 60 * 1000;
+
 /** 用户自动上传配置 */
 export type AutoUploadConfig = {
   enabled: boolean;
@@ -60,6 +65,16 @@ export class ServerState {
 
   // 临时管理员 TOKEN 管理
   readonly tempAdminTokens = new Map<string, { ip: string; expiresAt: number; banned: boolean }>();
+
+  // CLI 提权批准会话（mode=cli 的 OTP 流程）
+  readonly cliApprovalSessions = new Map<string, {
+    ip: string;
+    expiresAt: number;
+    status: "pending" | "approved" | "denied";
+    token?: string;
+    tokenExpiresAt?: number;
+    requestedAt: number;
+  }>();
   
   // 用户自动上传配置（仅内存存储，在/replay/auth时关联）
   readonly autoUploadConfigs = new Map<number, AutoUploadConfig>();

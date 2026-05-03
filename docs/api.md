@@ -40,37 +40,71 @@ token 错误/缺失：返回 `401 { "ok": false, "error": "unauthorized" }`
 
 ### 临时管理员TOKEN（OTP方式）
 
-当未配置 `ADMIN_TOKEN` 时，可以使用一次性验证码（OTP）方式获取临时管理员TOKEN。
+当未配置 `ADMIN_TOKEN` 时，可以使用一次性验证码（OTP）方式获取临时管理员TOKEN。  
+此外还支持 **CLI 直接批准** 模式：通过参数指示，跳过验证码并由服务器终端管理员人工批准发放临时 TOKEN（与 OTP 流程复用同一对接口）。
 
-#### 1) 请求一次性验证码
+#### 1) 请求一次性验证码 / 提权批准
 
 `POST /admin/otp/request`
 
+可选 Body：
+
+```json
+{ "mode": "otp" }
+```
+
+或 CLI 批准模式：
+
+```json
+{ "mode": "cli" }
+```
+
 说明：
 - 仅当未配置 `ADMIN_TOKEN` 时可用
-- 验证码有效期：5分钟
-- 验证码会输出到服务器终端（INFO级别），不写入日志文件
+- `mode` 可选 `"otp"`（默认）或 `"cli"`
+  - `"otp"`：与原行为一致，服务器在终端打印验证码，前端再调 `/admin/otp/verify` 提交验证码换取临时 TOKEN
+  - `"cli"`：服务器在终端打印一条 **CLI 提权申请**（包含请求 IP、`ssid`、短码），等待管理员在 CLI 输入 `approve <ssid>` 或 `deny <ssid>`；前端通过 `/admin/otp/verify` 携带 `mode: "cli"` 轮询批准结果
+- 不传 `mode` 或传非 `cli`/`otp` 的值，按 `"otp"` 处理（保持向后兼容）
+- 会话有效期：1 分钟（OTP 与 CLI 提权申请共用此时长）
+- 验证码 / CLI 申请会输出到服务器终端（INFO 级别），不写入日志文件
 
-返回示例：
+返回示例（OTP 模式）：
 
 ```json
 {
   "ok": true,
   "ssid": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-  "expiresIn": 300000
+  "expiresIn": 60000,
+  "mode": "otp"
 }
 ```
 
-终端输出示例：
-```
-[2026-02-11T10:30:00.000Z] [INFO] [OTP Request] SSID: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx, OTP: abcd1234, Expires in 5 minutes
+返回示例（CLI 模式）：
+
+```json
+{
+  "ok": true,
+  "ssid": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+  "expiresIn": 60000,
+  "mode": "cli"
+}
 ```
 
-#### 2) 验证OTP并获取临时TOKEN
+终端输出示例（OTP 模式）：
+```
+[2026-02-11T10:30:00.000Z] [INFO] [OTP Request] 您正在尝试请求验证码登录管理员后台 API，本次请求的验证码是 abcd1234，会话ID: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx, 1分钟内有效
+```
+
+终端输出示例（CLI 模式）：
+```
+[2026-02-11T10:30:00.000Z] [INFO] [OTP CLI Request] 收到管理员提权申请，请求IP: 1.2.3.4，会话ID: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx（短码: xxxxxxxx），1分钟内有效。使用 'approve xxxxxxxx' 批准或 'deny xxxxxxxx' 拒绝
+```
+
+#### 2) 验证OTP / 查询 CLI 批准结果
 
 `POST /admin/otp/verify`
 
-Body：
+Body（OTP 模式）：
 
 ```json
 {
@@ -79,27 +113,49 @@ Body：
 }
 ```
 
+Body（CLI 模式）：
+
+```json
+{
+  "ssid": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+  "mode": "cli"
+}
+```
+
 说明：
-- 验证成功后返回临时TOKEN，有效期4小时
-- 临时TOKEN绑定请求IP，仅该IP可使用
+- `mode` 默认 `"otp"`，必须与请求时使用的模式一致
+- OTP 模式：验证成功后返回临时 TOKEN
+- CLI 模式：根据当前批准状态返回不同结果，前端可定时轮询直到拿到 token 或被拒绝
+  - 待批准：`202 { ok: false, error: "pending-approval", status: "pending" }`
+  - 已拒绝：`403 { ok: false, error: "approval-denied", status: "denied" }`
+  - 已批准：`200` 返回 token（与 OTP 模式一致），返回后会话即被销毁，`token` 仅可获取一次
+  - 仅同 IP 可轮询（与请求时的 IP 必须一致），否则 `403 ip-mismatch`
+- 临时TOKEN有效期 4 小时，绑定请求 IP，仅该 IP 可使用
 - 若检测到不同IP使用同一TOKEN，该TOKEN会被封禁（但返回错误仍为"token-expired"）
 - 临时TOKEN权限与永久管理员TOKEN完全一致
 
-返回示例：
+返回示例（验证 / 批准成功）：
 
 ```json
 {
   "ok": true,
   "token": "yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy",
   "expiresAt": 1707649800000,
-  "expiresIn": 14400000
+  "expiresIn": 14400000,
+  "mode": "cli"
 }
 ```
+
+> `mode` 字段在 OTP 模式下被省略，CLI 模式下为 `"cli"`。
 
 常见错误：
 - 已配置永久TOKEN时：`403 { "ok": false, "error": "otp-disabled-when-token-configured" }`
 - 参数不合法：`400 { "ok": false, "error": "bad-request" }`
 - OTP无效或过期：`401 { "ok": false, "error": "invalid-or-expired-otp" }`
+- CLI 会话无效或过期：`401 { "ok": false, "error": "invalid-or-expired-session" }`
+- CLI 模式 IP 不匹配：`403 { "ok": false, "error": "ip-mismatch" }`
+- CLI 模式批准被拒：`403 { "ok": false, "error": "approval-denied", "status": "denied" }`
+- CLI 模式仍待批准：`202 { "ok": false, "error": "pending-approval", "status": "pending" }`
 - TOKEN过期或IP不匹配：`401 { "ok": false, "error": "token-expired" }`
 
 ## 数据持久化（封禁相关）
@@ -934,7 +990,7 @@ export HOST=http://127.0.0.1:12347
 
 # 1. 请求OTP（查看服务器终端获取验证码）
 curl -X POST "$HOST/admin/otp/request"
-# 返回: {"ok":true,"ssid":"xxx-xxx-xxx","expiresIn":300000}
+# 返回: {"ok":true,"ssid":"xxx-xxx-xxx","expiresIn":60000,"mode":"otp"}
 
 # 2. 使用SSID和OTP获取临时TOKEN
 curl -X POST -H "Content-Type: application/json" \
@@ -943,6 +999,36 @@ curl -X POST -H "Content-Type: application/json" \
 # 返回: {"ok":true,"token":"yyy-yyy-yyy","expiresAt":1707649800000,"expiresIn":14400000}
 
 # 3. 使用临时TOKEN访问管理员API（与永久TOKEN用法相同）
+export TEMP_TOKEN=yyy-yyy-yyy
+curl -H "X-Admin-Token: $TEMP_TOKEN" "$HOST/admin/rooms"
+```
+
+### 使用临时TOKEN（CLI 直接批准方式）
+
+让前端跳过验证码，由服务器终端管理员直接批准：
+
+```bash
+export HOST=http://127.0.0.1:12347
+
+# 1. 请求 CLI 批准（在服务器终端会出现 [OTP CLI Request] 日志，包含 ssid 和短码）
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"mode":"cli"}' \
+  "$HOST/admin/otp/request"
+# 返回: {"ok":true,"ssid":"xxx-xxx-xxx","expiresIn":60000,"mode":"cli"}
+
+# 2. 服务器终端管理员执行：
+#    approve xxx-xxx-x       （前缀短码即可）
+#    或 deny xxx-xxx-x
+
+# 3. 前端轮询（建议 1~2 秒一次，1 分钟内有效）
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"ssid":"xxx-xxx-xxx","mode":"cli"}' \
+  "$HOST/admin/otp/verify"
+# 待批准: HTTP 202 {"ok":false,"error":"pending-approval","status":"pending"}
+# 已拒绝: HTTP 403 {"ok":false,"error":"approval-denied","status":"denied"}
+# 已批准: HTTP 200 {"ok":true,"token":"yyy-yyy-yyy","expiresAt":...,"expiresIn":14400000,"mode":"cli"}
+
+# 4. 拿到 token 后用法与 OTP 方式相同
 export TEMP_TOKEN=yyy-yyy-yyy
 curl -H "X-Admin-Token: $TEMP_TOKEN" "$HOST/admin/rooms"
 ```
