@@ -607,7 +607,7 @@ export function startCli(ctx: CliContext): () => void {
       const monitorsText = monitors.join(sep);
       const monitorsSuffix = monitors.length > 0 ? t("log-room-game-start-monitors", { monitors: monitorsText }) : "";
       logRoomInfo(ctx.logger, getLang(), room.id, "log-room-game-start", { users: usersText, monitorsSuffix });
-      await room.send((c) => ctx.broadcastRoomAll(room.id, c), { type: "StartPlaying" });
+      await room.send((c) => ctx.broadcastRoomAll(room.id, c), { type: "StartPlaying" }, (id) => ctx.state.users.get(id));
       room.resetGameTime((id) => ctx.state.users.get(id));
       if (ctx.state.replayEnabled && room.replayEligible) {
         const replayUsers = room.userIds().map((id) => ({ id, name: ctx.state.users.get(id)?.name ?? String(id) }));

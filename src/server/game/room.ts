@@ -27,12 +27,26 @@ export class Room {
   private monitors: number[] = [];
   chart: Chart | null = null;
 
+  private recentLogs: Array<{ message: string; timestamp: number }> = [];
+  private static readonly MAX_RECENT_LOGS = 50;
+
   constructor(opts: { id: RoomId; hostId: number; maxUsers: number; replayEligible: boolean }) {
     this.id = opts.id;
     this.maxUsers = opts.maxUsers;
     this.replayEligible = opts.replayEligible;
     this.hostId = opts.hostId;
     this.users = [opts.hostId];
+  }
+
+  addLog(message: string, timestamp: number): void {
+    this.recentLogs.push({ message, timestamp });
+    if (this.recentLogs.length > Room.MAX_RECENT_LOGS) {
+      this.recentLogs.shift();
+    }
+  }
+
+  getRecentLogs(): Array<{ message: string; timestamp: number }> {
+    return [...this.recentLogs];
   }
 
   isLive(): boolean {
@@ -115,8 +129,60 @@ export class Room {
     return [...this.monitors];
   }
 
-  async send(broadcast: (cmd: ServerCommand) => Promise<void>, msg: Message): Promise<void> {
+  async send(
+    broadcast: (cmd: ServerCommand) => Promise<void>,
+    msg: Message,
+    usersById?: (id: number) => { name: string } | undefined
+  ): Promise<void> {
+    if (msg.type === "Chat") {
+      this.addLog(msg.content, Date.now());
+    } else {
+      const logText = this.formatMessageForLog(msg, usersById);
+      if (logText) this.addLog(logText, Date.now());
+    }
     await broadcast({ type: "Message", message: msg });
+  }
+
+  private formatMessageForLog(msg: Message, usersById?: (id: number) => { name: string } | undefined): string | null {
+    const name = (id: number) => usersById?.(id)?.name ?? String(id);
+
+    switch (msg.type) {
+      case "CreateRoom":
+        return `${name(msg.user)} 创建了房间`;
+      case "JoinRoom":
+        return `${msg.name} 加入了房间`;
+      case "LeaveRoom":
+        return `${msg.name} 离开了房间`;
+      case "NewHost":
+        return `${name(msg.user)} 成为了新的房主`;
+      case "SelectChart":
+        return `房主 ${name(msg.user)} 选择了谱面 ${msg.name} (#${msg.id})`;
+      case "GameStart":
+        return `房主 ${name(msg.user)} 开始了游戏，请其他玩家准备`;
+      case "Ready":
+        return `${name(msg.user)} 已就绪`;
+      case "CancelReady":
+        return `${name(msg.user)} 取消了准备`;
+      case "CancelGame":
+        return `${name(msg.user)} 取消了对局`;
+      case "StartPlaying":
+        return `游戏开始`;
+      case "Played": {
+        const acc = (msg.accuracy * 100).toFixed(2);
+        const fc = msg.full_combo ? "，全连" : "";
+        return `${name(msg.user)} 结束了游玩：${msg.score} (${acc}%)${fc}`;
+      }
+      case "GameEnd":
+        return `游戏结束`;
+      case "Abort":
+        return `${name(msg.user)} 放弃了游戏`;
+      case "LockRoom":
+        return msg.lock ? "房间已锁定" : "房间已解锁";
+      case "CycleRoom":
+        return msg.cycle ? "房间已切换为循环模式" : "房间已切换为普通模式";
+      default:
+        return null;
+    }
   }
 
   async sendAs(broadcast: (cmd: ServerCommand) => Promise<void>, user: User, content: string): Promise<void> {
@@ -137,7 +203,7 @@ export class Room {
       wsService?: { broadcastRoomUpdate: (roomId: RoomId) => Promise<void>; broadcastAdminUpdate: () => Promise<void> } | null;
     }): Promise<boolean> {
       const { user } = opts;
-      await this.send(opts.broadcast, { type: "LeaveRoom", user: user.id, name: user.name });
+      await this.send(opts.broadcast, { type: "LeaveRoom", user: user.id, name: user.name }, opts.usersById);
       user.room = null;
 
       if (user.monitor) this.monitors = this.monitors.filter((it) => it !== user.id);
@@ -150,7 +216,7 @@ export class Room {
         if (newHost === null) return true;
         this.hostId = newHost;
         if (opts.logger) logRoomInfo(opts.logger, opts.lang, this.id, "log-room-host-changed-offline", { old: String(user.id), next: String(newHost) });
-        await this.send(opts.broadcast, { type: "NewHost", user: newHost });
+        await this.send(opts.broadcast, { type: "NewHost", user: newHost }, opts.usersById);
         const newHostUser = opts.usersById(newHost);
         if (newHostUser) await newHostUser.trySend({ type: "ChangeHost", is_host: true });
       }
@@ -203,7 +269,7 @@ export class Room {
         const monitorsText = monitors.join(sep);
         const monitorsSuffix = monitors.length > 0 ? tl(opts.lang, "log-room-game-start-monitors", { monitors: monitorsText }) : "";
         if (opts.logger) logRoomInfo(opts.logger, opts.lang, this.id, "log-room-game-start", { users: usersText, monitorsSuffix });
-        await this.send(opts.broadcast, { type: "StartPlaying" });
+        await this.send(opts.broadcast, { type: "StartPlaying" }, opts.usersById);
         this.resetGameTime(opts.usersById);
         this.state = { type: "Playing", results: new Map(), aborted: new Set() };
         await this.onStateChange(opts.broadcast);
@@ -258,7 +324,7 @@ export class Room {
           uploaded: String(results.size),
           aborted: String(aborted.size)
         });
-        await this.send(opts.broadcast, { type: "GameEnd" });
+        await this.send(opts.broadcast, { type: "GameEnd" }, opts.usersById);
         if (opts.onGameEnd) await opts.onGameEnd(this);
         this.state = { type: "SelectChart" };
 
@@ -287,7 +353,7 @@ export class Room {
             const oldHost = this.hostId;
             this.hostId = newHost;
             if (opts.logger) logRoomInfo(opts.logger, opts.lang, this.id, "log-room-host-changed-cycle", { old: String(oldHost), next: String(newHost) });
-            await this.send(opts.broadcast, { type: "NewHost", user: newHost });
+            await this.send(opts.broadcast, { type: "NewHost", user: newHost }, opts.usersById);
             const oldHostUser = opts.usersById(oldHost);
             if (oldHostUser) await oldHostUser.trySend({ type: "ChangeHost", is_host: false });
             const newHostUser = opts.usersById(newHost);

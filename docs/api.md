@@ -478,6 +478,7 @@ SHARE_STATION:
 ```json
 {
   "ok": true,
+  "total_rooms": 2,
   "rooms": [
     {
       "roomid": "room1",
@@ -500,7 +501,11 @@ SHARE_STATION:
           "language": "zh-CN"
         }
       ],
-      "monitors": []
+      "monitors": [],
+      "recent_logs": [
+        { "message": "Alice 创建了房间", "timestamp": 1730000000000 },
+        { "message": "管理员通知：请注意游戏规则", "timestamp": 1730000005000 }
+      ]
     },
     {
       "roomid": "room2",
@@ -540,7 +545,13 @@ SHARE_STATION:
           "aborted": false
         }
       ],
-      "monitors": []
+      "monitors": [],
+      "recent_logs": [
+        { "message": "Bob 创建了房间", "timestamp": 1730000010000 },
+        { "message": "Bob 选择了谱面 Chart-2", "timestamp": 1730000015000 },
+        { "message": "游戏开始，参与玩家：100、200", "timestamp": 1730000020000 },
+        { "message": "Alice: 大家好", "timestamp": 1730000025000 }
+      ]
     }
   ]
 }
@@ -548,6 +559,20 @@ SHARE_STATION:
 
 说明：
 
+- `total_rooms`：当前房间总数
+- `recent_logs`：房间最近 50 条日志/公屏消息，按时间顺序排列，包含：
+  - **玩家聊天消息**
+  - **系统事件消息**（与 Phira 客户端公屏显示的消息一致）：
+    - 创建房间、加入/离开房间
+    - 房主变更
+    - 房间锁定/解锁
+    - 房间循环模式切换（普通模式/循环模式）
+    - 选择谱面
+    - 请求开始游戏、玩家准备/取消准备
+    - 游戏开始、游戏结束
+    - 玩家完成游玩（上传成绩）、放弃游戏
+  - 管理员通过 `/admin/broadcast` 或 `/admin/rooms/:roomId/chat` 发送的公屏消息
+  - 游戏结算摘要
 - 房间进行中（`state.type === "playing"`）时，每个玩家会包含以下额外字段：
   - `finished`：玩家是否已完成游玩（上传成绩或中止）
   - `aborted`：玩家是否中止了游玩

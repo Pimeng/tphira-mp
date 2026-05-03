@@ -151,6 +151,7 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
   const mergedCfg = loadMergedConfig();
   let currentConfig = mergedCfg;
   let broadcastRoomLog: ((roomId: RoomId, message: string, timestamp: Date) => void) | null = null;
+  let state: ServerState | undefined;
   const logger = new Logger({
     logsDir: paths.logsDir,
     minLevel: mergedCfg.log_level as any,
@@ -165,12 +166,14 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
       } catch {
         return;
       }
+      const room = state?.rooms.get(roomId);
+      if (room) room.addLog(message, timestamp.getTime());
       broadcastRoomLog?.(roomId, message, timestamp);
     }
   });
   const serverName = mergedCfg.server_name || "Phira MP";
   const adminDataPath = mergedCfg.admin_data_path ?? paths.adminDataPath;
-  const state = new ServerState(mergedCfg, logger, serverName, adminDataPath);
+  state = new ServerState(mergedCfg, logger, serverName, adminDataPath);
   await state.loadAdminData();
   const replayCleanup = startReplayCleanup({ ttlDays: 4, logger });
 

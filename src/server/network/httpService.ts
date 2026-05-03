@@ -1100,7 +1100,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           const monitorsText = monitors.join(sep);
           const monitorsSuffix = monitors.length > 0 ? tl(state.serverLang, "log-room-game-start-monitors", { monitors: monitorsText }) : "";
           logRoomInfo(state.logger, state.serverLang, room.id, "log-room-game-start", { users: usersText, monitorsSuffix });
-          await room.send((c) => broadcastRoomAll(room.id, c), { type: "StartPlaying" });
+          await room.send((c) => broadcastRoomAll(room.id, c), { type: "StartPlaying" }, (id) => state.users.get(id));
           room.resetGameTime((id) => state.users.get(id));
           if (state.replayEnabled && room.replayEligible) {
             const users = room.userIds().map((id) => ({ id, name: state.users.get(id)?.name ?? String(id) }));
@@ -1133,6 +1133,8 @@ export async function startHttpService(opts: { state: ServerState; host: string;
 
           // 优化：完全异步，不等待
           for (const roomId of snapshot) {
+            const room = state.rooms.get(roomId);
+            if (room) room.addLog(message, Date.now());
             void broadcastRoomAll(roomId, { type: "Message", message: { type: "Chat", user: 0, content: message } }).catch(() => {});
           }
 
@@ -1160,13 +1162,14 @@ export async function startHttpService(opts: { state: ServerState; host: string;
             return;
           }
 
-          const roomExists = state.rooms.has(rid);
+          const room = state.rooms.get(rid);
 
-          if (!roomExists) {
+          if (!room) {
             write(404, { ok: false, error: "room-not-found" });
             return;
           }
 
+          room.addLog(message, Date.now());
           void broadcastRoomAll(rid, { type: "Message", message: { type: "Chat", user: 0, content: message } }).catch(() => {});
           logRoomInfo(state.logger, state.serverLang, rid, "log-admin-room-message", { message });
           write(200, { ok: true });

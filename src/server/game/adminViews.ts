@@ -44,6 +44,7 @@ export type AdminRoomData = {
     connected: boolean;
     language: string;
   }>;
+  recent_logs: Array<{ message: string; timestamp: number }>;
 };
 
 export type RoomUpdateData = {
@@ -56,6 +57,7 @@ export type RoomUpdateData = {
   host: { id: number; name: string };
   users: Array<{ id: number; name: string; is_ready: boolean }>;
   monitors: Array<{ id: number; name: string }>;
+  recent_logs: Array<{ message: string; timestamp: number }>;
 };
 
 function toStateString(room: Room): "select_chart" | "waiting_for_ready" | "playing" {
@@ -136,7 +138,8 @@ export function buildAdminRoomData(state: ServerState, rid: RoomId, room: Room):
     chart,
     contest,
     users,
-    monitors
+    monitors,
+    recent_logs: room.getRecentLogs()
   };
 }
 
@@ -174,6 +177,7 @@ export function buildRoomUpdateData(state: ServerState, rid: RoomId): RoomUpdate
     chart: room.chart ? { name: room.chart.name, id: room.chart.id } : null,
     host: { id: room.hostId, name: hostName },
     users,
-    monitors
+    monitors,
+    recent_logs: room.getRecentLogs()
   };
 }
