@@ -545,7 +545,8 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           userId,
           enabled: config.enabled,
           show: config.show,
-          shareStationConfigured: state.shareStationConfigured
+          shareStationConfigured: state.shareStationConfigured,
+          autoUploadEnabled: Boolean(state.config.replay_auto_upload)
         });
         return;
       }
@@ -578,7 +579,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
         // 更新配置
         if (typeof enabled === 'boolean') {
           config.enabled = enabled;
-          
+
           // 如果禁用自动上传，清除待处理的任务
           if (!enabled) {
             state.pendingAutoUploads.delete(userId);
@@ -594,7 +595,9 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           ok: true,
           userId,
           enabled: config.enabled,
-          show: config.show
+          show: config.show,
+          shareStationConfigured: state.shareStationConfigured,
+          autoUploadEnabled: Boolean(state.config.replay_auto_upload)
         });
         return;
       }
@@ -1322,10 +1325,16 @@ export async function startHttpService(opts: { state: ServerState; host: string;
    * 延迟30秒后执行上传
    */
   const handleGameEndAutoUpload = (userId: number, chartId: number, timestamp: number, recordId: number): void => {
+    // 检查服务端是否启用自动上传功能
+    if (!state.config.replay_auto_upload) {
+      state.logger.debug(`Auto upload skipped for user ${userId}: REPLAY_AUTO_UPLOAD disabled`);
+      return;
+    }
+
     // 检查用户是否启用了自动上传
     const config = state.autoUploadConfigs.get(userId);
     if (!config?.enabled) return;
-    
+
     // 检查分享站是否配置
     if (!state.shareStationConfigured) {
       state.logger.debug(`Auto upload skipped for user ${userId}: share station not configured`);
@@ -1339,6 +1348,15 @@ export async function startHttpService(opts: { state: ServerState; host: string;
 
     // 延迟30秒后执行上传
     setTimeout(async () => {
+      // 再次检查全局开关（可能在此期间被禁用）
+      if (!state.config.replay_auto_upload) {
+        const tasks = state.pendingAutoUploads.get(userId) ?? [];
+        const filtered = tasks.filter(t => t.timestamp !== timestamp);
+        if (filtered.length === 0) state.pendingAutoUploads.delete(userId);
+        else state.pendingAutoUploads.set(userId, filtered);
+        return;
+      }
+
       // 再次检查配置（可能在此期间被禁用）
       const currentConfig = state.autoUploadConfigs.get(userId);
       if (!currentConfig?.enabled) {

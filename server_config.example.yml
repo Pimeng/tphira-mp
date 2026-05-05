@@ -37,6 +37,11 @@ REPLAY_ENABLED: false
 # 回放录制目录，默认 ./record
 # REPLAY_BASE_DIR: "./record"
 
+# 是否启用游戏结束后自动上传回放到分享站，默认 false
+# 仅当同时配置了 SHARE_STATION 时实际生效
+# 关闭后，即使用户在客户端开启了自动上传偏好，服务端也不会执行上传
+REPLAY_AUTO_UPLOAD: false
+
 # 观战用户 ID
 MONITORS:
   - 2

@@ -426,7 +426,8 @@ export class Session {
         if (!room) return null;
         if (room.state.type !== "Playing") return null;
         const canRecord = this.state.replayEnabled && room.replayEligible;
-        const canForward = refreshRoomLiveState(room, this.state.replayEnabled);
+        const hasMonitors = room.monitorIds().length > 0;
+        const canForward = canRecord || hasMonitors;
         if (!canRecord && !canForward) return null;
         const last = cmd.frames.at(-1);
         if (last) user.gameTime = last.time;
@@ -440,7 +441,8 @@ export class Session {
         if (!room) return null;
         if (room.state.type !== "Playing") return null;
         const canRecord = this.state.replayEnabled && room.replayEligible;
-        const canForward = refreshRoomLiveState(room, this.state.replayEnabled);
+        const hasMonitors = room.monitorIds().length > 0;
+        const canForward = canRecord || hasMonitors;
         if (!canRecord && !canForward) return null;
         this.state.logger.log("DEBUG", tl(this.state.serverLang, "log-user-judges", { user: user.name, room: room.id, count: String(cmd.judges.length) }), { judges: cmd.judges }, { userId: user.id });
         if (canRecord) this.state.replayRecorder.appendJudges(room.id, user.id, cmd.judges);

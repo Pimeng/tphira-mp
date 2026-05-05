@@ -37,6 +37,8 @@ export type ServerConfig = {
   outbound_proxy?: string | false;
   /** Phira Replay 分享站配置 */
   share_station?: ShareStationConfig;
+  /** 是否启用游戏结束后自动上传回放到分享站，默认 false。需要同时配置 share_station 才能实际生效 */
+  replay_auto_upload?: boolean;
 };
 
 export type Chart = {

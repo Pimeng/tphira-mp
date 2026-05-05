@@ -103,6 +103,7 @@ export const CONFIG_FIELDS: ReadonlyArray<ConfigField> = [
   field({ key: "chat_enabled", envName: "CHAT_ENABLED", parse: parseBoolValue }),
   field({ key: "replay_enabled", envName: "REPLAY_ENABLED", parse: parseBoolValue }),
   field({ key: "replay_base_dir", envName: "REPLAY_BASE_DIR", parse: parseStringValue }),
+  field({ key: "replay_auto_upload", envName: "REPLAY_AUTO_UPLOAD", parse: parseBoolValue }),
   field({ key: "admin_token", envName: "ADMIN_TOKEN", parse: parseStringValue }),
   field({ key: "admin_data_path", envName: "ADMIN_DATA_PATH", parse: parseStringValue, startupOnly: true }),
   field({ key: "room_list_tip", envName: "ROOM_LIST_TIP", parse: parseStringValue }),
