@@ -252,6 +252,37 @@ Body：
 }
 ```
 
+### 房间创建开关查询（无需鉴权）
+
+`GET /room-creation/config`
+
+返回示例：
+
+```json
+{ "ok": true, "enabled": true }
+```
+
+说明：
+
+- 返回当前服务器是否允许创建新房间
+- `enabled=true`：允许创建房间；`enabled=false`：禁止创建房间
+
+### 回放录制开关查询（无需鉴权）
+
+`GET /replay/config`
+
+返回示例：
+
+```json
+{ "ok": true, "enabled": false }
+```
+
+说明：
+
+- 返回当前服务器是否启用回放录制
+- `enabled=true`：正在录制；`enabled=false`：未录制
+- 此接口仅查询状态，修改开关需使用管理员接口 `POST /admin/replay/config`
+
 ### 谱面回放接口（无需 ADMIN_TOKEN）
 
 回放相关接口需要启用 HTTP 服务（见上文“启用 HTTP 服务”），但**不需要** `ADMIN_TOKEN`。

@@ -306,6 +306,11 @@ export async function startHttpService(opts: { state: ServerState; host: string;
         return;
       }
 
+      if (req.method === "GET" && url.pathname === "/room-creation/config") {
+        write(200, { ok: true, enabled: state.roomCreationEnabled });
+        return;
+      }
+
       if (req.method === "POST" && url.pathname === "/replay/auth") {
         const body = await read();
         const token = typeof (body as any)?.token === "string" ? String((body as any).token).trim() : "";
@@ -675,6 +680,11 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           shareStationConfigured: state.shareStationConfigured,
           autoUploadEnabled: Boolean(state.config.replay_auto_upload)
         });
+        return;
+      }
+
+      if (req.method === "GET" && url.pathname === "/replay/config") {
+        write(200, { ok: true, enabled: state.replayEnabled });
         return;
       }
 
