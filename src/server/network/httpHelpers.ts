@@ -3,6 +3,7 @@
 import type http from "node:http";
 import { writeJson, fetchWithRetry } from "../../common/http.js";
 import { parseRoomId, type RoomId } from "../../common/roomId.js";
+import { roomIdToString, type RoomId } from "../../common/roomId.js";
 import type { ServerState } from "../core/state.js";
 import type { ServerCommand } from "../../common/commands.js";
 import type { Room } from "../game/room.js";
@@ -55,6 +56,28 @@ export async function verifyUserTokenViaApi(state: ServerState, token: string, t
 }
 
 /**
+ * 向房间所有用户（包括观战者）广播命令
+ */
+export async function broadcastRoomAll(state: ServerState, roomId: RoomId, cmd: ServerCommand): Promise<void> {
+  const room = state.rooms.get(roomId);
+  if (!room) return;
+  const ids = [...room.userIds(), ...room.monitorIds()];
+  const tasks: Promise<void>[] = [];
+  for (const id of ids) {
+    const u = state.users.get(id);
+    if (u) tasks.push(u.trySend(cmd));
+  }
+  if (tasks.length > 0) await Promise.allSettled(tasks);
+}
+
+/**
+ * 从 ID 数组中挑选一个用户 ID（简单取第一个）
+ */
+export function pickRandomUserId(ids: number[]): number | null {
+  return ids[0] ?? null;
+}
+
+/**
  * 把所有未完成成绩的玩家标记为 abort，触发 checkAllReady。
  * 用于管理员踢人/封禁时不让对局卡在等待该玩家上传成绩。
  */
@@ -62,17 +85,15 @@ export async function abortPlayingUserAndCheckReady(opts: {
   state: ServerState;
   user: { id: number; room: Room | null };
   room: Room;
-  broadcastRoomAll: (roomId: RoomId, cmd: ServerCommand) => Promise<void>;
-  pickRandomUserId: (ids: number[]) => number | null;
 }): Promise<void> {
-  const { state, user, room, broadcastRoomAll, pickRandomUserId } = opts;
+  const { state, user, room } = opts;
   if (room.state.type !== "Playing") return;
   room.state.aborted.add(user.id);
-  await broadcastRoomAll(room.id, { type: "Message", message: { type: "Abort", user: user.id } });
+  await broadcastRoomAll(state, room.id, { type: "Message", message: { type: "Abort", user: user.id } });
   await room.checkAllReady({
     usersById: (id) => state.users.get(id),
-    broadcast: (cmd) => broadcastRoomAll(room.id, cmd),
-    broadcastToMonitors: (cmd) => broadcastRoomAll(room.id, cmd),
+    broadcast: (cmd) => broadcastRoomAll(state, room.id, cmd),
+    broadcastToMonitors: (cmd) => broadcastRoomAll(state, room.id, cmd),
     pickRandomUserId,
     lang: state.serverLang,
     logger: state.logger,

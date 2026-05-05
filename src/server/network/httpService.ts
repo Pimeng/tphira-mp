@@ -12,13 +12,14 @@ import {
   readJson,
   extractAdminToken,
   handleOptionsRequest,
-  fetchWithTimeout,
   fetchWithRetry
 } from "../../common/http.js";
 import { OTP_TTL_MS, TEMP_TOKEN_TTL_MS, type ServerState } from "../core/state.js";
 import { Language, tl } from "../utils/l10n.js";
-import type { ServerCommand } from "../../common/commands.js";
+
 import { deleteReplayForUser, listReplaysForUser, readReplayHeader, replayFilePath } from "../replay/replayStorage.js";
+import { createAutoUploadHandler } from "../replay/autoUpload.js";
+import { uploadToShareStation, setReplayVisibility } from "../utils/shareStation.js";
 import { startWebSocketService, type WebSocketService } from "../network/websocketService.js";
 import { getAppPaths } from "../utils/appPaths.js";
 import { logRoomInfo } from "../utils/logUtils.js";
@@ -26,9 +27,10 @@ import { refreshRoomLive } from "../game/roomUtils.js";
 import { buildAdminRoomsData } from "../game/adminViews.js";
 import {
   abortPlayingUserAndCheckReady,
+  broadcastRoomAll,
   cleanupExpiringMaps,
-  encodeMultipartFormData,
   parseRoomIdOrWriteError,
+  pickRandomUserId,
   verifyUserTokenViaApi
 } from "./httpHelpers.js";
 import yaml from "js-yaml";
@@ -66,91 +68,6 @@ export async function startHttpService(opts: { state: ServerState; host: string;
    */
   const verifyUserToken = (token: string): Promise<number | null> => verifyUserTokenViaApi(state, token);
 
-  /**
-   * 上传文件到分享站（内部函数）
-   */
-  const uploadToShareStation = async (
-    fileBuffer: Buffer,
-    filename: string,
-    options?: { chartName?: string; username?: string; illustration?: string; chartLink?: string }
-  ): Promise<{ success: boolean; replayId?: string; scoreId?: number; message?: string }> => {
-    if (!state.shareStationConfigured) {
-      return { success: false, message: "share-station-not-configured" };
-    }
-
-    const shareStation = state.shareStation!;
-    const uploadUrl = `${shareStation.url}/upload_direct`;
-
-    try {
-      const fields: Parameters<typeof encodeMultipartFormData>[0] = [
-        { name: "file", value: fileBuffer, filename }
-      ];
-      if (options?.chartName) fields.push({ name: "chart_name", value: options.chartName });
-      if (options?.username) fields.push({ name: "username", value: options.username });
-      if (options?.illustration) fields.push({ name: "illustration", value: options.illustration });
-      if (options?.chartLink) fields.push({ name: "chart_link", value: options.chartLink });
-      const { body, contentType } = encodeMultipartFormData(fields);
-
-      const response = await fetchWithTimeout(uploadUrl, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${shareStation.token}`,
-          "Content-Type": contentType,
-          "Content-Length": body.length.toString()
-        },
-        body,
-        proxy: state.config.outbound_proxy
-      }, 60000);
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => "unknown error");
-        return { success: false, message: `upload-failed: ${errorText}` };
-      }
-
-      // 按 API 文档，/upload_direct 响应仅保证返回 replay_id（success/message 为 x-apifox-ignore-properties，不实际返回）
-      const result = (await response.json()) as { replay_id?: string };
-
-      // 解析 replay_id 获取 score_id
-      // 格式为 "{user_id}_{chart_id}_{score_id}.phirarec"（分享站约定格式）
-      const replayId = result.replay_id || "";
-      const scoreIdMatch = /_(\d+)\.phirarec$/.exec(replayId);
-      const scoreId = scoreIdMatch ? parseInt(scoreIdMatch[1]!, 10) : undefined;
-
-      return {
-        success: true, // HTTP 200 即为成功；API 不返回 success 字段
-        replayId,
-        scoreId
-      };
-    } catch (error) {
-      state.logger.error(`Upload to share station failed: ${error instanceof Error ? error.message : String(error)}`);
-      return { success: false, message: "upload-failed" };
-    }
-  };
-
-  /**
-   * 设置回放在分享站的显示状态
-   */
-  const setReplayVisibility = async (scoreId: number, visible: boolean): Promise<boolean> => {
-    if (!state.shareStationConfigured) return false;
-
-    const shareStation = state.shareStation!;
-    const endpoint = visible ? `/show/${scoreId}` : `/hide/${scoreId}`;
-    const url = `${shareStation.url}${endpoint}`;
-
-    try {
-      const response = await fetchWithTimeout(url, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${shareStation.token}`
-        },
-        proxy: state.config.outbound_proxy
-      }, 10000);
-
-      return response.ok;
-    } catch {
-      return false;
-    }
-  };
   const otpBannedSsids = new Set<string>();
 
   const server = http.createServer((req, res) => {
@@ -245,19 +162,6 @@ export async function startHttpService(opts: { state: ServerState; host: string;
         adminFailedAttemptsByIp.delete(clientIp);
         return true;
       };
-
-      const broadcastRoomAll = async (roomId: RoomId, cmd: ServerCommand): Promise<void> => {
-        const room = state.rooms.get(roomId);
-        if (!room) return;
-        const ids = [...room.userIds(), ...room.monitorIds()];
-        const tasks: Promise<void>[] = [];
-        for (const id of ids) {
-          const u = state.users.get(id);
-          if (u) tasks.push(u.trySend(cmd));
-        }
-        await Promise.allSettled(tasks);
-      };
-      const pickRandomUserId = (ids: number[]): number | null => ids[0] ?? null;
 
       if (req.method === "GET" && url.pathname === "/room") {
         // 优化：不使用 mutex，直接读取
@@ -561,11 +465,14 @@ export async function startHttpService(opts: { state: ServerState; host: string;
         }
 
         // 上传到分享站
-        const uploadResult = await uploadToShareStation(
+        const uploadResult = await uploadToShareStation({
           fileBuffer,
-          `${timestamp}.phirarec`,
-          { chartName: header.chartName, username: header.userName }
-        );
+          filename: `${timestamp}.phirarec`,
+          chartName: header.chartName,
+          username: header.userName,
+          shareStation: state.shareStation!,
+          outboundProxy: state.config.outbound_proxy
+        });
 
         if (!uploadResult.success) {
           write(500, { ok: false, error: uploadResult.message || "upload-failed" });
@@ -587,7 +494,10 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           chartMeta.push({ scoreId: uploadResult.scoreId, chartId, timestamp });
 
           // 手动上传默认设置为显示
-          await setReplayVisibility(uploadResult.scoreId, true);
+          await setReplayVisibility(uploadResult.scoreId, true, {
+            shareStation: state.shareStation!,
+            outboundProxy: state.config.outbound_proxy
+          });
 
           // 上传成功后删除本地文件
           try {
@@ -1064,7 +974,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
             if (sessionToDisconnect) {
               const u = sessionToDisconnect.user;
               if (u && u.room) {
-                await abortPlayingUserAndCheckReady({ state, user: u, room: u.room, broadcastRoomAll, pickRandomUserId });
+                await abortPlayingUserAndCheckReady({ state, user: u, room: u.room });
               }
               await sessionToDisconnect.adminDisconnect({ preserveRoom: true });
             }
@@ -1109,7 +1019,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           }
           const u = target.user;
           if (u && u.room) {
-            await abortPlayingUserAndCheckReady({ state, user: u, room: u.room, broadcastRoomAll, pickRandomUserId });
+            await abortPlayingUserAndCheckReady({ state, user: u, room: u.room });
           }
           await target.adminDisconnect({ preserveRoom: false });
           write(200, { ok: true });
@@ -1167,9 +1077,9 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           const shouldDrop = await from.onUserLeave({
             user: u,
             usersById: (id) => state.users.get(id),
-            broadcast: (cmd) => broadcastRoomAll(from.id, cmd),
-            broadcastToMonitors: (cmd) => broadcastRoomAll(from.id, cmd),
-            pickRandomUserId,
+            broadcast: (cmd) => broadcastRoomAll(state, from.id, cmd),
+            broadcastToMonitors: (cmd) => broadcastRoomAll(state, from.id, cmd),
+            pickRandomUserId: pickRandomUserId,
             lang: state.serverLang,
             logger: state.logger,
             wsService: state.wsService
@@ -1274,14 +1184,14 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           const monitorsText = monitors.join(sep);
           const monitorsSuffix = monitors.length > 0 ? tl(state.serverLang, "log-room-game-start-monitors", { monitors: monitorsText }) : "";
           logRoomInfo(state.logger, state.serverLang, room.id, "log-room-game-start", { users: usersText, monitorsSuffix });
-          await room.send((c) => broadcastRoomAll(room.id, c), { type: "StartPlaying" }, (id) => state.users.get(id));
+          await room.send((c) => broadcastRoomAll(state, room.id, c), { type: "StartPlaying" }, (id) => state.users.get(id));
           room.resetGameTime((id) => state.users.get(id));
           if (state.replayEnabled && room.replayEligible) {
             const users = room.userIds().map((id) => ({ id, name: state.users.get(id)?.name ?? String(id) }));
             await state.replayRecorder.startRoom(room.id, room.chart!, users);
           }
           room.state = { type: "Playing", results: new Map(), aborted: new Set() };
-          await room.onStateChange((c) => broadcastRoomAll(room.id, c));
+          await room.onStateChange((c) => broadcastRoomAll(state, room.id, c));
           await room.notifyWebSocket(state);
           write(200, { ok: true });
           return;
@@ -1309,7 +1219,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           for (const roomId of snapshot) {
             const room = state.rooms.get(roomId);
             if (room) room.addLog(message, Date.now());
-            void broadcastRoomAll(roomId, { type: "Message", message: { type: "Chat", user: 0, content: message } }).catch(() => {});
+            void broadcastRoomAll(state, roomId, { type: "Message", message: { type: "Chat", user: 0, content: message } }).catch(() => {});
           }
 
           state.logger.info(tl(state.serverLang, "log-admin-broadcast", { message, rooms: String(snapshot.length) }));
@@ -1344,7 +1254,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           }
 
           room.addLog(message, Date.now());
-          void broadcastRoomAll(rid, { type: "Message", message: { type: "Chat", user: 0, content: message } }).catch(() => {});
+          void broadcastRoomAll(state, rid, { type: "Message", message: { type: "Chat", user: 0, content: message } }).catch(() => {});
           logRoomInfo(state.logger, state.serverLang, rid, "log-admin-room-message", { message });
           write(200, { ok: true });
           return;
@@ -1406,93 +1316,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
   // 启动 WebSocket 服务
   const ws = startWebSocketService({ httpServer: server, state });
 
-  /**
-   * 处理游戏结束时的自动上传任务
-   * 延迟30秒后执行上传
-   */
-  const handleGameEndAutoUpload = (userId: number, chartId: number, timestamp: number, recordId: number): void => {
-    // 检查服务端是否启用自动上传功能
-    if (!state.config.replay_auto_upload) {
-      state.logger.debug(`Auto upload skipped for user ${userId}: REPLAY_AUTO_UPLOAD disabled`);
-      return;
-    }
-
-    // 检查分享站是否配置（未配置则保留本地文件）
-    if (!state.shareStationConfigured) {
-      state.logger.debug(`Auto upload skipped for user ${userId}: share station not configured, keeping local file`);
-      return;
-    }
-
-    // 延迟30秒后执行上传
-    setTimeout(async () => {
-      // 再次检查全局开关（可能在此期间被禁用）
-      if (!state.config.replay_auto_upload) {
-        return;
-      }
-
-      const baseDir = state.replayRecorder.baseDir;
-      const filePath = replayFilePath(baseDir, userId, chartId, timestamp);
-
-      // 验证文件存在
-      const header = await readReplayHeader(filePath).catch(() => null);
-      if (!header || header.userId !== userId || header.chartId !== chartId) {
-        state.logger.warn(`Auto upload failed for user ${userId}: replay file not found or invalid`);
-        return;
-      }
-
-      // 读取文件内容
-      let fileBuffer: Buffer;
-      try {
-        fileBuffer = await readFile(filePath);
-      } catch (err) {
-        state.logger.error(`Auto upload failed for user ${userId}: failed to read file - ${err instanceof Error ? err.message : String(err)}`);
-        return;
-      }
-
-      // 上传到分享站
-      const uploadResult = await uploadToShareStation(
-        fileBuffer,
-        `${timestamp}.phirarec`,
-        { chartName: header.chartName, username: header.userName }
-      );
-
-      if (!uploadResult.success) {
-        state.logger.error(`Auto upload failed for user ${userId}: ${uploadResult.message}`);
-        return;
-      }
-
-      // 存储元数据
-      if (uploadResult.scoreId) {
-        let userMeta = state.uploadedReplayMeta.get(userId);
-        if (!userMeta) {
-          userMeta = new Map();
-          state.uploadedReplayMeta.set(userId, userMeta);
-        }
-        let chartMeta = userMeta.get(chartId);
-        if (!chartMeta) {
-          chartMeta = [];
-          userMeta.set(chartId, chartMeta);
-        }
-        chartMeta.push({ scoreId: uploadResult.scoreId, chartId, timestamp });
-
-        // 根据用户配置设置显示状态（默认不显示，show=true 时设为可见）
-        const config = state.autoUploadConfigs.get(userId);
-        if (config?.show) {
-          await setReplayVisibility(uploadResult.scoreId, true);
-        }
-      }
-
-      state.logger.info(`Auto upload completed for user ${userId}, chart ${chartId}, scoreId: ${uploadResult.scoreId}`);
-
-      // 上传成功后删除本地文件（只保留元数据）
-      try {
-        await rm(filePath);
-        state.logger.debug(`Local replay file deleted for user ${userId}, chart ${chartId}, timestamp ${timestamp}`);
-      } catch (err) {
-        state.logger.warn(`Failed to delete local replay file for user ${userId}: ${err instanceof Error ? err.message : String(err)}`);
-      }
-    }, 30000); // 30秒延迟
-  };
+  const handleGameEndAutoUpload = createAutoUploadHandler(state);
 
   return {
     server,

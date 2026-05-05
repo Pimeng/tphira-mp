@@ -403,18 +403,107 @@ export class Session {
     }
   }
 
+  private errToStr<T>(fn: () => Promise<T>): Promise<StringResult<T>> {
+    const user = this.user;
+    if (!user) return fn().then(ok).catch((e) => err(this.localizeError(user.lang, e)));
+    return fn().then(ok).catch((e) => err(this.localizeError(user.lang, e)));
+  }
+
+  private async processCreateRoom(user: User, id: string): Promise<void> {
+    if (await this.checkAndHandleBan(user)) throw new Error(user.lang.format("user-banned-by-server"));
+    if (!this.state.roomCreationEnabled) throw new Error(user.lang.format("room-creation-disabled"));
+    if (user.room) throw new Error(user.lang.format("room-already-in-room"));
+    await this.state.mutex.runExclusive(async () => {
+      if (this.state.rooms.has(id)) throw new Error(user.lang.format("create-id-occupied"));
+      const maxUsersRaw = this.state.config.room_max_users;
+      const maxUsers =
+        typeof maxUsersRaw === "number" && Number.isInteger(maxUsersRaw) ? Math.min(Math.max(maxUsersRaw, 1), 64) : 8;
+      const room = new RoomClass({ id, hostId: user.id, maxUsers, replayEligible: this.state.replayEnabled });
+      this.state.rooms.set(id, room);
+      user.room = room;
+    });
+    const room = user.room!;
+    refreshRoomLiveState(room, this.state.replayEnabled);
+    logRoomMark(this.state.logger, this.state.serverLang, room.id, "log-room-created", { user: user.name }, { userId: user.id });
+    await this.broadcastRoomMessage(room, { type: "CreateRoom", user: user.id });
+    if (this.state.replayEnabled && room.replayEligible) {
+      const fake = this.state.replayRecorder.fakeMonitorInfo();
+      // 使用 setImmediate 确保在当前事件循环后执行
+      setImmediate(() => {
+        void (async () => {
+          const me = this.user;
+          if (!me) return;
+          if (!me.room || me.room.id !== room.id) return;
+          await me.trySend({ type: "OnJoinRoom", info: fake });
+          await me.trySend({ type: "Message", message: { type: "JoinRoom", user: fake.id, name: fake.name } });
+        })();
+      });
+    }
+  }
+
+  private async processJoinRoom(user: User, roomId: string, monitor: boolean): Promise<JoinRoomResponse> {
+    if (await this.checkAndHandleBan(user)) throw new Error(user.lang.format("user-banned-by-server"));
+    if (user.room) throw new Error(user.lang.format("room-already-in-room"));
+
+    // 优化：先检查房间封禁，不需要mutex
+    const bannedInRoom = (() => {
+      const set = this.state.bannedRoomUsers.get(roomId);
+      return set ? set.has(user.id) : false;
+    })();
+    if (bannedInRoom) throw new Error(user.lang.format("room-banned", { id: String(roomId) }));
+
+    // 优化：获取房间也不需要mutex（读操作）
+    const room = this.state.rooms.get(roomId) ?? null;
+    if (!room) throw new Error(user.lang.format("room-not-found"));
+
+    room.validateJoin(user, monitor);
+    const okJoin = room.addUser(user, monitor);
+    if (!okJoin) throw new Error(user.lang.format("join-room-full"));
+
+    user.monitor = monitor;
+    user.room = room; // 直接设置，不需要mutex
+    refreshRoomLiveState(room, this.state.replayEnabled);
+
+    const suffix = monitor ? tl(this.state.serverLang, "label-monitor-suffix") : "";
+    logRoomMark(this.state.logger, this.state.serverLang, room.id, "log-room-joined", { user: user.name, suffix }, { userId: user.id });
+    await this.broadcastRoom(room, { type: "OnJoinRoom", info: user.toInfo() });
+    await this.broadcastRoomMessage(room, { type: "JoinRoom", user: user.id, name: user.name });
+
+    const users = [...room.userIds(), ...room.monitorIds()]
+      .map((id) => this.state.users.get(id))
+      .filter((it): it is User => Boolean(it))
+      .map((it) => it.toInfo());
+
+    const resp: JoinRoomResponse = {
+      state: room.clientRoomState(),
+      users,
+      live: room.isLive()
+    };
+
+    if (this.state.replayEnabled && room.replayEligible) {
+      const fake = this.state.replayRecorder.fakeMonitorInfo();
+      // 使用 setImmediate 确保在当前事件循环后执行
+      setImmediate(() => {
+        void (async () => {
+          if (!user.room || user.room.id !== room.id) return;
+          await user.trySend({ type: "OnJoinRoom", info: fake });
+          await user.trySend({ type: "Message", message: { type: "JoinRoom", user: fake.id, name: fake.name } });
+        })();
+      });
+    }
+
+    return resp;
+  }
+
   private async process(cmd: ClientCommand): Promise<ServerCommand | null> {
     const user = this.user;
     if (!user) return null;
-
-    const errToStr = <T>(fn: () => Promise<T>): Promise<StringResult<T>> =>
-      fn().then(ok).catch((e) => err(this.localizeError(user.lang, e)));
 
     switch (cmd.type) {
       case "Authenticate":
         return { type: "Authenticate", result: err(user.lang.format("auth-repeated-authenticate")) };
       case "Chat":
-        return { type: "Chat", result: await errToStr(async () => {
+        return { type: "Chat", result: await this.errToStr(async () => {
           const room = this.requireRoom(user);
           logRoomInfo(this.state.logger, this.state.serverLang, room.id, "log-user-chat", { user: user.name }, { userId: user.id });
           const content = this.state.config.chat_enabled === false ? tl(this.state.serverLang, "chat-disabled-by-server") : cmd.message;
@@ -454,95 +543,11 @@ export class Session {
         return null;
       }
       case "CreateRoom":
-        return { type: "CreateRoom", result: await errToStr(async () => {
-          if (await this.checkAndHandleBan(user)) throw new Error(user.lang.format("user-banned-by-server"));
-          if (!this.state.roomCreationEnabled) throw new Error(user.lang.format("room-creation-disabled"));
-          if (user.room) throw new Error(user.lang.format("room-already-in-room"));
-          const id = cmd.id;
-          await this.state.mutex.runExclusive(async () => {
-            if (this.state.rooms.has(id)) throw new Error(user.lang.format("create-id-occupied"));
-            const maxUsersRaw = this.state.config.room_max_users;
-            const maxUsers =
-              typeof maxUsersRaw === "number" && Number.isInteger(maxUsersRaw) ? Math.min(Math.max(maxUsersRaw, 1), 64) : 8;
-            const room = new RoomClass({ id, hostId: user.id, maxUsers, replayEligible: this.state.replayEnabled });
-            this.state.rooms.set(id, room);
-            user.room = room;
-          });
-          const room = user.room!;
-          refreshRoomLiveState(room, this.state.replayEnabled);
-          logRoomMark(this.state.logger, this.state.serverLang, room.id, "log-room-created", { user: user.name }, { userId: user.id });
-          await room.send((c) => this.broadcastRoom(room, c), { type: "CreateRoom", user: user.id }, (id) => this.state.users.get(id));
-          if (this.state.replayEnabled && room.replayEligible) {
-            const fake = this.state.replayRecorder.fakeMonitorInfo();
-            // 使用 setImmediate 确保在当前事件循环后执行
-            setImmediate(() => {
-              void (async () => {
-                const me = this.user;
-                if (!me) return;
-                if (!me.room || me.room.id !== room.id) return;
-                await me.trySend({ type: "OnJoinRoom", info: fake });
-                await me.trySend({ type: "Message", message: { type: "JoinRoom", user: fake.id, name: fake.name } });
-              })();
-            });
-          }
-          return {};
-        }) };
+        return { type: "CreateRoom", result: await this.errToStr(async () => this.processCreateRoom(user, cmd.id)) };
       case "JoinRoom":
-        return { type: "JoinRoom", result: await errToStr(async () => {
-          if (await this.checkAndHandleBan(user)) throw new Error(user.lang.format("user-banned-by-server"));
-          if (user.room) throw new Error(user.lang.format("room-already-in-room"));
-
-          // 优化：先检查房间封禁，不需要mutex
-          const bannedInRoom = (() => {
-            const set = this.state.bannedRoomUsers.get(cmd.id);
-            return set ? set.has(user.id) : false;
-          })();
-          if (bannedInRoom) throw new Error(user.lang.format("room-banned", { id: String(cmd.id) }));
-
-          // 优化：获取房间也不需要mutex（读操作）
-          const room = this.state.rooms.get(cmd.id) ?? null;
-          if (!room) throw new Error(user.lang.format("room-not-found"));
-
-          room.validateJoin(user, cmd.monitor);
-          const okJoin = room.addUser(user, cmd.monitor);
-          if (!okJoin) throw new Error(user.lang.format("join-room-full"));
-
-          user.monitor = cmd.monitor;
-          user.room = room; // 直接设置，不需要mutex
-          refreshRoomLiveState(room, this.state.replayEnabled);
-
-          const suffix = cmd.monitor ? tl(this.state.serverLang, "label-monitor-suffix") : "";
-          logRoomMark(this.state.logger, this.state.serverLang, room.id, "log-room-joined", { user: user.name, suffix }, { userId: user.id });
-          await this.broadcastRoom(room, { type: "OnJoinRoom", info: user.toInfo() });
-          await room.send((c) => this.broadcastRoom(room, c), { type: "JoinRoom", user: user.id, name: user.name }, (id) => this.state.users.get(id));
-
-          const users = [...room.userIds(), ...room.monitorIds()]
-            .map((id) => this.state.users.get(id))
-            .filter((it): it is User => Boolean(it))
-            .map((it) => it.toInfo());
-
-          const resp: JoinRoomResponse = {
-            state: room.clientRoomState(),
-            users,
-            live: room.isLive()
-          };
-
-          if (this.state.replayEnabled && room.replayEligible) {
-            const fake = this.state.replayRecorder.fakeMonitorInfo();
-            // 使用 setImmediate 确保在当前事件循环后执行
-            setImmediate(() => {
-              void (async () => {
-                if (!user.room || user.room.id !== room.id) return;
-                await user.trySend({ type: "OnJoinRoom", info: fake });
-                await user.trySend({ type: "Message", message: { type: "JoinRoom", user: fake.id, name: fake.name } });
-              })();
-            });
-          }
-
-          return resp;
-        }) };
+        return { type: "JoinRoom", result: await this.errToStr(async () => this.processJoinRoom(user, cmd.id, cmd.monitor)) };
       case "LeaveRoom":
-        return { type: "LeaveRoom", result: await errToStr(async () => {
+        return { type: "LeaveRoom", result: await this.errToStr(async () => {
           const room = this.requireRoom(user);
           const suffix = user.monitor ? tl(this.state.serverLang, "label-monitor-suffix") : "";
           logRoomMark(this.state.logger, this.state.serverLang, room.id, "log-room-left", { user: user.name, suffix }, { userId: user.id });
@@ -562,42 +567,42 @@ export class Session {
           return {};
         }) };
       case "LockRoom":
-        return { type: "LockRoom", result: await errToStr(async () => {
+        return { type: "LockRoom", result: await this.errToStr(async () => {
           const room = this.requireRoom(user);
           room.checkHost(user);
           room.locked = cmd.lock;
           logRoomMark(this.state.logger, this.state.serverLang, room.id, "log-room-lock", { user: user.name, lock: cmd.lock ? "true" : "false" }, { userId: user.id });
-          await room.send((c) => this.broadcastRoom(room, c), { type: "LockRoom", lock: cmd.lock }, (id) => this.state.users.get(id));
+          await this.broadcastRoomMessage(room, { type: "LockRoom", lock: cmd.lock });
           return {};
         }) };
       case "CycleRoom":
-        return { type: "CycleRoom", result: await errToStr(async () => {
+        return { type: "CycleRoom", result: await this.errToStr(async () => {
           const room = this.requireRoom(user);
           room.checkHost(user);
           room.cycle = cmd.cycle;
           logRoomMark(this.state.logger, this.state.serverLang, room.id, "log-room-cycle", { user: user.name, cycle: cmd.cycle ? "true" : "false" }, { userId: user.id });
-          await room.send((c) => this.broadcastRoom(room, c), { type: "CycleRoom", cycle: cmd.cycle }, (id) => this.state.users.get(id));
+          await this.broadcastRoomMessage(room, { type: "CycleRoom", cycle: cmd.cycle });
           return {};
         }) };
       case "SelectChart":
-        return { type: "SelectChart", result: await errToStr(async () => {
+        return { type: "SelectChart", result: await this.errToStr(async () => {
           const room = this.requireRoom(user);
           room.validateSelectChart(user);
           const chart = await this.fetchChart(user, cmd.id);
           room.chart = chart;
           logRoomMark(this.state.logger, this.state.serverLang, room.id, "log-room-select-chart", { user: user.name, userId: String(user.id), chart: chart.name }, { userId: user.id });
-          await room.send((c) => this.broadcastRoom(room, c), { type: "SelectChart", user: user.id, name: chart.name, id: chart.id }, (id) => this.state.users.get(id));
+          await this.broadcastRoomMessage(room, { type: "SelectChart", user: user.id, name: chart.name, id: chart.id });
           await room.onStateChange((c) => this.broadcastRoom(room, c));
           await room.notifyWebSocket(this.state);
           return {};
         }) };
       case "RequestStart":
-        return { type: "RequestStart", result: await errToStr(async () => {
+        return { type: "RequestStart", result: await this.errToStr(async () => {
           const room = this.requireRoom(user);
           room.validateStart(user);
           room.resetGameTime((id) => this.state.users.get(id));
           logRoomMark(this.state.logger, this.state.serverLang, room.id, "log-room-request-start", { user: user.name }, { userId: user.id });
-          await room.send((c) => this.broadcastRoom(room, c), { type: "GameStart", user: user.id }, (id) => this.state.users.get(id));
+          await this.broadcastRoomMessage(room, { type: "GameStart", user: user.id });
           room.state = { type: "WaitForReady", started: new Set([user.id]) };
           await room.onStateChange((c) => this.broadcastRoom(room, c));
           await room.notifyWebSocket(this.state);
@@ -605,71 +610,71 @@ export class Session {
           return {};
         }) };
       case "Ready":
-        return { type: "Ready", result: await errToStr(async () => {
+        return { type: "Ready", result: await this.errToStr(async () => {
           const room = this.requireRoom(user);
           if (room.state.type === "WaitForReady") {
             if (room.state.started.has(user.id)) throw new Error(user.lang.format("room-already-ready"));
             room.state.started.add(user.id);
             logRoomInfo(this.state.logger, this.state.serverLang, room.id, "log-room-ready", { user: user.name }, { userId: user.id });
-            await room.send((c) => this.broadcastRoom(room, c), { type: "Ready", user: user.id }, (id) => this.state.users.get(id));
+            await this.broadcastRoomMessage(room, { type: "Ready", user: user.id });
             await room.notifyWebSocket(this.state);
-            await room.checkAllReady({ ...this.makeRoomCallbacks(room), disbandRoom: (r: Room) => this.disbandRoom(r) });
+            await this.checkRoomAllReady(room);
           }
           return {};
         }) };
       case "CancelReady":
-        return { type: "CancelReady", result: await errToStr(async () => {
+        return { type: "CancelReady", result: await this.errToStr(async () => {
           const room = this.requireRoom(user);
           if (room.state.type === "WaitForReady") {
             if (!room.state.started.delete(user.id)) throw new Error(user.lang.format("room-not-ready"));
             if (room.hostId === user.id) {
               logRoomMark(this.state.logger, this.state.serverLang, room.id, "log-room-cancel-game", { user: user.name }, { userId: user.id });
-              await room.send((c) => this.broadcastRoom(room, c), { type: "CancelGame", user: user.id }, (id) => this.state.users.get(id));
+              await this.broadcastRoomMessage(room, { type: "CancelGame", user: user.id });
               room.state = { type: "SelectChart" };
               await room.onStateChange((c) => this.broadcastRoom(room, c));
               await room.notifyWebSocket(this.state);
             } else {
               logRoomInfo(this.state.logger, this.state.serverLang, room.id, "log-room-cancel-ready", { user: user.name }, { userId: user.id });
-              await room.send((c) => this.broadcastRoom(room, c), { type: "CancelReady", user: user.id }, (id) => this.state.users.get(id));
+              await this.broadcastRoomMessage(room, { type: "CancelReady", user: user.id });
               await room.notifyWebSocket(this.state);
             }
           }
           return {};
         }) };
       case "Played":
-        return { type: "Played", result: await errToStr(async () => {
+        return { type: "Played", result: await this.errToStr(async () => {
           const room = this.requireRoom(user);
           const record = await this.fetchRecord(user, cmd.id);
           if (record.player !== user.id) throw new Error(user.lang.format("record-invalid"));
           logRoomMark(this.state.logger, this.state.serverLang, room.id, "log-room-played", { user: user.name, score: String(record.score), acc: String(record.accuracy) }, { userId: user.id });
-          await room.send((c) => this.broadcastRoom(room, c), {
+          await this.broadcastRoomMessage(room, {
             type: "Played",
             user: user.id,
             score: record.score,
             accuracy: record.accuracy,
             full_combo: record.full_combo
-          }, (id) => this.state.users.get(id));
+          });
           if (room.state.type === "Playing") {
             if (room.state.aborted.has(user.id)) throw new Error(user.lang.format("room-game-aborted"));
             if (room.state.results.has(user.id)) throw new Error(user.lang.format("record-already-uploaded"));
             room.state.results.set(user.id, record);
             if (this.state.replayEnabled && room.replayEligible) this.state.replayRecorder.setRecordId(room.id, user.id, record.id);
             await room.notifyWebSocket(this.state);
-            await room.checkAllReady({ ...this.makeRoomCallbacks(room), disbandRoom: (r: Room) => this.disbandRoom(r) });
+            await this.checkRoomAllReady(room);
           }
           return {};
         }) };
       case "Abort":
-        return { type: "Abort", result: await errToStr(async () => {
+        return { type: "Abort", result: await this.errToStr(async () => {
           const room = this.requireRoom(user);
           if (room.state.type === "Playing") {
             if (room.state.results.has(user.id)) throw new Error(user.lang.format("record-already-uploaded"));
             if (room.state.aborted.has(user.id)) throw new Error(user.lang.format("room-game-aborted"));
             room.state.aborted.add(user.id);
             logRoomMark(this.state.logger, this.state.serverLang, room.id, "log-room-abort", { user: user.name }, { userId: user.id });
-            await room.send((c) => this.broadcastRoom(room, c), { type: "Abort", user: user.id }, (id) => this.state.users.get(id));
+            await this.broadcastRoomMessage(room, { type: "Abort", user: user.id });
             await room.notifyWebSocket(this.state);
-            await room.checkAllReady({ ...this.makeRoomCallbacks(room), disbandRoom: (r: Room) => this.disbandRoom(r) });
+            await this.checkRoomAllReady(room);
           }
           return {};
         }) };
@@ -701,6 +706,17 @@ export class Session {
     return this.broadcastToIds(room.monitorIds(), cmd);
   }
 
+  /**
+   * 简化 room.send 调用：自动使用 broadcastRoom 和 state.users.get
+   */
+  private broadcastRoomMessage(room: Room, msg: Parameters<Room["send"]> [1]): Promise<void> {
+    return room.send(
+      (c) => this.broadcastRoom(room, c),
+      msg,
+      (id) => this.state.users.get(id)
+    );
+  }
+
   private makeRoomCallbacks(room: Room) {
     return {
       usersById: (id: number) => this.state.users.get(id),
@@ -718,6 +734,13 @@ export class Session {
         await this.handleGameEnd(r);
       }
     };
+  }
+
+  /**
+   * 简化 checkAllReady 调用
+   */
+  private async checkRoomAllReady(room: Room): Promise<void> {
+    await room.checkAllReady({ ...this.makeRoomCallbacks(room), disbandRoom: (r: Room) => this.disbandRoom(r) });
   }
 
   private async disbandRoom(room: Room): Promise<void> {
