@@ -1,18 +1,47 @@
+/**
+ * 二进制数据读写工具模块
+ *
+ * 提供 BinaryReader 和 BinaryWriter 类，用于在 Buffer 上进行类型安全的二进制读写操作。
+ * 支持的数据类型包括：整数（8/16/32/64位）、浮点数（32位）、布尔值、字符串、
+ * UUID、LEB128 变长编码、Option/Result/Array/Map 等复合类型。
+ *
+ * 所有数值均采用小端序（Little Endian）。
+ */
 import { f16BitsToF32, f32ToF16Bits } from "./half.js";
 import { u64PairToUuid, uuidToU64Pair } from "./uuid.js";
 
+/**
+ * 确保缓冲区中有足够的数据可读
+ * @param buffer - 数据缓冲区
+ * @param offset - 当前读取偏移
+ * @param need - 需要的字节数
+ * @throws 当数据不足时抛出 "binary-unexpected-eof" 错误
+ */
 function ensureAvailable(buffer: Buffer, offset: number, need: number): void {
   if (offset + need > buffer.length) throw new Error("binary-unexpected-eof");
 }
 
+/**
+ * 二进制数据读取器
+ *
+ * 提供从 Buffer 中顺序读取各种数据类型的方法。
+ * 内部维护一个 offset 指针，每次读取后自动前进。
+ */
 export class BinaryReader {
+  /** 底层数据缓冲区 */
   readonly buffer: Buffer;
+  /** 当前读取偏移量 */
   offset = 0;
 
   constructor(buffer: Buffer) {
     this.buffer = buffer;
   }
 
+  /**
+   * 读取指定长度的字节
+   * @param n - 字节数
+   * @returns 包含 n 个字节的 Buffer
+   */
   take(n: number): Buffer {
     ensureAvailable(this.buffer, this.offset, n);
     const out = this.buffer.subarray(this.offset, this.offset + n);
@@ -145,67 +174,91 @@ export class BinaryReader {
   }
 }
 
+/**
+ * 二进制数据写入器
+ *
+ * 提供向 Buffer 写入各种数据类型的方法。
+ * 内部使用 chunks 数组累积数据，最后通过 toBuffer() 合并输出。
+ * 使用 allocUnsafe 优化性能，适合大量小数据写入场景。
+ */
 export class BinaryWriter {
   private chunks: Buffer[] = [];
 
+  /** 将所有已写入的数据合并为单个 Buffer */
   toBuffer(): Buffer {
     return Buffer.concat(this.chunks);
   }
 
+  /** 直接写入一个 Buffer */
   writeBuffer(buf: Buffer): void {
     this.chunks.push(buf);
   }
 
+  /** 写入无符号 8 位整数 */
   writeU8(v: number): void {
     const b = Buffer.allocUnsafe(1);
     b[0] = v & 0xff;
     this.chunks.push(b);
   }
 
+  /** 写入有符号 8 位整数 */
   writeI8(v: number): void {
     this.writeU8(v & 0xff);
   }
 
+  /** 写入布尔值（true=1, false=0） */
   writeBool(v: boolean): void {
     this.writeU8(v ? 1 : 0);
   }
 
+  /** 写入无符号 16 位整数（小端序） */
   writeU16(v: number): void {
     const b = Buffer.allocUnsafe(2);
     b.writeUInt16LE(v & 0xffff, 0);
     this.chunks.push(b);
   }
 
+  /** 写入无符号 32 位整数（小端序） */
   writeU32(v: number): void {
     const b = Buffer.allocUnsafe(4);
     b.writeUInt32LE(v >>> 0, 0);
     this.chunks.push(b);
   }
 
+  /** 写入有符号 32 位整数（小端序） */
   writeI32(v: number): void {
     const b = Buffer.allocUnsafe(4);
     b.writeInt32LE(v | 0, 0);
     this.chunks.push(b);
   }
 
+  /** 写入无符号 64 位整数（小端序） */
   writeU64(v: bigint): void {
     const b = Buffer.allocUnsafe(8);
     b.writeBigUInt64LE(v, 0);
     this.chunks.push(b);
   }
 
+  /** 写入有符号 64 位整数（小端序） */
   writeI64(v: bigint): void {
     const b = Buffer.allocUnsafe(8);
     b.writeBigInt64LE(v, 0);
     this.chunks.push(b);
   }
 
+  /** 写入 32 位浮点数（小端序） */
   writeF32(v: number): void {
     const b = Buffer.allocUnsafe(4);
     b.writeFloatLE(v, 0);
     this.chunks.push(b);
   }
 
+  /**
+   * 写入 LEB128 变长无符号整数
+   *
+   * 每字节使用 7 位存储数据，最高位为 continuation flag。
+   * 适用于编码长度等通常较小的数值。
+   */
   writeUleb(v: number | bigint): void {
     let x = typeof v === "bigint" ? v : BigInt(v);
     while (true) {
@@ -217,12 +270,18 @@ export class BinaryWriter {
     }
   }
 
+  /** 写入 UTF-8 字符串（先写 LEB128 长度，再写内容） */
   writeString(s: string): void {
     const buf = Buffer.from(s, "utf8");
     this.writeUleb(buf.length);
     this.chunks.push(buf);
   }
 
+  /**
+   * 写入带最大长度限制的字符串
+   * @param maxLen - 最大允许字节数
+   * @throws 当字符串超过 maxLen 时抛出 "binary-string-too-long"
+   */
   writeVarchar(maxLen: number, s: string): void {
     const buf = Buffer.from(s, "utf8");
     if (buf.length > maxLen) throw new Error("binary-string-too-long");
@@ -230,6 +289,7 @@ export class BinaryWriter {
     this.chunks.push(buf);
   }
 
+  /** 写入 Option<T>（null 编码为 false，非 null 编码为 true + 值） */
   writeOption<T>(value: T | null, encode: (w: BinaryWriter, v: T) => void): void {
     if (value === null) {
       this.writeBool(false);
@@ -239,6 +299,7 @@ export class BinaryWriter {
     encode(this, value);
   }
 
+  /** 写入 Result<Ok, Err>（ok 编码为 true + value，err 编码为 false + error） */
   writeResult<Ok, Err>(value: { ok: true; value: Ok } | { ok: false; error: Err }, encodeOk: (w: BinaryWriter, v: Ok) => void, encodeErr: (w: BinaryWriter, v: Err) => void): void {
     if (value.ok) {
       this.writeBool(true);
@@ -249,11 +310,13 @@ export class BinaryWriter {
     }
   }
 
+  /** 写入数组（先写 LEB128 长度，再逐个编码元素） */
   writeArray<T>(arr: readonly T[], encode: (w: BinaryWriter, v: T) => void): void {
     this.writeUleb(arr.length);
     for (const it of arr) encode(this, it);
   }
 
+  /** 写入 Map（先写 LEB128 大小，再逐个编码键值对） */
   writeMap<K, V>(map: Map<K, V>, encodeK: (w: BinaryWriter, v: K) => void, encodeV: (w: BinaryWriter, v: V) => void): void {
     this.writeUleb(map.size);
     for (const [k, v] of map) {
@@ -262,45 +325,65 @@ export class BinaryWriter {
     }
   }
 
+  /** 写入 UUID（编码为两个 64 位整数：low, high） */
   writeUuid(uuid: string): void {
     const { high, low } = uuidToU64Pair(uuid);
     this.writeU64(low);
     this.writeU64(high);
   }
 
+  /** 写入压缩位置（将 32 位浮点数压缩为 16 位半精度存储） */
   writeCompactPos(pos: { x: number; y: number }): void {
     this.writeU16(f32ToF16Bits(pos.x));
     this.writeU16(f32ToF16Bits(pos.y));
   }
 }
 
+/**
+ * 解码数据包
+ * @param data - 原始二进制数据
+ * @param decode - 解码函数
+ * @returns 解码后的值
+ */
 export function decodePacket<T>(data: Buffer, decode: (r: BinaryReader) => T): T {
   const r = new BinaryReader(data);
   const v = decode(r);
   return v;
 }
 
+/**
+ * 编码数据包
+ * @param value - 要编码的值
+ * @param encode - 编码函数
+ * @returns 编码后的二进制数据
+ */
 export function encodePacket<T>(value: T, encode: (w: BinaryWriter, v: T) => void): Buffer {
   const w = new BinaryWriter();
   encode(w, value);
   return w.toBuffer();
 }
 
+/** 字符串结果类型（Rust 风格的 Result，但错误类型固定为 string） */
 export type StringResult<T> = { ok: true; value: T } | { ok: false; error: string };
+/** 空类型（相当于 Rust 的 ()） */
 export type Unit = Record<never, never>;
 
+/** 创建成功的 StringResult */
 export function ok<T>(value: T): StringResult<T> {
   return { ok: true, value };
 }
 
+/** 创建失败的 StringResult */
 export function err<T = never>(error: string): StringResult<T> {
   return { ok: false, error };
 }
 
+/** 编码 StringResult（错误类型固定为 string） */
 export function encodeStringResult<T>(w: BinaryWriter, value: StringResult<T>, encodeOk: (w: BinaryWriter, v: T) => void): void {
   w.writeResult(value, encodeOk, (ww, s) => ww.writeString(s));
 }
 
+/** 解码 StringResult（错误类型固定为 string） */
 export function decodeStringResult<T>(r: BinaryReader, decodeOk: (r: BinaryReader) => T): StringResult<T> {
   const res = r.readResult(decodeOk, (rr) => rr.readString());
   if (res.ok) return { ok: true, value: res.value };

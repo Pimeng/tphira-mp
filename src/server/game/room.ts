@@ -1,3 +1,14 @@
+/**
+ * 游戏房间管理模块
+ *
+ * Room 类代表一个多人游戏房间，管理：
+ * - 房间状态机（选谱 -> 等待就绪 -> 游戏中 -> 结束）
+ * - 用户与观战者管理
+ * - 房主转移逻辑
+ * - 游戏结果统计与展示
+ * - 房间日志记录
+ * - 比赛模式支持
+ */
 import type { ClientRoomState, Message, RoomState, ServerCommand } from "../../common/commands.js";
 import type { RoomId } from "../../common/roomId.js";
 import { tl, type Language } from "../utils/l10n.js";
@@ -6,30 +17,55 @@ import type { User } from "../game/user.js";
 import type { Logger } from "../utils/logger.js";
 import { logRoomInfo } from "../utils/logUtils.js";
 
+/** 房间内部状态类型（比客户端状态更详细） */
 export type InternalRoomState =
   | { type: "SelectChart" }
   | { type: "WaitForReady"; started: Set<number> }
   | { type: "Playing"; results: Map<number, RecordData>; aborted: Set<number> };
 
+/**
+ * 游戏房间类
+ *
+ * 管理房间内的所有游戏逻辑和状态转换。
+ * 房间生命周期：创建 -> 玩家加入 -> 选谱 -> 等待就绪 -> 游戏中 -> 结束 -> 循环/解散
+ */
 export class Room {
+  /** 房间唯一标识符 */
   readonly id: RoomId;
+  /** 房间最大用户数 */
   maxUsers: number;
+  /** 是否允许录制回放 */
   readonly replayEligible: boolean;
+  /** 当前房主用户 ID */
   hostId: number;
+  /** 房间内部状态 */
   state: InternalRoomState = { type: "SelectChart" };
 
+  /** 是否处于直播模式 */
   live = false;
+  /** 是否已锁定（锁定后禁止加入） */
   locked = false;
+  /** 是否启用循环模式（游戏结束后房主轮换） */
   cycle = false;
+  /** 比赛模式配置（null 表示普通房间） */
   contest: { whitelist: Set<number>; manualStart: boolean; autoDisband: boolean } | null = null;
 
+  /** 房间内普通用户 ID 列表 */
   private users: number[] = [];
+  /** 房间内观战者 ID 列表 */
   private monitors: number[] = [];
+  /** 当前选中的谱面 */
   chart: Chart | null = null;
 
+  /** 最近房间日志（用于 WebSocket 实时推送和管理面板） */
   private recentLogs: Array<{ message: string; timestamp: number }> = [];
+  /** 最大保留日志条数 */
   private static readonly MAX_RECENT_LOGS = 50;
 
+  /**
+   * 创建新房间
+   * @param opts - 房间创建选项
+   */
   constructor(opts: { id: RoomId; hostId: number; maxUsers: number; replayEligible: boolean }) {
     this.id = opts.id;
     this.maxUsers = opts.maxUsers;

@@ -96,6 +96,67 @@ pnpm run package:sea
 - Node.js >= 22
 - pnpm >= 10.26.0
 
+## 🏗️ 项目架构
+
+本项目采用模块化架构，主要分为以下几个层次：
+
+```
+src/
+├── server/
+│   ├── main.ts          # 服务器入口，CLI 参数解析
+│   ├── core/            # 核心层
+│   │   ├── server.ts    # 服务器生命周期管理
+│   │   ├── state.ts     # 全局状态管理（用户、房间、会话）
+│   │   ├── types.ts     # TypeScript 类型定义
+│   │   ├── configValues.ts  # 配置解析与合并
+│   │   └── version.ts   # 版本信息
+│   ├── network/         # 网络层
+│   │   ├── session.ts   # TCP 会话管理（认证、命令路由）
+│   │   ├── httpService.ts   # HTTP/WebSocket 服务
+│   │   ├── websocketService.ts  # WebSocket 实时推送
+│   │   ├── proxyProtocol.ts   # HAProxy PROXY Protocol 支持
+│   │   └── httpHelpers.ts     # HTTP 工具函数
+│   ├── game/            # 游戏逻辑层
+│   │   ├── room.ts      # 房间状态机与游戏流程
+│   │   ├── user.ts      # 用户模型
+│   │   └── roomUtils.ts # 房间工具函数
+│   ├── replay/          # 回放录制层
+│   │   ├── replayRecorder.ts  # 回放录制引擎
+│   │   ├── replayStorage.ts   # 回放文件存储
+│   │   ├── replayFormat.ts    # 回放格式定义
+│   │   ├── replayCleanup.ts   # 过期回放清理
+│   │   └── autoUpload.ts      # 自动上传逻辑
+│   ├── cli/             # 命令行管理界面
+│   │   ├── cli.ts       # CLI 主程序
+│   │   └── cliHelpers.ts    # CLI 辅助函数
+│   └── utils/           # 工具模块
+│       ├── logger.ts    # 日志系统（限流、黑名单）
+│       ├── l10n.ts      # 国际化/本地化
+│       ├── cache.ts     # 谱面缓存
+│       ├── mutex.ts     # 互斥锁
+│       ├── rateLimiter.ts   # 日志限流器
+│       └── appPaths.ts  # 应用路径管理
+├── common/              # 共享代码（服务端/客户端共用）
+│   ├── binary.ts        # 二进制读写工具
+│   ├── commands.ts      # 协议命令定义与编解码
+│   ├── stream.ts        # TCP 流管理（批量发送、优先级）
+│   ├── framing.ts       # 帧编码（解决粘包）
+│   ├── http.ts          # HTTP 请求工具
+│   ├── uuid.ts          # UUID 生成与转换
+│   └── roomId.ts        # 房间 ID 解析
+└── client/              # 客户端代码
+    └── client.ts        # 客户端实现
+```
+
+### 核心设计要点
+
+- **配置热重载**：支持运行时修改配置（部分配置需重启生效）
+- **批量发送优化**：低优先级消息延迟 5ms 批量发送，提高吞吐量
+- **观战数据缓冲**：触摸/判定数据 50ms 聚合窗口，减少网络冲击
+- **断线重连**：10 秒 dangling 窗口，保留房间和状态
+- **回放录制**：独立录制引擎，支持自动上传到分享站
+- **HAProxy 支持**：通过 PROXY Protocol 获取真实客户端 IP
+
 ## 🔭 本项目长期远景
 
 - [x] 谱面录制功能
@@ -111,6 +172,49 @@ pnpm run package:sea
 ##  🌍 公共访问前端（需要自备API地址）
 
 https://t.phira.link/
+
+## 🔧 开发指南
+
+### 项目结构约定
+
+- `src/server/` - 服务端代码，使用 ESM 模块
+- `src/common/` - 共享代码，服务端和客户端共用
+- `test/` - 测试文件，使用 Vitest 测试框架
+- `docs/` - 文档目录
+- `locales/` - 本地化字符串（运行时需要）
+
+### 添加新命令
+
+1. 在 `src/common/commands.ts` 中定义命令类型（ClientCommand/ServerCommand）
+2. 实现对应的 encode/decode 函数
+3. 在 `src/server/network/session.ts` 的 `process()` 方法中处理命令
+4. 如有需要，在 `src/server/game/room.ts` 中实现房间级逻辑
+
+### 配置文件
+
+配置文件为 `server_config.yml`，示例见 `server_config.example.yml`。
+支持使用环境变量覆盖配置（键名统一使用全大写）。
+
+**优先级：** 命令行 > 环境变量 > 配置文件
+
+### 运行测试
+
+```bash
+pnpm test           # 运行所有测试
+pnpm test:watch     # 监视模式运行测试
+```
+
+### 调试模式
+
+设置环境变量 `LOG_LEVEL=DEBUG` 可开启详细日志：
+
+```bash
+# Windows PowerShell
+$env:LOG_LEVEL="DEBUG"; pnpm run dev:server
+
+# Linux/macOS
+LOG_LEVEL=DEBUG pnpm run dev:server
+```
 
 ## 🙏 致谢
 

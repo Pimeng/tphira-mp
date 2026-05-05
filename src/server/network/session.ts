@@ -1,3 +1,13 @@
+/**
+ * 客户端会话管理模块
+ *
+ * Session 类代表一个客户端连接会话，负责：
+ * - 协议握手与认证（通过 Phira API 验证用户身份）
+ * - 心跳检测与超时断开
+ * - 命令处理与路由（游戏命令、房间管理、聊天等）
+ * - 观战数据聚合与转发（Touches/Judges 缓冲）
+ * - 断线重连处理（dangle 机制）
+ */
 import type net from "node:net";
 import { err, ok, type StringResult } from "../../common/binary.js";
 import type { ClientCommand, ClientRoomState, JoinRoomResponse, ServerCommand, TouchFrame, JudgeEvent } from "../../common/commands.js";
@@ -16,66 +26,123 @@ import { chartCache } from "../utils/cache.js";
 import { getHitokotoCached } from "../utils/hitokotoCache.js";
 import { logRoomInfo, logRoomMark, logRoomWarn } from "../utils/logUtils.js";
 
+/** Phira API 默认端点 */
 const DEFAULT_PHIRA_API_ENDPOINT = "https://phira.5wyxi.com";
+/** API 请求超时时间（毫秒） */
 const FETCH_TIMEOUT_MS = 8000;
 
-// 房间列表缓存
+/** 房间列表缓存数据结构 */
 type RoomListCache = {
-  text: Map<string, string>; // lang -> text
+  /** 按语言缓存的房间列表文本 */
+  text: Map<string, string>;
+  /** 缓存生成时间戳 */
   timestamp: number;
 };
 
+/** 房间列表缓存实例（全局单例） */
 let roomListCache: RoomListCache = {
   text: new Map(),
   timestamp: 0
 };
 
-const ROOM_LIST_CACHE_TTL_MS = 2000; // 2秒缓存
+/** 房间列表缓存有效期（2秒） */
+const ROOM_LIST_CACHE_TTL_MS = 2000;
 
+/**
+ * 从数组中随机选择一个元素
+ * @param arr - 输入数组
+ * @returns 随机选中的元素，数组为空时返回 null
+ */
 function pickRandom<T>(arr: readonly T[]): T | null {
   if (arr.length === 0) return null;
   const idx = Math.floor(Math.random() * arr.length);
   return arr[idx] ?? null;
 }
 
+/**
+ * 客户端会话类
+ *
+ * 管理单个 TCP 连接的生命周期，包括：
+ * - 连接建立与协议握手
+ * - 用户认证（通过 Phira API Bearer Token）
+ * - 心跳检测与超时断开
+ * - 命令路由与处理
+ * - 观战数据聚合缓冲
+ * - 断线重连支持（dangle 机制）
+ */
 export class Session {
+  /** 会话唯一标识符（UUID） */
   readonly id: string;
+  /** TCP Socket 连接 */
   readonly socket: net.Socket;
+  /** 服务器全局状态引用 */
   readonly state: ServerState;
+  /** 客户端真实 IP 地址（支持 HAProxy PROXY Protocol） */
   readonly remoteIp: string;
 
+  // ========== 协议状态 ==========
+
+  /** 绑定的流实例（协议握手成功后设置） */
   private stream: Stream<ServerCommand, ClientCommand> | null = null;
+  /** 协商后的协议版本 */
   private protocolVersion: number | null = null;
+  /** 是否等待认证（初始为 true，认证成功后设为 false） */
   private waitingForAuthenticate = true;
+  /** 是否处于 panic 状态（认证失败等致命错误） */
   private panicked = false;
+  /** 连接是否已断开 */
   private lost = false;
+  /** 断线时是否保留房间（用于踢出旧连接时保留房间） */
   private preserveRoomOnLost = false;
 
+  // ========== 心跳检测 ==========
+
+  /** 最后接收数据的时间戳 */
   private lastRecv = Date.now();
+  /** 心跳检测定时器（每 500ms 检查一次） */
   private heartbeatTimer: NodeJS.Timeout;
 
-  // 观战数据聚合缓冲：避免高频实时数据直接冲击网络
-  private monitorTouchBuffer: Array<{ player: number; frames: TouchFrame[] }> = [];
-  private monitorJudgeBuffer: Array<{ player: number; judges: JudgeEvent[] }> = [];
-  private monitorFlushTimer: NodeJS.Timeout | null = null;
-  private static readonly MONITOR_FLUSH_INTERVAL_MS = 50; // 50ms 聚合窗口
+  // ========== 观战数据缓冲 ==========
 
+  /**
+   * 观战触摸数据缓冲
+   *
+   * 为避免高频实时数据直接冲击网络，将多个触摸帧聚合后批量发送。
+   * 聚合窗口为 50ms，期间收集的数据会合并后统一转发给观战者。
+   */
+  private monitorTouchBuffer: Array<{ player: number; frames: TouchFrame[] }> = [];
+  /** 观战判定数据缓冲（同触摸数据缓冲机制） */
+  private monitorJudgeBuffer: Array<{ player: number; judges: JudgeEvent[] }> = [];
+  /** 观战数据 flush 定时器 */
+  private monitorFlushTimer: NodeJS.Timeout | null = null;
+  /** 观战数据聚合间隔（毫秒） */
+  private static readonly MONITOR_FLUSH_INTERVAL_MS = 50;
+
+  /** 关联的用户实例（认证成功后设置） */
   user: User | null = null;
 
+/**
+   * 创建新会话实例
+   * @param opts - 会话选项
+   */
   constructor(opts: { id: string; socket: net.Socket; state: ServerState; remoteIp?: string }) {
     this.id = opts.id;
     this.socket = opts.socket;
     this.state = opts.state;
     this.remoteIp = opts.remoteIp ?? opts.socket.remoteAddress ?? "unknown";
 
+    // 监听 socket 事件
     this.socket.on("close", () => void this.markLost());
     this.socket.on("error", () => void this.markLost());
     this.socket.on("data", () => {
+      // 每次收到数据时更新最后接收时间，用于心跳检测
       this.lastRecv = Date.now();
     });
 
+    // 启动心跳检测定时器
     this.heartbeatTimer = setInterval(() => {
       if (this.lost) return;
+      // 如果超过心跳超时时间未收到数据，判定为连接丢失
       if (Date.now() - this.lastRecv > HEARTBEAT_DISCONNECT_TIMEOUT_MS) {
         this.state.logger.log("WARN", tl(this.state.serverLang, "log-heartbeat-timeout-disconnect", { id: this.id }), { session: this.id }, { userId: this.user?.id });
         void this.markLost();
