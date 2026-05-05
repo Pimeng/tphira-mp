@@ -123,7 +123,12 @@ function startConfigFileWatcher(opts: { configPath: string; logger: Logger; onRe
 
 const codec: StreamCodec<ServerCommand, ClientCommand> = {
   encodeSend: (payload) => encodePacket(payload, encodeServerCommand),
-  decodeRecv: (payload) => decodePacket(payload, decodeClientCommand)
+  decodeRecv: (payload) => decodePacket(payload, decodeClientCommand),
+  isHighPriority: (cmd) => {
+    // 心跳响应、认证响应、状态变更、房主变更 为高优先级
+    const highTypes = new Set(["Pong", "Authenticate", "ChangeState", "ChangeHost", "OnJoinRoom"]);
+    return highTypes.has(cmd.type);
+  }
 };
 
 function formatListenHostPort(host: string, port: number): string {

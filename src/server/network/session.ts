@@ -1,6 +1,6 @@
 import type net from "node:net";
 import { err, ok, type StringResult } from "../../common/binary.js";
-import type { ClientCommand, ClientRoomState, JoinRoomResponse, ServerCommand } from "../../common/commands.js";
+import type { ClientCommand, ClientRoomState, JoinRoomResponse, ServerCommand, TouchFrame, JudgeEvent } from "../../common/commands.js";
 import { HEARTBEAT_DISCONNECT_TIMEOUT_MS } from "../../common/commands.js";
 import type { Stream } from "../../common/stream.js";
 import { fetchWithRetry } from "../../common/http.js";
@@ -54,6 +54,12 @@ export class Session {
   private lastRecv = Date.now();
   private heartbeatTimer: NodeJS.Timeout;
 
+  // 观战数据聚合缓冲：避免高频实时数据直接冲击网络
+  private monitorTouchBuffer: Array<{ player: number; frames: TouchFrame[] }> = [];
+  private monitorJudgeBuffer: Array<{ player: number; judges: JudgeEvent[] }> = [];
+  private monitorFlushTimer: NodeJS.Timeout | null = null;
+  private static readonly MONITOR_FLUSH_INTERVAL_MS = 50; // 50ms 聚合窗口
+
   user: User | null = null;
 
   constructor(opts: { id: string; socket: net.Socket; state: ServerState; remoteIp?: string }) {
@@ -88,6 +94,63 @@ export class Session {
   private localizeError(lang: Language, e: unknown): string {
     const msg = e instanceof Error ? e.message : String(e);
     return this.localizeMessage(lang, msg);
+  }
+
+  /**
+   * 立即 flush 观战数据缓冲区
+   */
+  private flushMonitorBuffers(): void {
+    const room = this.user?.room;
+    if (!room) {
+      this.monitorTouchBuffer = [];
+      this.monitorJudgeBuffer = [];
+      return;
+    }
+
+    if (this.monitorTouchBuffer.length > 0) {
+      // 合并同一玩家的多批 frames
+      const merged = new Map<number, TouchFrame[]>();
+      for (const item of this.monitorTouchBuffer) {
+        const existing = merged.get(item.player);
+        if (existing) existing.push(...item.frames);
+        else merged.set(item.player, [...item.frames]);
+      }
+      for (const [player, frames] of merged) {
+        this.broadcastToIdsFast(room.monitorIds(), { type: "Touches", player, frames });
+      }
+      this.monitorTouchBuffer = [];
+    }
+
+    if (this.monitorJudgeBuffer.length > 0) {
+      const merged = new Map<number, JudgeEvent[]>();
+      for (const item of this.monitorJudgeBuffer) {
+        const existing = merged.get(item.player);
+        if (existing) existing.push(...item.judges);
+        else merged.set(item.player, [...item.judges]);
+      }
+      for (const [player, judges] of merged) {
+        this.broadcastToIdsFast(room.monitorIds(), { type: "Judges", player, judges });
+      }
+      this.monitorJudgeBuffer = [];
+    }
+  }
+
+  /**
+   * 将观战数据推入缓冲区，并设置延迟 flush
+   */
+  private bufferMonitorData(type: "touches" | "judges", player: number, data: TouchFrame[] | JudgeEvent[]): void {
+    if (type === "touches") {
+      this.monitorTouchBuffer.push({ player, frames: data as TouchFrame[] });
+    } else {
+      this.monitorJudgeBuffer.push({ player, judges: data as JudgeEvent[] });
+    }
+
+    if (!this.monitorFlushTimer) {
+      this.monitorFlushTimer = setTimeout(() => {
+        this.monitorFlushTimer = null;
+        this.flushMonitorBuffers();
+      }, Session.MONITOR_FLUSH_INTERVAL_MS);
+    }
   }
 
   bindStream(stream: Stream<ServerCommand, ClientCommand>): void {
@@ -324,6 +387,11 @@ export class Session {
     if (this.lost) return;
     this.lost = true;
     clearInterval(this.heartbeatTimer);
+    if (this.monitorFlushTimer) {
+      clearTimeout(this.monitorFlushTimer);
+      this.monitorFlushTimer = null;
+    }
+    this.flushMonitorBuffers();
 
     const stream = this.stream;
     if (stream) stream.close();
@@ -522,9 +590,9 @@ export class Session {
         const last = cmd.frames.at(-1);
         if (last) user.gameTime = last.time;
         this.state.logger.log("DEBUG", tl(this.state.serverLang, "log-user-touches", { user: user.name, room: room.id, count: String(cmd.frames.length) }), { frames: cmd.frames }, { userId: user.id });
-        // monitor数据转发模块 - 独立判断、独立执行
+        // monitor数据转发模块 - 聚合缓冲，避免高频实时数据冲击网络
         if (room.monitorIds().length > 0) {
-          void this.broadcastRoomMonitors(room, { type: "Touches", player: user.id, frames: cmd.frames });
+          this.bufferMonitorData("touches", user.id, cmd.frames);
         }
         // 录制回放模块 - 独立判断、独立执行
         if (this.state.replayEnabled && room.replayEligible) {
@@ -537,9 +605,9 @@ export class Session {
         if (!room) return null;
         if (room.state.type !== "Playing") return null;
         this.state.logger.log("DEBUG", tl(this.state.serverLang, "log-user-judges", { user: user.name, room: room.id, count: String(cmd.judges.length) }), { judges: cmd.judges }, { userId: user.id });
-        // monitor数据转发模块 - 独立判断、独立执行
+        // monitor数据转发模块 - 聚合缓冲，避免高频实时数据冲击网络
         if (room.monitorIds().length > 0) {
-          void this.broadcastRoomMonitors(room, { type: "Judges", player: user.id, judges: cmd.judges });
+          this.bufferMonitorData("judges", user.id, cmd.judges);
         }
         // 录制回放模块 - 独立判断、独立执行
         if (this.state.replayEnabled && room.replayEligible) {
@@ -703,12 +771,26 @@ export class Session {
     if (tasks.length > 0) await Promise.allSettled(tasks);
   }
 
+  /**
+   * 快速广播：fire-and-forget，不等待发送完成
+   * 用于实时游戏数据（Touches/Judges），避免慢客户端拖累全场
+   */
+  private broadcastToIdsFast(ids: number[], cmd: ServerCommand): void {
+    for (const id of ids) {
+      const u = this.state.users.get(id);
+      if (u) void u.trySend(cmd).catch(() => {});
+    }
+  }
+
   private broadcastRoom(room: Room, cmd: ServerCommand): Promise<void> {
     return this.broadcastToIds([...room.userIds(), ...room.monitorIds()], cmd);
   }
 
-  private broadcastRoomMonitors(room: Room, cmd: ServerCommand): Promise<void> {
-    return this.broadcastToIds(room.monitorIds(), cmd);
+  /**
+   * 观战数据广播：使用 fire-and-forget，避免慢观战客户端拖累实时数据流
+   */
+  private broadcastRoomMonitors(room: Room, cmd: ServerCommand): void {
+    this.broadcastToIdsFast(room.monitorIds(), cmd);
   }
 
   /**

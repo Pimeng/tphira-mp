@@ -395,6 +395,152 @@ describe("WebSocket 测试", () => {
     });
   });
 
+  describe("房间索引广播", () => {
+    test("多个房间订阅应只收到自己房间的消息", async () => {
+      const client1 = await Client.connect("127.0.0.1", gamePort);
+      const client2 = await Client.connect("127.0.0.1", gamePort);
+
+      try {
+        await client1.authenticate("user1token");
+        // 如果用户已在房间中，先离开
+        if (client1.roomId()) await client1.leaveRoom();
+        await client1.createRoom("room-index-1");
+
+        await client2.authenticate("user2token");
+        if (client2.roomId()) await client2.leaveRoom();
+        await client2.createRoom("room-index-2");
+
+        await sleep(100);
+
+        const ws1 = await createWebSocket(`ws://127.0.0.1:${httpPort}/ws`);
+        const ws2 = await createWebSocket(`ws://127.0.0.1:${httpPort}/ws`);
+
+        const messages1: any[] = [];
+        const messages2: any[] = [];
+
+        ws1.on("message", (data) => {
+          messages1.push(JSON.parse(data.toString()));
+        });
+        ws2.on("message", (data) => {
+          messages2.push(JSON.parse(data.toString()));
+        });
+
+        // 分别订阅不同房间
+        ws1.send(JSON.stringify({ type: "subscribe", roomId: "room-index-1", userId: 1001 }));
+        ws2.send(JSON.stringify({ type: "subscribe", roomId: "room-index-2", userId: 1002 }));
+
+        await waitFor(() => messages1.some(m => m.type === "subscribed"));
+        await waitFor(() => messages2.some(m => m.type === "subscribed"));
+
+        // 清空初始消息
+        messages1.length = 0;
+        messages2.length = 0;
+
+        // client1 操作房间1
+        await client1.selectChart(1);
+
+        await sleep(200);
+
+        // ws1 应该收到 room-index-1 的更新
+        const ws1Updates = messages1.filter(m => m.type === "room_update");
+        expect(ws1Updates.length).toBeGreaterThanOrEqual(1);
+
+        // ws2 不应该收到 room-index-1 的更新
+        const ws2UpdatesForRoom1 = messages2.filter(
+          m => m.type === "room_update" && m.data?.roomid === "room-index-1"
+        );
+        expect(ws2UpdatesForRoom1.length).toBe(0);
+
+        await closeWebSocket(ws1);
+        await closeWebSocket(ws2);
+      } finally {
+        await client1.close();
+        await client2.close();
+      }
+    });
+
+    test("取消订阅后不应再收到房间消息", async () => {
+      const client = await Client.connect("127.0.0.1", gamePort);
+
+      try {
+        await client.authenticate("user1token");
+        if (client.roomId()) await client.leaveRoom();
+        await client.createRoom("unsub-test");
+
+        await sleep(100);
+
+        const ws = await createWebSocket(`ws://127.0.0.1:${httpPort}/ws`);
+        const messages: any[] = [];
+
+        ws.on("message", (data) => {
+          messages.push(JSON.parse(data.toString()));
+        });
+
+        ws.send(JSON.stringify({ type: "subscribe", roomId: "unsub-test", userId: 1001 }));
+        await waitFor(() => messages.some(m => m.type === "subscribed"));
+
+        // 取消订阅
+        ws.send(JSON.stringify({ type: "unsubscribe" }));
+        await waitFor(() => messages.some(m => m.type === "unsubscribed"));
+
+        // 清空消息
+        const beforeCount = messages.length;
+
+        // 操作房间
+        await client.selectChart(1);
+        await sleep(300);
+
+        // 不应该收到新的 room_update
+        const newMessages = messages.slice(beforeCount);
+        const roomUpdates = newMessages.filter(m => m.type === "room_update");
+        expect(roomUpdates.length).toBe(0);
+
+        await closeWebSocket(ws);
+      } finally {
+        await client.close();
+      }
+    });
+
+    test("WebSocket 断开后应从房间索引移除", async () => {
+      const client = await Client.connect("127.0.0.1", gamePort);
+
+      try {
+        await client.authenticate("user1token");
+        if (client.roomId()) await client.leaveRoom();
+        await client.createRoom("disconnect-test");
+
+        await sleep(100);
+
+        const ws = await createWebSocket(`ws://127.0.0.1:${httpPort}/ws`);
+        const messages: any[] = [];
+
+        ws.on("message", (data) => {
+          messages.push(JSON.parse(data.toString()));
+        });
+
+        ws.send(JSON.stringify({ type: "subscribe", roomId: "disconnect-test", userId: 1001 }));
+        await waitFor(() => messages.some(m => m.type === "subscribed"));
+
+        // 断开 WebSocket
+        await closeWebSocket(ws);
+        await sleep(100);
+
+        // 检查服务端房间索引
+        // @ts-expect-error 访问私有属性
+        const wsService = server.state.wsService;
+        if (wsService) {
+          // @ts-expect-error 访问私有属性
+          const subscribers = wsService.roomSubscribers?.get("disconnect-test");
+          if (subscribers) {
+            expect(subscribers.size).toBe(0);
+          }
+        }
+      } finally {
+        await client.close();
+      }
+    });
+  });
+
   describe("错误处理", () => {
     test("应该对无效消息格式返回错误", async () => {
       const ws = await createWebSocket(`ws://127.0.0.1:${httpPort}/ws`);

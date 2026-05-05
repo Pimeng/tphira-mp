@@ -648,8 +648,34 @@ export async function fetchWithTimeout(
   }
 }
 
+function isRetryableError(error: unknown): boolean {
+  if (!(error instanceof Error)) return true;
+  const msg = error.message.toLowerCase();
+  const retryableCodes = [
+    "econnreset",
+    "etimedout",
+    "enotfound",
+    "econnrefused",
+    "socket hang up",
+    "network error",
+    "aborted",
+    "timeout"
+  ];
+  return retryableCodes.some((code) => msg.includes(code));
+}
+
+function isRetryableResponse(res: Response): boolean {
+  // 429 Too Many Requests 也可以重试
+  if (res.status === 429) return true;
+  // 5xx 服务器错误可以重试
+  if (res.status >= 500 && res.status < 600) return true;
+  // 4xx 客户端错误不应当重试
+  return false;
+}
+
 /**
  * 发送带重试的 fetch 请求，默认最多重试 2 次
+ * 使用指数退避 + 抖动策略，自动跳过不可重试错误（4xx）
  */
 export async function fetchWithRetry(
   input: string | URL,
@@ -661,13 +687,29 @@ export async function fetchWithRetry(
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      return await fetchWithTimeout(input, init, timeoutMs);
+      const res = await fetchWithTimeout(input, init, timeoutMs);
+      // HTTP 成功直接返回
+      if (res.ok) return res;
+      // HTTP 失败：判断是否可以重试
+      if (!isRetryableResponse(res)) {
+        return res; // 4xx 不应当重试，直接返回让调用方处理
+      }
+      // 5xx/429 进入重试逻辑
+      lastError = new Error(`http-${res.status}`);
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
-      if (attempt < maxRetries) {
-        await new Promise((resolve) => setTimeout(resolve, 100 * (attempt + 1)));
-        continue;
+      // 不可重试的网络错误直接抛出
+      if (!isRetryableError(lastError)) {
+        throw lastError;
       }
+    }
+
+    if (attempt < maxRetries) {
+      // 指数退避：100ms, 200ms, 400ms... 上限 5 秒
+      const baseDelay = Math.min(100 * Math.pow(2, attempt), 5000);
+      // 20% 随机抖动，避免惊群效应
+      const jitter = Math.random() * baseDelay * 0.2;
+      await new Promise((resolve) => setTimeout(resolve, baseDelay + jitter));
     }
   }
 

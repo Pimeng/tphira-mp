@@ -2,14 +2,16 @@ import type net from "node:net";
 import { encodeLengthPrefixU32, tryDecodeFrame } from "./framing.js";
 
 const SEND_TIMEOUT_MS = 5000;
-const BATCH_SEND_DELAY_MS = 0; // 优化：立即发送，减少延迟
-const MAX_BATCH_SIZE = 20; // 优化：增加批量大小
+const BATCH_SEND_DELAY_MS = 5; // 低优先级消息 5ms 批量窗口，轻微延迟换取更高吞吐量
+const MAX_BATCH_SIZE = 20;
 
 export type StreamHandler<R> = (packet: R) => void | Promise<void>;
 
 export type StreamCodec<S, R> = {
   encodeSend: (payload: S) => Buffer;
   decodeRecv: (payload: Buffer) => R;
+  /** 判断消息是否为高优先级；高优先级消息会跳过批量延迟，立即发送 */
+  isHighPriority?: (payload: S) => boolean;
 };
 
 export class Stream<S, R> {
@@ -124,26 +126,33 @@ export class Stream<S, R> {
 
   async send(payload: S): Promise<void> {
     if (this.closed) throw new Error("net-connection-closed");
-    
+
     const body = this.codec.encodeSend(payload);
     const header = encodeLengthPrefixU32(body.length);
     const frame = Buffer.concat([header, body]);
-    
+
+    // 高优先级消息：立即 flush 并发送，不进入批量队列
+    if (this.codec.isHighPriority?.(payload)) {
+      // 先 flush 已有的低优先级批量，保证顺序
+      await this.flushSendBatch();
+      this.sendBatch.push(frame);
+      await this.flushSendBatch();
+      return;
+    }
+
     // 添加到批量发送队列
     this.sendBatch.push(frame);
-    
+
     // 如果达到批量大小，立即发送
     if (this.sendBatch.length >= MAX_BATCH_SIZE) {
       await this.flushSendBatch();
       return;
     }
-    
-    // 否则设置延迟发送（如果延迟为0则立即发送）
-    if (BATCH_SEND_DELAY_MS === 0) {
-      await this.flushSendBatch();
-    } else if (!this.sendBatchTimer) {
+
+    // 低优先级消息设置延迟发送
+    if (!this.sendBatchTimer) {
       this.sendBatchTimer = setTimeout(() => {
-        void this.flushSendBatch();
+        void this.flushSendBatch().catch(() => {});
       }, BATCH_SEND_DELAY_MS);
     }
   }
@@ -180,6 +189,13 @@ export class Stream<S, R> {
       });
     } finally {
       this.sending = false;
+      // 批量发送期间如果有新消息进入队列（例如高优先级消息），继续发送
+      if (this.sendBatch.length > 0 && !this.sendBatchTimer) {
+        this.sendBatchTimer = setTimeout(() => {
+          this.sendBatchTimer = null;
+          void this.flushSendBatch().catch(() => {});
+        }, 0);
+      }
     }
   }
 

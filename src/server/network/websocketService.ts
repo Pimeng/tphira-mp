@@ -64,6 +64,28 @@ export function startWebSocketService(opts: { httpServer: http.Server; state: Se
   const { httpServer, state } = opts;
   const wss = new WebSocketServer({ noServer: true });
   const clients = new Map<WebSocket, WebSocketClient>();
+  // 房间订阅索引：roomId string -> Set<WebSocket>，避免广播时全量遍历
+  const roomSubscribers = new Map<string, Set<WebSocket>>();
+
+  const addRoomSubscriber = (roomId: RoomId, ws: WebSocket): void => {
+    const key = roomIdToString(roomId);
+    let set = roomSubscribers.get(key);
+    if (!set) {
+      set = new Set();
+      roomSubscribers.set(key, set);
+    }
+    set.add(ws);
+  };
+
+  const removeRoomSubscriber = (roomId: RoomId | null, ws: WebSocket): void => {
+    if (!roomId) return;
+    const key = roomIdToString(roomId);
+    const set = roomSubscribers.get(key);
+    if (set) {
+      set.delete(ws);
+      if (set.size === 0) roomSubscribers.delete(key);
+    }
+  };
 
   // 处理 HTTP 升级请求
   httpServer.on("upgrade", (request, socket, head) => {
@@ -123,8 +145,10 @@ export function startWebSocketService(opts: { httpServer: http.Server; state: Se
               return;
             }
 
+            removeRoomSubscriber(client.roomId, ws);
             client.roomId = roomId;
             client.userId = msg.userId ?? null;
+            addRoomSubscriber(roomId, ws);
 
             sendResponse(ws, { type: "subscribed", roomId: msg.roomId });
 
@@ -137,6 +161,7 @@ export function startWebSocketService(opts: { httpServer: http.Server; state: Se
         }
 
         if (msg.type === "unsubscribe") {
+          removeRoomSubscriber(client.roomId, ws);
           client.roomId = null;
           client.userId = null;
           sendResponse(ws, { type: "unsubscribed" });
@@ -179,6 +204,7 @@ export function startWebSocketService(opts: { httpServer: http.Server; state: Se
     });
 
     ws.on("close", () => {
+      removeRoomSubscriber(client.roomId, ws);
       clients.delete(ws);
       state.logger.log("DEBUG", tl(state.serverLang, "log-websocket-disconnected", { total: String(clients.size) }));
     });
@@ -266,12 +292,10 @@ export function startWebSocketService(opts: { httpServer: http.Server; state: Se
     if (!data) return;
 
     const message = JSON.stringify({ type: "room_update", data } satisfies WebSocketResponse);
-    const targetRoomKey = roomIdToString(roomId);
+    const subscribers = roomSubscribers.get(roomIdToString(roomId));
+    if (!subscribers) return;
 
-    // 优化：完全异步，不等待
-    for (const [ws, client] of clients) {
-      if (!client.roomId) continue;
-      if (roomIdToString(client.roomId) !== targetRoomKey) continue;
+    for (const ws of subscribers) {
       if (ws.readyState !== WebSocket.OPEN) continue;
       ws.send(message, (err) => {
         if (err) state.logger.log("WARN", `WebSocket send error: ${err.message}`);
@@ -280,15 +304,15 @@ export function startWebSocketService(opts: { httpServer: http.Server; state: Se
   };
 
   const broadcastRoomLog = async (roomId: RoomId, message: string, timestamp: Date): Promise<void> => {
-    const targetRoomKey = roomIdToString(roomId);
     const messageStr = JSON.stringify({
       type: "room_log",
       data: { message, timestamp: timestamp.getTime() }
     } satisfies WebSocketResponse);
 
-    for (const [ws, client] of clients) {
-      if (!client.roomId) continue;
-      if (roomIdToString(client.roomId) !== targetRoomKey) continue;
+    const subscribers = roomSubscribers.get(roomIdToString(roomId));
+    if (!subscribers) return;
+
+    for (const ws of subscribers) {
       if (ws.readyState !== WebSocket.OPEN) continue;
       ws.send(messageStr);
     }
@@ -312,6 +336,7 @@ export function startWebSocketService(opts: { httpServer: http.Server; state: Se
       clearInterval(heartbeatInterval);
       for (const [ws] of clients) ws.close();
       clients.clear();
+      roomSubscribers.clear();
       wss.close();
     }
   };

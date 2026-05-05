@@ -193,7 +193,7 @@ export class Room {
       user: User;
       usersById: (id: number) => User | undefined;
       broadcast: (cmd: ServerCommand) => Promise<void>;
-      broadcastToMonitors: (cmd: ServerCommand) => Promise<void>;
+      broadcastToMonitors: (cmd: ServerCommand) => Promise<void> | void;
       pickRandomUserId: (ids: number[]) => number | null;
       lang: Language;
       logger?: Logger;
@@ -243,7 +243,7 @@ export class Room {
       user?: User;
       usersById: (id: number) => User | undefined;
       broadcast: (cmd: ServerCommand) => Promise<void>;
-      broadcastToMonitors: (cmd: ServerCommand) => Promise<void>;
+      broadcastToMonitors: (cmd: ServerCommand) => Promise<void> | void;
       pickRandomUserId: (ids: number[]) => number | null;
       lang: Language;
       logger?: Logger;

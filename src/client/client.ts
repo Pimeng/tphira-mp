@@ -37,11 +37,20 @@ export type LivePlayer = {
 
 export type ClientOptions = {
   timeoutMs?: number;
+  autoReconnect?: boolean;
+  maxReconnectAttempts?: number;
+  onReconnect?: () => void;
+  onReconnectFailed?: () => void;
 };
 
 const codec: StreamCodec<ClientCommand, ServerCommand> = {
   encodeSend: (payload) => encodePacket(payload, encodeClientCommand),
-  decodeRecv: (payload) => decodePacket(payload, decodeServerCommand)
+  decodeRecv: (payload) => decodePacket(payload, decodeServerCommand),
+  isHighPriority: (cmd) => {
+    // 心跳、认证、准备/取消准备、放弃 为高优先级
+    const highTypes = new Set(["Ping", "Authenticate", "Ready", "CancelReady", "Abort"]);
+    return highTypes.has(cmd.type);
+  }
 };
 
 export class Client {
@@ -61,30 +70,115 @@ export class Client {
   pingFailCount = 0;
   delayMs: number | null = null;
 
+  // 自动重连相关
+  private host: string = "";
+  private port: number = 0;
+  private autoReconnect = false;
+  private maxReconnectAttempts = 5;
+  private reconnectAttempts = 0;
+  private reconnectTimer: NodeJS.Timeout | null = null;
+  private onReconnectCallback: (() => void) | null = null;
+  private onReconnectFailedCallback: (() => void) | null = null;
+
+  // 用于重连后恢复状态
+  private lastToken: string | null = null;
+  private lastRoomId: RoomId | null = null;
+  private lastMonitor = false;
+  private isReconnecting = false;
+
   private constructor(timeoutMs: number) {
     this.timeoutMs = timeoutMs;
   }
 
   static async connect(host: string, port: number, options: ClientOptions = {}): Promise<Client> {
-    const socket = net.createConnection({ host, port });
+    const client = new Client(options.timeoutMs ?? 7000);
+    client.host = host;
+    client.port = port;
+    client.autoReconnect = options.autoReconnect ?? false;
+    client.maxReconnectAttempts = options.maxReconnectAttempts ?? 5;
+    client.onReconnectCallback = options.onReconnect ?? null;
+    client.onReconnectFailedCallback = options.onReconnectFailed ?? null;
+    await client.doConnect();
+    return client;
+  }
+
+  private async doConnect(): Promise<void> {
+    const socket = net.createConnection({ host: this.host, port: this.port });
     await new Promise<void>((resolve, reject) => {
       socket.once("connect", resolve);
       socket.once("error", reject);
     });
 
-    const client = new Client(options.timeoutMs ?? 7000);
     const stream = await Stream.create<ClientCommand, ServerCommand>({
       socket,
       versionToSend: 1,
       codec,
       fastPath: (cmd) => cmd.type === "Pong",
       handler: async (cmd) => {
-        await client.onServerCommand(cmd);
+        await this.onServerCommand(cmd);
       }
     });
-    client.stream = stream;
-    client.startHeartbeat();
-    return client;
+    this.stream = stream;
+    this.startHeartbeat();
+
+    // 监听底层 socket 断开，触发自动重连
+    socket.once("close", () => {
+      this.cleanupConnection();
+      if (this.autoReconnect && !this.isReconnecting) {
+        void this.scheduleReconnect();
+      }
+    });
+  }
+
+  private cleanupConnection(): void {
+    if (this.pingTimer) {
+      clearInterval(this.pingTimer);
+      this.pingTimer = null;
+    }
+    this.stream = null;
+  }
+
+  private async scheduleReconnect(): Promise<void> {
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      this.isReconnecting = false;
+      this.onReconnectFailedCallback?.();
+      return;
+    }
+
+    this.isReconnecting = true;
+    this.reconnectAttempts++;
+
+    // 指数退避：1s, 2s, 4s, 8s... 上限 30s
+    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts - 1), 30000);
+    const jitter = Math.random() * delay * 0.2;
+    const totalDelay = delay + jitter;
+
+    this.rejectAllPending(new Error(`client-reconnecting-attempt-${this.reconnectAttempts}`));
+
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      void this.attemptReconnect();
+    }, totalDelay);
+  }
+
+  private async attemptReconnect(): Promise<void> {
+    try {
+      await this.doConnect();
+      this.reconnectAttempts = 0;
+      this.isReconnecting = false;
+
+      // 恢复认证和房间状态
+      if (this.lastToken) {
+        await this.authenticate(this.lastToken);
+        if (this.lastRoomId) {
+          await this.joinRoom(this.lastRoomId, this.lastMonitor);
+        }
+      }
+
+      this.onReconnectCallback?.();
+    } catch {
+      void this.scheduleReconnect();
+    }
   }
 
   me(): UserInfo | null {
@@ -126,11 +220,16 @@ export class Client {
   }
 
   async close(): Promise<void> {
-    if (this.pingTimer) clearInterval(this.pingTimer);
-    this.pingTimer = null;
+    this.autoReconnect = false; // 主动关闭不再重连
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     this.rejectAllPending(new Error("连接已关闭"));
-    this.stream?.close();
+    const stream = this.stream;
     this.stream = null;
+    this.cleanupConnection();
+    stream?.close();
   }
 
   async ping(): Promise<number> {
@@ -143,6 +242,7 @@ export class Client {
   }
 
   async authenticate(token: string): Promise<void> {
+    this.lastToken = token;
     const res = await this.rcall<[UserInfo, ClientRoomState | null]>("Authenticate", { type: "Authenticate", token });
     if (!res.ok) throw new Error(res.error);
     const [me, room] = res.value;
@@ -173,8 +273,10 @@ export class Client {
     };
   }
 
-  async joinRoom(id: string, monitor: boolean): Promise<JoinRoomResponse> {
-    const roomId = parseRoomId(id);
+  async joinRoom(id: string | RoomId, monitor: boolean): Promise<JoinRoomResponse> {
+    const roomId = typeof id === "string" ? parseRoomId(id) : id;
+    this.lastRoomId = roomId;
+    this.lastMonitor = monitor;
     const res = await this.rcall<JoinRoomResponse>("JoinRoom", { type: "JoinRoom", id: roomId, monitor });
     if (!res.ok) throw new Error(res.error);
     const users = new Map<number, UserInfo>();
@@ -195,6 +297,8 @@ export class Client {
   async leaveRoom(): Promise<void> {
     await this.rcallUnit("LeaveRoom", { type: "LeaveRoom" });
     this.roomValue = null;
+    this.lastRoomId = null;
+    this.lastMonitor = false;
   }
 
   async lockRoom(lock: boolean): Promise<void> {
@@ -247,20 +351,35 @@ export class Client {
   }
 
   private startHeartbeat(): void {
-    this.pingTimer = setInterval(() => {
-      void (async () => {
-        const start = Date.now();
-        try {
-          await this.send({ type: "Ping" });
-          await this.waitPong(HEARTBEAT_TIMEOUT_MS);
-          this.pingFailCount = 0;
-        } catch {
-          this.pingFailCount += 1;
-        } finally {
-          this.delayMs = Date.now() - start;
+    const runHeartbeat = async () => {
+      if (!this.stream) return;
+      const start = Date.now();
+      try {
+        await this.send({ type: "Ping" });
+        await this.waitPong(HEARTBEAT_TIMEOUT_MS);
+        this.pingFailCount = 0;
+      } catch {
+        this.pingFailCount += 1;
+        // 连续 3 次心跳失败，认为连接已断开，关闭 socket 触发重连
+        if (this.pingFailCount >= 3) {
+          this.stream?.socket.destroy();
+          return;
         }
-      })();
-    }, HEARTBEAT_INTERVAL_MS);
+      } finally {
+        this.delayMs = Date.now() - start;
+      }
+
+      // 自适应心跳间隔
+      let nextInterval = HEARTBEAT_INTERVAL_MS;
+      if (this.delayMs !== null) {
+        if (this.delayMs < 100) nextInterval = 5000;
+        else if (this.delayMs > 300) nextInterval = 1000;
+      }
+
+      this.pingTimer = setTimeout(runHeartbeat, nextInterval);
+    };
+
+    this.pingTimer = setTimeout(runHeartbeat, HEARTBEAT_INTERVAL_MS);
   }
 
   private async waitPong(timeoutMs: number): Promise<void> {
