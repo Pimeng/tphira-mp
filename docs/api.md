@@ -282,7 +282,8 @@ Body：
     {
       "chartId": 1,
       "replays": [
-        { "timestamp": 1730000000000, "recordId": 123 }
+        { "timestamp": 1730000000000, "recordId": 123 },
+        { "timestamp": 1730000001000, "recordId": 0, "scoreId": 456, "downloadUrl": "http://share.station/download/replay/456" }
       ]
     }
   ],
@@ -293,17 +294,18 @@ Body：
 
 - `token`：Phira 主站 token（与客户端 TCP 鉴权相同），服务端会用它去请求 `/me` 以确定用户身份。
 - `sessionToken`：临时 token，仅用于下载该用户自己的回放文件（默认 30 分钟有效）。
+- 已上传到分享站的回放会包含 `scoreId` 和 `downloadUrl`，未上传的只包含 `recordId`。
 
-#### 2) 下载回放文件（限速 50KB/s）
+#### 2) 下载回放文件
 
 `GET /replay/download?sessionToken=...&chartId=...&timestamp=...`
 
-成功：返回 `application/octet-stream` 的 `.phirarec` 文件。
+- 本地文件：返回 `application/octet-stream` 的 `.phirarec` 文件（限速 50KB/s）
+- 已上传文件：返回 `302` 重定向到分享站下载链接
 
 - `sessionToken`：来自 `/replay/auth`，仅允许下载该 token 绑定用户的回放
 - `chartId`：谱面 ID
 - `timestamp`：回放文件名中的时间戳（毫秒）
-- 限速：每个下载连接按 50KB/s 节流
 
 #### 3) 删除回放文件
 
@@ -417,15 +419,15 @@ curl -X POST -H "Content-Type: application/json" \
 {
   "ok": true,
   "userId": 100,
-  "enabled": true,
   "show": false,
-  "shareStationConfigured": true
+  "shareStationConfigured": true,
+  "autoUploadEnabled": true
 }
 ```
 
-- `enabled`：是否启用自动上传
 - `show`：自动上传的文件是否显示（`false` 表示不显示，`true` 表示显示）
-- `shareStationConfigured`：服务器是否配置了分享站（如果为 `false`，自动上传不会生效）
+- `shareStationConfigured`：服务器是否配置了分享站
+- `autoUploadEnabled`：服务器是否启用了自动上传（如果为 `false`，自动上传不会生效）
 
 ##### 修改自动上传配置
 
@@ -436,13 +438,11 @@ Body：
 ```json
 {
   "token": "your_phira_user_token",
-  "enabled": true,
   "show": false
 }
 ```
 
 - `token`：Phira用户TOKEN，用于鉴权（**必需**）
-- `enabled`：是否启用自动上传（**可选**，不传递则保持原值）
 - `show`：自动上传的文件是否显示（**可选**，不传递则保持原值）
   - `false`（默认）：自动上传的文件在分享站不显示
   - `true`：自动上传的文件在分享站显示
@@ -450,12 +450,12 @@ Body：
 curl示例：
 
 ```bash
-# 启用自动上传，上传的文件不显示
+# 设置上传的文件不显示
 curl -X POST -H "Content-Type: application/json" \
-  -d '{"token":"your_phira_user_token","enabled":true,"show":false}' \
+  -d '{"token":"your_phira_user_token","show":false}' \
   http://127.0.0.1:12347/replay/auto-upload/config
 
-# 只修改显示设置
+# 设置上传的文件显示
 curl -X POST -H "Content-Type: application/json" \
   -d '{"token":"your_phira_user_token","show":true}' \
   http://127.0.0.1:12347/replay/auto-upload/config
@@ -467,8 +467,9 @@ curl -X POST -H "Content-Type: application/json" \
 {
   "ok": true,
   "userId": 100,
-  "enabled": true,
-  "show": false
+  "show": false,
+  "shareStationConfigured": true,
+  "autoUploadEnabled": true
 }
 ```
 
@@ -477,8 +478,9 @@ curl -X POST -H "Content-Type: application/json" \
 - 使用**用户TOKEN**鉴权（与 `/replay/auth` 相同），而非管理员TOKEN
 - 自动上传会在游戏结束后**延迟30秒**执行
 - 自动上传的文件 `show` 属性默认为 `false`（不显示），与手动上传不同
-- 如果用户禁用了自动上传，所有待处理的自动上传任务会被取消
-- 需要服务器配置了 `SHARE_STATION` 才能正常工作
+- 自动上传由服务器全局配置 `replay_auto_upload` 控制，用户无法单独禁用
+- 如果服务器未配置分享站，回放将保留在本地，不会自动上传
+- 上传成功后本地文件会被删除，只保留元数据，下载时返回分享站下载链接
 
 ##### 调用的Phira Replay API
 

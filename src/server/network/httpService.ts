@@ -2,7 +2,7 @@ import http from "node:http";
 import type net from "node:net";
 import { once } from "node:events";
 import { createReadStream } from "node:fs";
-import { stat, readFile, writeFile } from "node:fs/promises";
+import { stat, readFile, writeFile, rm } from "node:fs/promises";
 import { roomIdToString, type RoomId } from "../../common/roomId.js";
 import { newUuid } from "../../common/uuid.js";
 import {
@@ -332,10 +332,41 @@ export async function startHttpService(opts: { state: ServerState; host: string;
 
         const baseDir = state.replayRecorder.baseDir;
         const listed = await listReplaysForUser(baseDir, me.id);
-        const charts = [...listed.entries()].map(([chartId, replays]) => ({
+        const charts: Array<{
+          chartId: number;
+          replays: Array<{ timestamp: number; recordId: number; scoreId?: number; downloadUrl?: string }>;
+        }> = [...listed.entries()].map(([chartId, replays]) => ({
           chartId,
           replays: replays.map((r) => ({ timestamp: r.timestamp, recordId: r.recordId }))
         }));
+
+        // 合并已上传回放的元数据
+        const userMeta = state.uploadedReplayMeta.get(me.id);
+        if (userMeta) {
+          for (const [chartId, metaList] of userMeta.entries()) {
+            let chartEntry = charts.find((c) => c.chartId === chartId);
+            if (!chartEntry) {
+              chartEntry = { chartId, replays: [] };
+              charts.push(chartEntry);
+            }
+            for (const meta of metaList) {
+              const shareStation = state.shareStation;
+              if (shareStation) {
+                chartEntry.replays.push({
+                  timestamp: meta.timestamp,
+                  recordId: 0,
+                  scoreId: meta.scoreId,
+                  downloadUrl: `${shareStation.url}/download/replay/${meta.scoreId}`
+                });
+              }
+            }
+          }
+        }
+
+        // 对每个 chart 的 replays 按时间倒序排列
+        for (const chart of charts) {
+          chart.replays.sort((a, b) => b.timestamp - a.timestamp);
+        }
         charts.sort((a, b) => a.chartId - b.chartId);
 
         const sessionToken = newUuid();
@@ -365,44 +396,59 @@ export async function startHttpService(opts: { state: ServerState; host: string;
 
         const baseDir = state.replayRecorder.baseDir;
         const filePath = replayFilePath(baseDir, sess.userId, chartId, timestamp);
-        const header = await readReplayHeader(filePath).catch(() => null);
-        if (!header || header.userId !== sess.userId || header.chartId !== chartId) {
-          write(404, { ok: false, error: "not-found" });
-          return;
-        }
-
         const info = await stat(filePath).catch(() => null);
-        if (!info || !info.isFile()) {
-          write(404, { ok: false, error: "not-found" });
+
+        // 本地文件存在，直接返回文件流
+        if (info && info.isFile()) {
+          const header = await readReplayHeader(filePath).catch(() => null);
+          if (!header || header.userId !== sess.userId || header.chartId !== chartId) {
+            write(404, { ok: false, error: "not-found" });
+            return;
+          }
+
+          res.statusCode = 200;
+          res.setHeader("content-type", "application/octet-stream");
+          res.setHeader("cache-control", "no-store");
+          res.setHeader("content-disposition", `attachment; filename="${timestamp}.phirarec"`);
+          res.setHeader("content-length", String(info.size));
+
+          const bytesPerSec = 50 * 1024;
+          const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+          const stream = createReadStream(filePath, { highWaterMark: 4096 });
+          try {
+            for await (const chunk of stream) {
+              if (!res.write(chunk)) await once(res, "drain");
+              const delayMs = Math.ceil((chunk.length / bytesPerSec) * 1000);
+              if (delayMs > 0) await sleep(delayMs);
+            }
+            res.end();
+          } catch {
+            stream.destroy();
+            res.end();
+          }
           return;
         }
 
-        res.statusCode = 200;
-        res.setHeader("content-type", "application/octet-stream");
-        res.setHeader("cache-control", "no-store");
-        res.setHeader("content-disposition", `attachment; filename="${timestamp}.phirarec"`);
-        res.setHeader("content-length", String(info.size));
-
-        const bytesPerSec = 50 * 1024;
-        const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-        const stream = createReadStream(filePath, { highWaterMark: 4096 });
-        try {
-          for await (const chunk of stream) {
-            if (!res.write(chunk)) await once(res, "drain");
-            const delayMs = Math.ceil((chunk.length / bytesPerSec) * 1000);
-            if (delayMs > 0) await sleep(delayMs);
-          }
+        // 本地文件不存在，检查已上传的元数据
+        const userMeta = state.uploadedReplayMeta.get(sess.userId);
+        const chartMeta = userMeta?.get(chartId);
+        const meta = chartMeta?.find((m) => m.timestamp === timestamp);
+        if (meta && state.shareStation) {
+          // 重定向到分享站下载链接
+          const downloadUrl = `${state.shareStation.url}/download/replay/${meta.scoreId}`;
+          res.statusCode = 302;
+          res.setHeader("Location", downloadUrl);
           res.end();
-        } catch {
-          stream.destroy();
-          res.end();
+          return;
         }
+
+        write(404, { ok: false, error: "not-found" });
         return;
       }
 
       if (req.method === "POST" && url.pathname === "/replay/delete") {
         const body = await read();
-        const sessionToken = typeof (body as any)?.sessionToken === "string" ? String((body as any).sessionToken).trim() : "";
+        const sessionToken = typeof (body as any)?.sessionToken === "string" ? String((body as any)?.sessionToken).trim() : "";
         const chartId = Number((body as any)?.chartId ?? "");
         const timestamp = Number((body as any)?.timestamp ?? "");
         if (!sessionToken || !Number.isInteger(chartId) || !Number.isInteger(timestamp) || chartId < 0 || timestamp <= 0) {
@@ -418,21 +464,42 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           return;
         }
 
+        // 先尝试删除本地文件
         const baseDir = state.replayRecorder.baseDir;
         const filePath = replayFilePath(baseDir, sess.userId, chartId, timestamp);
-        const header = await readReplayHeader(filePath).catch(() => null);
-        if (!header || header.userId !== sess.userId || header.chartId !== chartId) {
-          write(404, { ok: false, error: "not-found" });
-          return;
+        const info = await stat(filePath).catch(() => null);
+        if (info?.isFile()) {
+          const header = await readReplayHeader(filePath).catch(() => null);
+          if (header && header.userId === sess.userId && header.chartId === chartId) {
+            const deleted = await deleteReplayForUser(baseDir, sess.userId, chartId, timestamp);
+            if (deleted) {
+              write(200, { ok: true });
+              return;
+            }
+          }
         }
 
-        const deleted = await deleteReplayForUser(baseDir, sess.userId, chartId, timestamp);
-        if (!deleted) {
-          write(404, { ok: false, error: "not-found" });
-          return;
+        // 本地文件不存在，尝试从元数据中删除
+        const userMeta = state.uploadedReplayMeta.get(sess.userId);
+        if (userMeta) {
+          const chartMeta = userMeta.get(chartId);
+          if (chartMeta) {
+            const idx = chartMeta.findIndex((m) => m.timestamp === timestamp);
+            if (idx >= 0) {
+              chartMeta.splice(idx, 1);
+              if (chartMeta.length === 0) {
+                userMeta.delete(chartId);
+              }
+              if (userMeta.size === 0) {
+                state.uploadedReplayMeta.delete(sess.userId);
+              }
+              write(200, { ok: true });
+              return;
+            }
+          }
         }
 
-        write(200, { ok: true });
+        write(404, { ok: false, error: "not-found" });
         return;
       }
 
@@ -500,9 +567,29 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           return;
         }
 
-        // 手动上传默认设置为显示
+        // 存储元数据
         if (uploadResult.scoreId) {
+          let userMeta = state.uploadedReplayMeta.get(userId);
+          if (!userMeta) {
+            userMeta = new Map();
+            state.uploadedReplayMeta.set(userId, userMeta);
+          }
+          let chartMeta = userMeta.get(chartId);
+          if (!chartMeta) {
+            chartMeta = [];
+            userMeta.set(chartId, chartMeta);
+          }
+          chartMeta.push({ scoreId: uploadResult.scoreId, chartId, timestamp });
+
+          // 手动上传默认设置为显示
           await setReplayVisibility(uploadResult.scoreId, true);
+
+          // 上传成功后删除本地文件
+          try {
+            await rm(filePath);
+          } catch (err) {
+            state.logger.warn(`Failed to delete local replay file after manual upload for user ${userId}: ${err instanceof Error ? err.message : String(err)}`);
+          }
         }
 
         write(200, {
@@ -533,17 +620,16 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           return;
         }
 
-        // 获取或创建用户配置
+        // 获取或创建用户配置（show 默认 false）
         let config = state.autoUploadConfigs.get(userId);
         if (!config) {
-          config = { enabled: false, show: false };
+          config = { show: false };
           state.autoUploadConfigs.set(userId, config);
         }
 
         write(200, {
           ok: true,
           userId,
-          enabled: config.enabled,
           show: config.show,
           shareStationConfigured: state.shareStationConfigured,
           autoUploadEnabled: Boolean(state.config.replay_auto_upload)
@@ -551,11 +637,10 @@ export async function startHttpService(opts: { state: ServerState; host: string;
         return;
       }
 
-      // 修改自动上传配置
+      // 修改自动上传配置（仅控制显示状态）
       if (req.method === "POST" && url.pathname === "/replay/auto-upload/config") {
         const body = await read();
         const token = typeof (body as any)?.token === "string" ? String((body as any).token).trim() : "";
-        const enabled = (body as any)?.enabled;
         const show = (body as any)?.show;
 
         if (!token) {
@@ -570,21 +655,13 @@ export async function startHttpService(opts: { state: ServerState; host: string;
           return;
         }
 
-        // 获取或创建用户配置
+        // 获取或创建用户配置（show 默认 false）
         let config = state.autoUploadConfigs.get(userId);
         if (!config) {
-          config = { enabled: false, show: false };
+          config = { show: false };
         }
 
         // 更新配置
-        if (typeof enabled === 'boolean') {
-          config.enabled = enabled;
-
-          // 如果禁用自动上传，清除待处理的任务
-          if (!enabled) {
-            state.pendingAutoUploads.delete(userId);
-          }
-        }
         if (typeof show === 'boolean') {
           config.show = show;
         }
@@ -594,7 +671,6 @@ export async function startHttpService(opts: { state: ServerState; host: string;
         write(200, {
           ok: true,
           userId,
-          enabled: config.enabled,
           show: config.show,
           shareStationConfigured: state.shareStationConfigured,
           autoUploadEnabled: Boolean(state.config.replay_auto_upload)
@@ -1331,40 +1407,16 @@ export async function startHttpService(opts: { state: ServerState; host: string;
       return;
     }
 
-    // 检查用户是否启用了自动上传
-    const config = state.autoUploadConfigs.get(userId);
-    if (!config?.enabled) return;
-
-    // 检查分享站是否配置
+    // 检查分享站是否配置（未配置则保留本地文件）
     if (!state.shareStationConfigured) {
-      state.logger.debug(`Auto upload skipped for user ${userId}: share station not configured`);
+      state.logger.debug(`Auto upload skipped for user ${userId}: share station not configured, keeping local file`);
       return;
     }
-
-    // 添加到待处理任务（用于可能的取消操作）
-    const pendingTasks = state.pendingAutoUploads.get(userId) ?? [];
-    pendingTasks.push({ chartId, timestamp, recordId });
-    state.pendingAutoUploads.set(userId, pendingTasks);
 
     // 延迟30秒后执行上传
     setTimeout(async () => {
       // 再次检查全局开关（可能在此期间被禁用）
       if (!state.config.replay_auto_upload) {
-        const tasks = state.pendingAutoUploads.get(userId) ?? [];
-        const filtered = tasks.filter(t => t.timestamp !== timestamp);
-        if (filtered.length === 0) state.pendingAutoUploads.delete(userId);
-        else state.pendingAutoUploads.set(userId, filtered);
-        return;
-      }
-
-      // 再次检查配置（可能在此期间被禁用）
-      const currentConfig = state.autoUploadConfigs.get(userId);
-      if (!currentConfig?.enabled) {
-        // 从待处理列表中移除
-        const tasks = state.pendingAutoUploads.get(userId) ?? [];
-        const filtered = tasks.filter(t => t.timestamp !== timestamp);
-        if (filtered.length === 0) state.pendingAutoUploads.delete(userId);
-        else state.pendingAutoUploads.set(userId, filtered);
         return;
       }
 
@@ -1399,19 +1451,36 @@ export async function startHttpService(opts: { state: ServerState; host: string;
         return;
       }
 
-      // 根据用户配置设置显示状态
-      // 自动上传默认不显示（show=false），除非用户明确设置为 true
-      if (uploadResult.scoreId && currentConfig.show) {
-        await setReplayVisibility(uploadResult.scoreId, true);
+      // 存储元数据
+      if (uploadResult.scoreId) {
+        let userMeta = state.uploadedReplayMeta.get(userId);
+        if (!userMeta) {
+          userMeta = new Map();
+          state.uploadedReplayMeta.set(userId, userMeta);
+        }
+        let chartMeta = userMeta.get(chartId);
+        if (!chartMeta) {
+          chartMeta = [];
+          userMeta.set(chartId, chartMeta);
+        }
+        chartMeta.push({ scoreId: uploadResult.scoreId, chartId, timestamp });
+
+        // 根据用户配置设置显示状态（默认不显示，show=true 时设为可见）
+        const config = state.autoUploadConfigs.get(userId);
+        if (config?.show) {
+          await setReplayVisibility(uploadResult.scoreId, true);
+        }
       }
 
       state.logger.info(`Auto upload completed for user ${userId}, chart ${chartId}, scoreId: ${uploadResult.scoreId}`);
 
-      // 从待处理列表中移除
-      const tasks = state.pendingAutoUploads.get(userId) ?? [];
-      const filtered = tasks.filter(t => t.timestamp !== timestamp);
-      if (filtered.length === 0) state.pendingAutoUploads.delete(userId);
-      else state.pendingAutoUploads.set(userId, filtered);
+      // 上传成功后删除本地文件（只保留元数据）
+      try {
+        await rm(filePath);
+        state.logger.debug(`Local replay file deleted for user ${userId}, chart ${chartId}, timestamp ${timestamp}`);
+      } catch (err) {
+        state.logger.warn(`Failed to delete local replay file for user ${userId}: ${err instanceof Error ? err.message : String(err)}`);
+      }
     }, 30000); // 30秒延迟
   };
 

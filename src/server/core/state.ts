@@ -20,10 +20,16 @@ export const TEMP_TOKEN_TTL_MS = 4 * 60 * 60 * 1000;
 /** OTP / CLI 提权会话的有效期（1 分钟） */
 export const OTP_TTL_MS = 1 * 60 * 1000;
 
-/** 用户自动上传配置 */
+/** 用户自动上传配置（仅控制是否显示） */
 export type AutoUploadConfig = {
-  enabled: boolean;
   show: boolean;
+};
+
+/** 已上传回放的元数据 */
+export type UploadedReplayMeta = {
+  scoreId: number;
+  chartId: number;
+  timestamp: number;
 };
 
 export class ServerState {
@@ -76,10 +82,10 @@ export class ServerState {
     requestedAt: number;
   }>();
   
-  // 用户自动上传配置（仅内存存储，在/replay/auth时关联）
+  // 用户自动上传配置（仅控制显示状态，仅内存存储）
   readonly autoUploadConfigs = new Map<number, AutoUploadConfig>();
-  // 待处理的自动上传任务（用户ID -> 任务列表）
-  readonly pendingAutoUploads = new Map<number, Array<{ chartId: number; timestamp: number; recordId: number }>>();
+  // 已上传回放的元数据（userId -> chartId -> UploadedReplayMeta[]）
+  readonly uploadedReplayMeta = new Map<number, Map<number, Array<UploadedReplayMeta>>>();
 
   constructor(config: ServerConfig, logger: Logger, serverName: string, adminDataPath: string) {
     this.config = config;
