@@ -6,6 +6,7 @@ import type { Stream } from "../../common/stream.js";
 import { fetchWithRetry } from "../../common/http.js";
 import type { Room } from "../game/room.js";
 import { Room as RoomClass } from "../game/room.js";
+import { parseRoomId } from "../../common/roomId.js";
 import { refreshRoomLive as refreshRoomLiveState } from "../game/roomUtils.js";
 import type { ServerState } from "../core/state.js";
 import type { Chart, RecordData } from "../core/types.js";
@@ -405,21 +406,22 @@ export class Session {
 
   private errToStr<T>(fn: () => Promise<T>): Promise<StringResult<T>> {
     const user = this.user;
-    if (!user) return fn().then(ok).catch((e) => err(this.localizeError(user.lang, e)));
-    return fn().then(ok).catch((e) => err(this.localizeError(user.lang, e)));
+    const lang = user?.lang ?? this.state.serverLang;
+    return fn().then(ok).catch((e) => err(this.localizeError(lang, e)));
   }
 
-  private async processCreateRoom(user: User, id: string): Promise<void> {
+  private async processCreateRoom(user: User, id: string): Promise<Record<never, never>> {
     if (await this.checkAndHandleBan(user)) throw new Error(user.lang.format("user-banned-by-server"));
     if (!this.state.roomCreationEnabled) throw new Error(user.lang.format("room-creation-disabled"));
     if (user.room) throw new Error(user.lang.format("room-already-in-room"));
+    const roomId = parseRoomId(id);
     await this.state.mutex.runExclusive(async () => {
-      if (this.state.rooms.has(id)) throw new Error(user.lang.format("create-id-occupied"));
+      if (this.state.rooms.has(roomId)) throw new Error(user.lang.format("create-id-occupied"));
       const maxUsersRaw = this.state.config.room_max_users;
       const maxUsers =
         typeof maxUsersRaw === "number" && Number.isInteger(maxUsersRaw) ? Math.min(Math.max(maxUsersRaw, 1), 64) : 8;
-      const room = new RoomClass({ id, hostId: user.id, maxUsers, replayEligible: this.state.replayEnabled });
-      this.state.rooms.set(id, room);
+      const room = new RoomClass({ id: roomId, hostId: user.id, maxUsers, replayEligible: this.state.replayEnabled });
+      this.state.rooms.set(roomId, room);
       user.room = room;
     });
     const room = user.room!;
@@ -439,11 +441,14 @@ export class Session {
         })();
       });
     }
+    return {};
   }
 
-  private async processJoinRoom(user: User, roomId: string, monitor: boolean): Promise<JoinRoomResponse> {
+  private async processJoinRoom(user: User, roomIdStr: string, monitor: boolean): Promise<JoinRoomResponse> {
     if (await this.checkAndHandleBan(user)) throw new Error(user.lang.format("user-banned-by-server"));
     if (user.room) throw new Error(user.lang.format("room-already-in-room"));
+
+    const roomId = parseRoomId(roomIdStr);
 
     // 优化：先检查房间封禁，不需要mutex
     const bannedInRoom = (() => {

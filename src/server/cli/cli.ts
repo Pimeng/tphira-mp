@@ -269,9 +269,7 @@ export function startCli(ctx: CliContext): () => void {
       await abortPlayingUserAndCheckReady({
         state: ctx.state,
         user: u,
-        room: u.room,
-        broadcastRoomAll: ctx.broadcastRoomAll,
-        pickRandomUserId: ctx.pickRandomUserId
+        room: u.room
       });
     }
 

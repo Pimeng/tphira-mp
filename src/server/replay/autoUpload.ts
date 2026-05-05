@@ -22,6 +22,7 @@ export function createAutoUploadHandler(state: ServerState): AutoUploadHandler {
       state.logger.debug(`Auto upload skipped for user ${userId}: share station not configured, keeping local file`);
       return;
     }
+    const shareStation = state.shareStation;
 
     // 延迟30秒后执行上传
     setTimeout(async () => {
@@ -55,7 +56,7 @@ export function createAutoUploadHandler(state: ServerState): AutoUploadHandler {
         filename: `${timestamp}.phirarec`,
         chartName: header.chartName,
         username: header.userName,
-        shareStation: state.shareStation,
+        shareStation,
         outboundProxy: state.config.outbound_proxy
       });
 
@@ -82,7 +83,7 @@ export function createAutoUploadHandler(state: ServerState): AutoUploadHandler {
         const config = state.autoUploadConfigs.get(userId);
         if (config?.show) {
           await setReplayVisibility(uploadResult.scoreId, true, {
-            shareStation: state.shareStation,
+            shareStation,
             outboundProxy: state.config.outbound_proxy
           });
         }
