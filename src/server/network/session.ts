@@ -425,28 +425,32 @@ export class Session {
         const room = user.room;
         if (!room) return null;
         if (room.state.type !== "Playing") return null;
-        const canRecord = this.state.replayEnabled && room.replayEligible;
-        const hasMonitors = room.monitorIds().length > 0;
-        const canForward = canRecord || hasMonitors;
-        if (!canRecord && !canForward) return null;
         const last = cmd.frames.at(-1);
         if (last) user.gameTime = last.time;
         this.state.logger.log("DEBUG", tl(this.state.serverLang, "log-user-touches", { user: user.name, room: room.id, count: String(cmd.frames.length) }), { frames: cmd.frames }, { userId: user.id });
-        if (canRecord) this.state.replayRecorder.appendTouches(room.id, user.id, cmd.frames);
-        if (canForward) void this.broadcastRoomMonitors(room, { type: "Touches", player: user.id, frames: cmd.frames });
+        // monitor数据转发模块 - 独立判断、独立执行
+        if (room.monitorIds().length > 0) {
+          void this.broadcastRoomMonitors(room, { type: "Touches", player: user.id, frames: cmd.frames });
+        }
+        // 录制回放模块 - 独立判断、独立执行
+        if (this.state.replayEnabled && room.replayEligible) {
+          this.state.replayRecorder.appendTouches(room.id, user.id, cmd.frames);
+        }
         return null;
       }
       case "Judges": {
         const room = user.room;
         if (!room) return null;
         if (room.state.type !== "Playing") return null;
-        const canRecord = this.state.replayEnabled && room.replayEligible;
-        const hasMonitors = room.monitorIds().length > 0;
-        const canForward = canRecord || hasMonitors;
-        if (!canRecord && !canForward) return null;
         this.state.logger.log("DEBUG", tl(this.state.serverLang, "log-user-judges", { user: user.name, room: room.id, count: String(cmd.judges.length) }), { judges: cmd.judges }, { userId: user.id });
-        if (canRecord) this.state.replayRecorder.appendJudges(room.id, user.id, cmd.judges);
-        if (canForward) void this.broadcastRoomMonitors(room, { type: "Judges", player: user.id, judges: cmd.judges });
+        // monitor数据转发模块 - 独立判断、独立执行
+        if (room.monitorIds().length > 0) {
+          void this.broadcastRoomMonitors(room, { type: "Judges", player: user.id, judges: cmd.judges });
+        }
+        // 录制回放模块 - 独立判断、独立执行
+        if (this.state.replayEnabled && room.replayEligible) {
+          this.state.replayRecorder.appendJudges(room.id, user.id, cmd.judges);
+        }
         return null;
       }
       case "CreateRoom":
