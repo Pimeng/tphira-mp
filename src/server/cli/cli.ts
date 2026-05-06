@@ -1,23 +1,31 @@
 import * as readline from "node:readline";
 import type { FluentVariable } from "@fluent/bundle";
 import type { ServerState } from "../core/state.js";
-import { TEMP_TOKEN_TTL_MS } from "../core/state.js";
-import { newUuid } from "../../common/uuid.js";
 import type { Logger } from "../utils/logger.js";
-import { roomIdToString, type RoomId } from "../../common/roomId.js";
+import { type RoomId } from "../../common/roomId.js";
 import type { ServerCommand } from "../../common/commands.js";
 import { tl } from "../utils/l10n.js";
-import { logRoomInfo } from "../utils/logUtils.js";
-import { refreshRoomLive } from "../game/roomUtils.js";
-import { abortPlayingUserAndCheckReady } from "../network/httpHelpers.js";
+import { makePrinter } from "./cliHelpers.js";
+import type { CommandCtx } from "./commands/types.js";
 import {
-  makePrinter,
-  parseBoundedIntArg,
-  parseRoomIdArg,
-  parseToggleArg,
-  parseUserIdArg,
-  validateChatMessage
-} from "./cliHelpers.js";
+  handleDisband,
+  handleListRooms,
+  handleMaxUsers,
+  handleRoomSay
+} from "./commands/rooms.js";
+import { handleKick, handleListUsers, handleUserInfo } from "./commands/users.js";
+import {
+  handleBan,
+  handleBanList,
+  handleBanRoom,
+  handleUnban,
+  handleUnbanRoom
+} from "./commands/bans.js";
+import { handleBroadcast } from "./commands/broadcast.js";
+import { handleReplay, handleRoomCreation } from "./commands/toggles.js";
+import { handleContest } from "./commands/contest.js";
+import { handleIpBlacklist } from "./commands/ipBlacklist.js";
+import { handleApprove, handleDeny, handlePending } from "./commands/approval.js";
 
 export type CliContext = {
   state: ServerState;
@@ -33,10 +41,21 @@ export function startCli(ctx: CliContext): () => void {
     prompt: ""
   });
 
-  const { print, printError, printSuccess, printInfo } = makePrinter();
+  const printer = makePrinter();
+  const { print, printError, printInfo } = printer;
   // 每次调用都从 ctx.state 取最新的 serverLang——配置 reload 时它会被替换。
   const getLang = () => ctx.state.serverLang;
   const t = (key: string, args?: Record<string, FluentVariable>): string => tl(getLang(), key, args);
+
+  const cmdCtx: CommandCtx = {
+    state: ctx.state,
+    logger: ctx.logger,
+    broadcastRoomAll: ctx.broadcastRoomAll,
+    pickRandomUserId: ctx.pickRandomUserId,
+    printer,
+    getLang,
+    t
+  };
 
   rl.on("line", async (line) => {
     const input = line.trim();
@@ -49,70 +68,70 @@ export function startCli(ctx: CliContext): () => void {
     try {
       switch (cmd) {
         case "help":
-          await handleHelp();
+          print(t("cli-help"));
           break;
         case "list":
         case "rooms":
-          await handleListRooms();
+          await handleListRooms(cmdCtx);
           break;
         case "users":
-          await handleListUsers();
+          await handleListUsers(cmdCtx);
           break;
         case "user":
-          await handleUserInfo(args);
+          await handleUserInfo(cmdCtx, args);
           break;
         case "kick":
-          await handleKick(args);
+          await handleKick(cmdCtx, args);
           break;
         case "ban":
-          await handleBan(args);
+          await handleBan(cmdCtx, args);
           break;
         case "unban":
-          await handleUnban(args);
+          await handleUnban(cmdCtx, args);
           break;
         case "banlist":
-          await handleBanList();
+          await handleBanList(cmdCtx);
           break;
         case "banroom":
-          await handleBanRoom(args);
+          await handleBanRoom(cmdCtx, args);
           break;
         case "unbanroom":
-          await handleUnbanRoom(args);
+          await handleUnbanRoom(cmdCtx, args);
           break;
         case "broadcast":
         case "say":
-          await handleBroadcast(args);
+          await handleBroadcast(cmdCtx, args);
           break;
         case "roomsay":
-          await handleRoomSay(args);
+          await handleRoomSay(cmdCtx, args);
           break;
         case "maxusers":
-          await handleMaxUsers(args);
+          await handleMaxUsers(cmdCtx, args);
           break;
         case "disband":
-          await handleDisband(args);
+          await handleDisband(cmdCtx, args);
           break;
         case "replay":
-          await handleReplay(args);
+          await handleReplay(cmdCtx, args);
           break;
         case "roomcreation":
-          await handleRoomCreation(args);
+          await handleRoomCreation(cmdCtx, args);
           break;
         case "contest":
-          await handleContest(args);
+          await handleContest(cmdCtx, args);
           break;
         case "ipblacklist":
-          await handleIpBlacklist(args);
+          await handleIpBlacklist(cmdCtx, args);
           break;
         case "approve":
-          await handleApprove(args);
+          await handleApprove(cmdCtx, args);
           break;
         case "deny":
         case "reject":
-          await handleDeny(args);
+          await handleDeny(cmdCtx, args);
           break;
         case "pending":
-          await handlePending();
+          await handlePending(cmdCtx);
           break;
         case "stop":
         case "shutdown":
@@ -125,669 +144,6 @@ export function startCli(ctx: CliContext): () => void {
       printError(t("cli-command-failed", { reason: e instanceof Error ? e.message : String(e) }));
     }
   });
-
-  const handleHelp = async () => {
-    print(t("cli-help"));
-  };
-
-  const stateLabel = (type: string): string => {
-    if (type === "Playing") return t("cli-room-state-playing");
-    if (type === "WaitForReady") return t("cli-room-state-waiting");
-    return t("cli-room-state-select");
-  };
-
-  const handleListRooms = async () => {
-    const rooms = await ctx.state.mutex.runExclusive(async () => {
-      return [...ctx.state.rooms.entries()].map(([rid, room]) => ({
-        roomid: roomIdToString(rid),
-        state: stateLabel(room.state.type),
-        users: room.userIds().length,
-        monitors: room.monitorIds().length,
-        maxUsers: room.maxUsers,
-        locked: room.locked ? t("cli-bool-yes") : t("cli-bool-no"),
-        cycle: room.cycle ? t("cli-bool-yes") : t("cli-bool-no"),
-        chart: room.chart?.name ?? t("cli-none"),
-        contest: room.contest ? t("cli-bool-yes") : t("cli-bool-no")
-      }));
-    });
-
-    if (rooms.length === 0) {
-      printInfo(t("cli-no-rooms"));
-      return;
-    }
-
-    print("");
-    print(t("cli-rooms-total", { count: rooms.length }));
-    for (const r of rooms) {
-      print(t("cli-room-line", {
-        id: r.roomid,
-        state: r.state,
-        users: r.users,
-        maxUsers: r.maxUsers,
-        monitors: r.monitors,
-        chart: r.chart,
-        locked: r.locked,
-        cycle: r.cycle,
-        contest: r.contest
-      }));
-    }
-    print("");
-  };
-
-  const handleListUsers = async () => {
-    const users = await ctx.state.mutex.runExclusive(async () => {
-      return [...ctx.state.users.values()].map((u) => ({
-        id: u.id,
-        name: u.name,
-        room: u.room ? roomIdToString(u.room.id) : null,
-        monitor: u.monitor,
-        connected: Boolean(u.session),
-        banned: ctx.state.bannedUsers.has(u.id)
-      }));
-    });
-
-    if (users.length === 0) {
-      printInfo(t("cli-no-users"));
-      return;
-    }
-
-    print("");
-    print(t("cli-users-total", { count: users.length }));
-    for (const u of users) {
-      print(t("cli-user-line", {
-        id: u.id,
-        name: u.name,
-        status: u.connected ? t("cli-user-status-online") : t("cli-user-status-offline"),
-        role: u.monitor ? t("cli-user-role-monitor") : t("cli-user-role-player"),
-        room: u.room ?? t("cli-none"),
-        bannedTag: u.banned ? t("cli-user-banned-tag") : ""
-      }));
-    }
-    print("");
-  };
-
-  const handleUserInfo = async (args: string[]) => {
-    if (args.length === 0) {
-      printError(t("cli-usage-user"));
-      return;
-    }
-    const userId = parseUserIdArg(args[0], getLang(), printError);
-    if (userId === null) return;
-
-    const info = await ctx.state.mutex.runExclusive(async () => {
-      const u = ctx.state.users.get(userId);
-      if (!u) return null;
-      return {
-        id: u.id,
-        name: u.name,
-        room: u.room ? roomIdToString(u.room.id) : null,
-        monitor: u.monitor,
-        connected: Boolean(u.session),
-        banned: ctx.state.bannedUsers.has(u.id),
-        gameTime: u.gameTime,
-        lang: u.lang.lang
-      };
-    });
-
-    if (!info) {
-      printError(t("cli-user-not-found", { id: userId }));
-      return;
-    }
-
-    print("");
-    print(t("cli-user-info-header"));
-    print(t("cli-user-info-id", { id: info.id }));
-    print(t("cli-user-info-name", { name: info.name }));
-    print(t("cli-user-info-status", { status: info.connected ? t("cli-user-status-online") : t("cli-user-status-offline") }));
-    print(t("cli-user-info-role", { role: info.monitor ? t("cli-user-role-monitor") : t("cli-user-role-player") }));
-    print(t("cli-user-info-room", { room: info.room ?? t("cli-none") }));
-    print(t("cli-user-info-banned", { banned: info.banned ? t("cli-yes") : t("cli-no") }));
-    print(t("cli-user-info-game-time", { time: info.gameTime }));
-    print(t("cli-user-info-language", { lang: info.lang }));
-    print("");
-  };
-
-  const handleKick = async (args: string[]) => {
-    if (args.length === 0) {
-      printError(t("cli-usage-kick"));
-      return;
-    }
-
-    const userId = parseUserIdArg(args[0], getLang(), printError);
-    if (userId === null) return;
-
-    const preserveRoom = args[1] === "true" || args[1] === "preserve";
-
-    const session = await ctx.state.mutex.runExclusive(async () => ctx.state.users.get(userId)?.session ?? null);
-    if (!session) {
-      printError(t("cli-user-not-connected", { id: userId }));
-      return;
-    }
-
-    const u = session.user;
-    if (preserveRoom && u && u.room) {
-      await abortPlayingUserAndCheckReady({
-        state: ctx.state,
-        user: u,
-        room: u.room
-      });
-    }
-
-    await session.adminDisconnect({ preserveRoom });
-    printSuccess(t("cli-user-kicked", { id: userId }));
-  };
-
-  const handleBan = async (args: string[]) => {
-    if (args.length === 0) {
-      printError(t("cli-usage-ban"));
-      return;
-    }
-
-    const userId = parseUserIdArg(args[0], getLang(), printError);
-    if (userId === null) return;
-
-    await ctx.state.mutex.runExclusive(async () => {
-      ctx.state.bannedUsers.add(userId);
-    });
-
-    await ctx.state.saveAdminData();
-    printSuccess(t("cli-user-banned", { id: userId }));
-  };
-
-  const handleUnban = async (args: string[]) => {
-    if (args.length === 0) {
-      printError(t("cli-usage-unban"));
-      return;
-    }
-
-    const userId = parseUserIdArg(args[0], getLang(), printError);
-    if (userId === null) return;
-
-    await ctx.state.mutex.runExclusive(async () => {
-      ctx.state.bannedUsers.delete(userId);
-    });
-
-    await ctx.state.saveAdminData();
-    printSuccess(t("cli-user-unbanned", { id: userId }));
-  };
-
-  const handleBanList = async () => {
-    const banned = await ctx.state.mutex.runExclusive(async () => {
-      return [...ctx.state.bannedUsers];
-    });
-
-    if (banned.length === 0) {
-      printInfo(t("cli-no-banned-users"));
-      return;
-    }
-
-    print("");
-    print(t("cli-banned-list-header", { count: banned.length }));
-    for (const id of banned) print(`  ${id}`);
-    print("");
-  };
-
-  const handleBanRoom = async (args: string[]) => {
-    if (args.length < 2) {
-      printError(t("cli-usage-banroom"));
-      return;
-    }
-
-    const userId = parseUserIdArg(args[0], getLang(), printError);
-    if (userId === null) return;
-
-    const rid = parseRoomIdArg(args[1], getLang(), printError);
-    if (!rid) return;
-
-    await ctx.state.mutex.runExclusive(async () => {
-      const set = ctx.state.bannedRoomUsers.get(rid) ?? new Set<number>();
-      set.add(userId);
-      ctx.state.bannedRoomUsers.set(rid, set);
-    });
-
-    await ctx.state.saveAdminData();
-    printSuccess(t("cli-room-user-banned", { userId, room: args[1]! }));
-  };
-
-  const handleUnbanRoom = async (args: string[]) => {
-    if (args.length < 2) {
-      printError(t("cli-usage-unbanroom"));
-      return;
-    }
-
-    const userId = parseUserIdArg(args[0], getLang(), printError);
-    if (userId === null) return;
-
-    const rid = parseRoomIdArg(args[1], getLang(), printError);
-    if (!rid) return;
-
-    await ctx.state.mutex.runExclusive(async () => {
-      const set = ctx.state.bannedRoomUsers.get(rid);
-      if (set) {
-        set.delete(userId);
-        if (set.size === 0) ctx.state.bannedRoomUsers.delete(rid);
-      }
-    });
-
-    await ctx.state.saveAdminData();
-    printSuccess(t("cli-room-user-unbanned", { userId, room: args[1]! }));
-  };
-
-  const handleBroadcast = async (args: string[]) => {
-    if (args.length === 0) {
-      printError(t("cli-usage-broadcast"));
-      return;
-    }
-
-    const message = validateChatMessage(args.join(" "), getLang(), printError);
-    if (message === null) return;
-
-    const snapshot = await ctx.state.mutex.runExclusive(async () => {
-      return [...ctx.state.rooms.keys()];
-    });
-
-    const tasks: Promise<void>[] = [];
-    for (const roomId of snapshot) {
-      tasks.push(ctx.broadcastRoomAll(roomId, { type: "Message", message: { type: "Chat", user: 0, content: message } }));
-    }
-    await Promise.allSettled(tasks);
-
-    ctx.logger.info(t("log-admin-broadcast", { message, rooms: String(snapshot.length) }));
-    printSuccess(t("cli-broadcast-sent", { count: snapshot.length }));
-  };
-
-  const handleRoomSay = async (args: string[]) => {
-    if (args.length < 2) {
-      printError(t("cli-usage-roomsay"));
-      return;
-    }
-
-    const rid = parseRoomIdArg(args[0], getLang(), printError);
-    if (!rid) return;
-
-    const message = validateChatMessage(args.slice(1).join(" "), getLang(), printError);
-    if (message === null) return;
-
-    const roomExists = await ctx.state.mutex.runExclusive(async () => ctx.state.rooms.has(rid));
-    if (!roomExists) {
-      printError(t("cli-room-not-found-named", { room: args[0]! }));
-      return;
-    }
-
-    await ctx.broadcastRoomAll(rid, { type: "Message", message: { type: "Chat", user: 0, content: message } });
-    logRoomInfo(ctx.logger, getLang(), rid, "log-admin-room-message", { message });
-    printSuccess(t("cli-room-message-sent", { room: args[0]! }));
-  };
-
-  const handleMaxUsers = async (args: string[]) => {
-    if (args.length < 2) {
-      printError(t("cli-usage-maxusers"));
-      return;
-    }
-
-    const rid = parseRoomIdArg(args[0], getLang(), printError);
-    if (!rid) return;
-
-    const maxUsers = parseBoundedIntArg(args[1], 1, 64, "cli-bad-max-users", getLang(), printError);
-    if (maxUsers === null) return;
-
-    const updated = await ctx.state.mutex.runExclusive(async () => {
-      const room = ctx.state.rooms.get(rid);
-      if (!room) return null;
-      room.maxUsers = maxUsers;
-      return roomIdToString(room.id);
-    });
-
-    if (!updated) {
-      printError(t("cli-room-not-found"));
-      return;
-    }
-
-    printSuccess(t("cli-room-max-users-set", { room: updated, count: maxUsers }));
-  };
-
-  const handleDisband = async (args: string[]) => {
-    if (args.length === 0) {
-      printError(t("cli-usage-disband"));
-      return;
-    }
-
-    const rid = parseRoomIdArg(args[0], getLang(), printError);
-    if (!rid) return;
-
-    const room = await ctx.state.mutex.runExclusive(async () => ctx.state.rooms.get(rid) ?? null);
-    if (!room) {
-      printError(t("cli-room-not-found"));
-      return;
-    }
-
-    const allIds = [...room.userIds(), ...room.monitorIds()];
-    const tasks: Promise<void>[] = [];
-    for (const id of allIds) {
-      const u = ctx.state.users.get(id);
-      if (u) tasks.push(u.trySend({ type: "Message", message: { type: "Chat", user: 0, content: t("room-disbanded-by-admin") } }));
-    }
-    await Promise.allSettled(tasks);
-
-    await ctx.state.mutex.runExclusive(async () => {
-      ctx.state.rooms.delete(rid);
-    });
-
-    if (ctx.state.replayEnabled && room.replayEligible) {
-      await ctx.state.replayRecorder.endRoom(rid);
-    }
-
-    logRoomInfo(ctx.logger, getLang(), rid, "log-room-disbanded-by-admin");
-    printSuccess(t("cli-room-disbanded", { room: args[0]! }));
-  };
-
-  const handleReplay = async (args: string[]) => {
-    const toggle = parseToggleArg(args[0]);
-    if (toggle === null) {
-      printError(t("cli-usage-replay"));
-      return;
-    }
-    if (toggle === "status") {
-      printInfo(t("cli-replay-status", { state: ctx.state.replayEnabled ? t("cli-state-on") : t("cli-state-off") }));
-      return;
-    }
-
-    const enabled = toggle === "on";
-    const snapshot = await ctx.state.mutex.runExclusive(async () => {
-      ctx.state.replayEnabled = enabled;
-      const roomIds = enabled ? [] : [...ctx.state.rooms.keys()];
-      for (const room of ctx.state.rooms.values()) refreshRoomLive(room, enabled);
-      return { enabled, roomIds };
-    });
-
-    if (!snapshot.enabled) {
-      const tasks = snapshot.roomIds.map((rid) => ctx.state.replayRecorder.endRoom(rid));
-      await Promise.allSettled(tasks);
-    }
-
-    printSuccess(enabled ? t("cli-replay-toggled-on") : t("cli-replay-toggled-off"));
-  };
-
-  const handleRoomCreation = async (args: string[]) => {
-    const toggle = parseToggleArg(args[0]);
-    if (toggle === null) {
-      printError(t("cli-usage-roomcreation"));
-      return;
-    }
-    if (toggle === "status") {
-      printInfo(t("cli-room-creation-status", { state: ctx.state.roomCreationEnabled ? t("cli-state-on") : t("cli-state-off") }));
-      return;
-    }
-
-    const enabled = toggle === "on";
-    await ctx.state.mutex.runExclusive(async () => {
-      ctx.state.roomCreationEnabled = enabled;
-    });
-
-    printSuccess(enabled ? t("cli-room-creation-toggled-on") : t("cli-room-creation-toggled-off"));
-  };
-
-  const handleContest = async (args: string[]) => {
-    if (args.length < 2) {
-      printError(t("cli-usage-contest"));
-      return;
-    }
-
-    const rid = parseRoomIdArg(args[0], getLang(), printError);
-    if (!rid) return;
-
-    const subCmd = args[1]?.toLowerCase();
-
-    if (subCmd === "enable") {
-      const userIds = args.slice(2).map((id) => Number(id)).filter((n) => Number.isInteger(n));
-      const ok = await ctx.state.mutex.runExclusive(async () => {
-        const room = ctx.state.rooms.get(rid);
-        if (!room) return false;
-        const currentIds = [...room.userIds(), ...room.monitorIds()];
-        const set = new Set<number>(userIds.length > 0 ? userIds : currentIds);
-        for (const id of currentIds) set.add(id);
-        room.contest = { whitelist: set, manualStart: true, autoDisband: true };
-        return true;
-      });
-
-      if (!ok) {
-        printError(t("cli-room-not-found"));
-        return;
-      }
-      printSuccess(t("cli-contest-enabled", { room: args[0]! }));
-    } else if (subCmd === "disable") {
-      const ok = await ctx.state.mutex.runExclusive(async () => {
-        const room = ctx.state.rooms.get(rid);
-        if (!room) return false;
-        room.contest = null;
-        return true;
-      });
-
-      if (!ok) {
-        printError(t("cli-room-not-found"));
-        return;
-      }
-      printSuccess(t("cli-contest-disabled", { room: args[0]! }));
-    } else if (subCmd === "whitelist") {
-      const userIds = args.slice(2).map((id) => Number(id)).filter((n) => Number.isInteger(n));
-      if (userIds.length === 0) {
-        printError(t("cli-contest-no-user-id"));
-        return;
-      }
-
-      const ok = await ctx.state.mutex.runExclusive(async () => {
-        const room = ctx.state.rooms.get(rid);
-        if (!room || !room.contest) return false;
-        room.contest.whitelist = new Set<number>(userIds);
-        const currentIds = [...room.userIds(), ...room.monitorIds()];
-        for (const id of currentIds) room.contest.whitelist.add(id);
-        return true;
-      });
-
-      if (!ok) {
-        printError(t("cli-contest-not-enabled"));
-        return;
-      }
-      printSuccess(t("cli-contest-whitelist-updated", { room: args[0]! }));
-    } else if (subCmd === "start") {
-      const force = args[2] === "force";
-
-      const result = await ctx.state.mutex.runExclusive(async () => {
-        const room = ctx.state.rooms.get(rid);
-        if (!room || !room.contest) return { ok: false as const, error: "contest-room-not-found" };
-        if (room.state.type !== "WaitForReady") return { ok: false as const, error: "room-not-waiting" };
-        if (!room.chart) return { ok: false as const, error: "no-chart-selected" };
-        const started = room.state.started;
-        const allIds = [...room.userIds(), ...room.monitorIds()];
-        const allReady = allIds.every((id) => started.has(id));
-        if (!allReady && !force) return { ok: false as const, error: "not-all-ready" };
-        return { ok: true as const, room };
-      });
-
-      if (!result.ok) {
-        printError(t("cli-contest-cannot-start", { reason: result.error }));
-        return;
-      }
-
-      const room = result.room;
-      const users = room.userIds();
-      const monitors = room.monitorIds();
-      const sep = getLang().lang === "zh-CN" ? "、" : ", ";
-      const usersText = users.join(sep);
-      const monitorsText = monitors.join(sep);
-      const monitorsSuffix = monitors.length > 0 ? t("log-room-game-start-monitors", { monitors: monitorsText }) : "";
-      logRoomInfo(ctx.logger, getLang(), room.id, "log-room-game-start", { users: usersText, monitorsSuffix });
-      await room.send((c) => ctx.broadcastRoomAll(room.id, c), { type: "StartPlaying" }, (id) => ctx.state.users.get(id));
-      room.resetGameTime((id) => ctx.state.users.get(id));
-      if (ctx.state.replayEnabled && room.replayEligible) {
-        const replayUsers = room.userIds().map((id) => ({ id, name: ctx.state.users.get(id)?.name ?? String(id) }));
-        await ctx.state.replayRecorder.startRoom(room.id, room.chart!, replayUsers);
-      }
-      room.state = { type: "Playing", results: new Map(), aborted: new Set() };
-      await room.onStateChange((c) => ctx.broadcastRoomAll(room.id, c));
-
-      printSuccess(t("cli-contest-started", { room: args[0]! }));
-    } else {
-      printError(t("cli-contest-unknown-subcommand"));
-    }
-  };
-
-  const handleIpBlacklist = async (args: string[]) => {
-    if (args.length === 0) {
-      printError(t("cli-usage-ipblacklist"));
-      return;
-    }
-
-    const subCmd = args[0]?.toLowerCase();
-
-    if (subCmd === "list") {
-      const blacklist = ctx.logger.getBlacklistedIps();
-      if (blacklist.length === 0) {
-        printInfo(t("cli-blacklist-empty"));
-        return;
-      }
-
-      print("");
-      print(t("cli-blacklist-header", { count: blacklist.length }));
-      for (const item of blacklist) {
-        const expiresInMin = Math.ceil(item.expiresIn / 60000);
-        print(t("cli-blacklist-line", { ip: item.ip, minutes: expiresInMin }));
-      }
-      print("");
-    } else if (subCmd === "remove") {
-      if (args.length < 2) {
-        printError(t("cli-usage-ipblacklist-remove"));
-        return;
-      }
-      const ip = args[1]!;
-      ctx.logger.removeFromBlacklist(ip);
-      printSuccess(t("cli-blacklist-removed", { ip }));
-    } else if (subCmd === "clear") {
-      ctx.logger.clearBlacklist();
-      printSuccess(t("cli-blacklist-cleared"));
-    } else {
-      printError(t("cli-ipblacklist-unknown-subcommand"));
-    }
-  };
-
-  /** 通过完整 ssid 或前缀短码，唯一定位一个 CLI 提权会话；歧义时返回 "ambiguous"。 */
-  const findApprovalSsid = (input: string): string | "ambiguous" | null => {
-    const sessions = ctx.state.cliApprovalSessions;
-    if (sessions.has(input)) return input;
-    let found: string | null = null;
-    for (const ssid of sessions.keys()) {
-      if (ssid.startsWith(input)) {
-        if (found !== null) return "ambiguous";
-        found = ssid;
-      }
-    }
-    return found;
-  };
-
-  const handleApprove = async (args: string[]) => {
-    if (args.length === 0) {
-      printError(t("cli-usage-approve"));
-      return;
-    }
-    const input = args[0]!.trim();
-    if (!input) {
-      printError(t("cli-usage-approve"));
-      return;
-    }
-
-    const result = findApprovalSsid(input);
-    if (result === "ambiguous") {
-      printError(t("cli-approve-ambiguous", { input }));
-      return;
-    }
-    if (!result) {
-      printError(t("cli-approve-not-found", { input }));
-      return;
-    }
-
-    const session = ctx.state.cliApprovalSessions.get(result)!;
-    if (Date.now() > session.expiresAt) {
-      ctx.state.cliApprovalSessions.delete(result);
-      printError(t("cli-approve-expired", { ssid: result.slice(0, 8) }));
-      return;
-    }
-    if (session.status !== "pending") {
-      printError(t("cli-approve-already-handled", { ssid: result.slice(0, 8), status: session.status }));
-      return;
-    }
-
-    // 生成临时 TOKEN，并放入 tempAdminTokens（与 OTP 流程产物一致）
-    const token = newUuid();
-    const tokenExpiresAt = Date.now() + TEMP_TOKEN_TTL_MS;
-    ctx.state.tempAdminTokens.set(token, { ip: session.ip, expiresAt: tokenExpiresAt, banned: false });
-
-    session.status = "approved";
-    session.token = token;
-    session.tokenExpiresAt = tokenExpiresAt;
-
-    ctx.logger.info(`[OTP CLI Approve] 会话 ${result.slice(0, 8)} 已批准，签发临时TOKEN ${token.slice(0, 8)}... (IP: ${session.ip})`);
-    printSuccess(t("cli-approve-success", { ssid: result.slice(0, 8), ip: session.ip }));
-  };
-
-  const handleDeny = async (args: string[]) => {
-    if (args.length === 0) {
-      printError(t("cli-usage-deny"));
-      return;
-    }
-    const input = args[0]!.trim();
-    if (!input) {
-      printError(t("cli-usage-deny"));
-      return;
-    }
-
-    const result = findApprovalSsid(input);
-    if (result === "ambiguous") {
-      printError(t("cli-approve-ambiguous", { input }));
-      return;
-    }
-    if (!result) {
-      printError(t("cli-approve-not-found", { input }));
-      return;
-    }
-
-    const session = ctx.state.cliApprovalSessions.get(result)!;
-    if (session.status !== "pending") {
-      printError(t("cli-approve-already-handled", { ssid: result.slice(0, 8), status: session.status }));
-      return;
-    }
-
-    session.status = "denied";
-    ctx.logger.info(`[OTP CLI Deny] 会话 ${result.slice(0, 8)} 已被拒绝 (IP: ${session.ip})`);
-    printSuccess(t("cli-deny-success", { ssid: result.slice(0, 8), ip: session.ip }));
-  };
-
-  const handlePending = async () => {
-    const now = Date.now();
-    // 顺便清理过期项
-    for (const [ssid, sess] of ctx.state.cliApprovalSessions) {
-      if (now > sess.expiresAt) ctx.state.cliApprovalSessions.delete(ssid);
-    }
-
-    const items = [...ctx.state.cliApprovalSessions.entries()]
-      .filter(([, s]) => s.status === "pending")
-      .map(([ssid, s]) => ({
-        ssid,
-        ip: s.ip,
-        remainingSec: Math.max(0, Math.ceil((s.expiresAt - now) / 1000))
-      }));
-
-    if (items.length === 0) {
-      printInfo(t("cli-pending-empty"));
-      return;
-    }
-
-    print("");
-    print(t("cli-pending-header", { count: items.length }));
-    for (const it of items) {
-      print(t("cli-pending-line", { ssid: it.ssid.slice(0, 8), full: it.ssid, ip: it.ip, seconds: it.remainingSec }));
-    }
-    print("");
-  };
 
   return () => {
     rl.close();
