@@ -406,8 +406,16 @@ export class Room {
   validateJoin(user: User, monitor: boolean): void {
     if (this.contest && !this.contest.whitelist.has(user.id)) throw new Error(tl(user.lang, "room-not-whitelisted"));
     if (this.locked) throw new Error(tl(user.lang, "join-room-locked"));
-    if (this.state.type !== "SelectChart") throw new Error(tl(user.lang, "join-game-ongoing"));
+    // 观战者可以在任何状态加入；普通玩家只能在选谱或游戏进行中加入
+    if (!monitor && this.state.type === "WaitForReady") throw new Error(tl(user.lang, "join-game-ongoing"));
     if (monitor && !user.canMonitor()) throw new Error(tl(user.lang, "join-cant-monitor"));
+  }
+
+  handleJoin(user: User): void {
+    if (this.state.type === "Playing" && !user.monitor) {
+      // 游戏进行中加入的普通玩家自动标记为已完成，不影响当前局结束判断
+      this.state.aborted.add(user.id);
+    }
   }
 
   validateStart(user: User): void {

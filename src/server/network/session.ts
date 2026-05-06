@@ -366,7 +366,7 @@ export class Session {
     for (const [id, room] of this.state.rooms) {
       if (String(id).startsWith("_")) continue;
       if (room.locked) continue;
-      if (room.state.type !== "SelectChart") continue;
+      if (room.state.type !== "SelectChart" && room.state.type !== "Playing") continue;
       const count = room.userIds().length;
       if (count >= room.maxUsers) continue;
       rooms.push({ id: String(id), count, max: room.maxUsers });
@@ -602,6 +602,7 @@ export class Session {
 
     user.monitor = monitor;
     user.room = room; // 直接设置，不需要mutex
+    room.handleJoin(user);
     refreshRoomLiveState(room, this.state.replayEnabled);
 
     const suffix = monitor ? tl(this.state.serverLang, "label-monitor-suffix") : "";
@@ -619,6 +620,12 @@ export class Session {
       users,
       live: room.isLive()
     };
+
+    // 状态同步：如果正在游戏中，先发送 SelectChart 状态让客户端知道当前谱面，再发送 Playing 状态
+    if (room.state.type === "Playing" && room.chart) {
+      await user.trySend({ type: "ChangeState", state: { type: "SelectChart", id: room.chart.id } });
+      await user.trySend({ type: "ChangeState", state: { type: "Playing" } });
+    }
 
     if (this.state.replayEnabled && room.replayEligible) {
       const fake = this.state.replayRecorder.fakeMonitorInfo();
@@ -654,6 +661,7 @@ export class Session {
         const room = user.room;
         if (!room) return null;
         if (room.state.type !== "Playing") return null;
+        if (room.state.aborted.has(user.id) || room.state.results.has(user.id)) return null;
         const last = cmd.frames.at(-1);
         if (last) user.gameTime = last.time;
         this.state.logger.log("DEBUG", tl(this.state.serverLang, "log-user-touches", { user: user.name, room: room.id, count: String(cmd.frames.length) }), { frames: cmd.frames }, { userId: user.id });
@@ -671,6 +679,7 @@ export class Session {
         const room = user.room;
         if (!room) return null;
         if (room.state.type !== "Playing") return null;
+        if (room.state.aborted.has(user.id) || room.state.results.has(user.id)) return null;
         this.state.logger.log("DEBUG", tl(this.state.serverLang, "log-user-judges", { user: user.name, room: room.id, count: String(cmd.judges.length) }), { judges: cmd.judges }, { userId: user.id });
         // monitor数据转发模块 - 聚合缓冲，避免高频实时数据冲击网络
         if (room.monitorIds().length > 0) {

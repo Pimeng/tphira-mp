@@ -160,6 +160,9 @@ export function setupMockFetch() {
       if (token === "cccccccccccccccccccccccccccccccc") {
         return new Response(JSON.stringify({ id: 300, name: "Carol", language: "zh-CN" }), { status: 200 });
       }
+      if (token === "dddddddddddddddddddddddddddddddd") {
+        return new Response(JSON.stringify({ id: 400, name: "Dave", language: "zh-CN" }), { status: 200 });
+      }
       return new Response("unauthorized", { status: 401 });
     }
 
@@ -170,10 +173,18 @@ export function setupMockFetch() {
 
     if (/\/record\/\d+$/.test(url)) {
       const id = Number(url.split("/").at(-1));
+      const auth = String(init?.headers && (init.headers as any).Authorization ? (init.headers as any).Authorization : (init?.headers as any)?.get?.("Authorization") ?? "");
+      const token = auth.replace(/^Bearer\s+/i, "");
+      const playerMap: Record<string, number> = {
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": 100,
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": 200,
+        "cccccccccccccccccccccccccccccccc": 300,
+        "dddddddddddddddddddddddddddddddd": 400
+      };
       return new Response(
         JSON.stringify({
           id,
-          player: 100,
+          player: playerMap[token] ?? 100,
           score: 999999,
           perfect: 1,
           good: 0,
