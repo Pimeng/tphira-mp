@@ -39,6 +39,7 @@ export type ClientOptions = {
   timeoutMs?: number;
   autoReconnect?: boolean;
   maxReconnectAttempts?: number;
+  reconnectBaseDelayMs?: number;
   onReconnect?: () => void;
   onReconnectFailed?: () => void;
 };
@@ -75,6 +76,7 @@ export class Client {
   private port: number = 0;
   private autoReconnect = false;
   private maxReconnectAttempts = 5;
+  private reconnectBaseDelayMs = 1000;
   private reconnectAttempts = 0;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private onReconnectCallback: (() => void) | null = null;
@@ -96,6 +98,7 @@ export class Client {
     client.port = port;
     client.autoReconnect = options.autoReconnect ?? false;
     client.maxReconnectAttempts = options.maxReconnectAttempts ?? 5;
+    client.reconnectBaseDelayMs = options.reconnectBaseDelayMs ?? 1000;
     client.onReconnectCallback = options.onReconnect ?? null;
     client.onReconnectFailedCallback = options.onReconnectFailed ?? null;
     await client.doConnect();
@@ -148,8 +151,8 @@ export class Client {
     this.isReconnecting = true;
     this.reconnectAttempts++;
 
-    // 指数退避：1s, 2s, 4s, 8s... 上限 30s
-    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts - 1), 30000);
+    // 指数退避：baseDelay, 2*baseDelay, 4*baseDelay... 上限 30s
+    const delay = Math.min(this.reconnectBaseDelayMs * Math.pow(2, this.reconnectAttempts - 1), 30000);
     const jitter = Math.random() * delay * 0.2;
     const totalDelay = delay + jitter;
 
@@ -217,6 +220,11 @@ export class Client {
     const created: LivePlayer = { touch_frames: [], judge_events: [] };
     this.livePlayers.set(playerId, created);
     return created;
+  }
+
+  /** 主动断开底层连接（会触发自动重连，与 close 不同） */
+  disconnect(): void {
+    this.stream?.close();
   }
 
   async close(): Promise<void> {
