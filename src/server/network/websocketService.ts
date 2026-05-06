@@ -270,14 +270,20 @@ export function startWebSocketService(opts: { httpServer: http.Server; state: Se
 
   // 心跳检测
   const heartbeatInterval = setInterval(() => {
+    const toRemove: WebSocket[] = [];
     for (const [ws, client] of clients) {
       if (!client.isAlive) {
-        ws.terminate();
-        clients.delete(ws);
+        toRemove.push(ws);
         continue;
       }
       client.isAlive = false;
       ws.ping();
+    }
+    // 批量清理断开的连接，避免遍历时修改 Map
+    for (const ws of toRemove) {
+      ws.terminate();
+      removeRoomSubscriber(clients.get(ws)?.roomId ?? null, ws);
+      clients.delete(ws);
     }
   }, 30000); // 30秒心跳
 

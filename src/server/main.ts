@@ -130,6 +130,10 @@ async function main(): Promise<void> {
 
 // 启动主程序，捕获未处理的异常
 main().catch((err) => {
-  console.error(err);
-  process.exitCode = 1;
+  const message = err instanceof Error ? err.message : String(err);
+  console.error(`[FATAL] Server failed to start: ${message}`);
+  if (err instanceof Error && err.stack) {
+    console.error(err.stack);
+  }
+  process.exit(1);
 });

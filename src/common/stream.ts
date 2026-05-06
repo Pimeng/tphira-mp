@@ -36,6 +36,9 @@ export type StreamCodec<S, R> = {
   isHighPriority?: (payload: S) => boolean;
 };
 
+/** 流错误处理器 */
+export type StreamErrorHandler = (phase: "decode" | "handler", error: Error) => void;
+
 /**
  * 双向网络流类
  *
@@ -62,6 +65,8 @@ export class Stream<S, R> {
   private processing = false;
   /** 接收消息队列（非 fast path 消息进入此队列） */
   private queue: R[] = [];
+  /** 错误处理器（可选） */
+  private readonly onError?: StreamErrorHandler;
 
   // ========== 批量发送优化 ==========
 
@@ -77,13 +82,15 @@ export class Stream<S, R> {
     version: number,
     codec: StreamCodec<S, R>,
     handler: StreamHandler<R>,
-    fastPath: ((packet: R) => boolean) | undefined
+    fastPath: ((packet: R) => boolean) | undefined,
+    onError?: StreamErrorHandler
   ) {
     this.socket = socket;
     this.version = version;
     this.codec = codec;
     this.handler = handler;
     this.fastPath = fastPath;
+    this.onError = onError;
   }
 
 /**
@@ -104,6 +111,7 @@ export class Stream<S, R> {
     codec: StreamCodec<S, R>;
     handler: StreamHandler<R>;
     fastPath?: (packet: R) => boolean;
+    onError?: StreamErrorHandler;
   }): Promise<Stream<S, R>> {
     // 禁用 Nagle 算法，减少延迟
     opts.socket.setNoDelay(true);
@@ -156,7 +164,7 @@ export class Stream<S, R> {
       throw new Error(`net-unsupported-protocol-version:${version}`);
     }
 
-    const stream = new Stream<S, R>(opts.socket, version, opts.codec, opts.handler, opts.fastPath);
+    const stream = new Stream<S, R>(opts.socket, version, opts.codec, opts.handler, opts.fastPath, opts.onError);
     stream.recvBuffer = initialBuffer as Buffer<ArrayBufferLike>;
 
     stream.socket.on("data", (data) => {
@@ -296,6 +304,7 @@ export class Stream<S, R> {
         return;
       }
       if (res.type === "error") {
+        this.onError?.("decode", res.error);
         this.close();
         return;
       }
@@ -304,12 +313,16 @@ export class Stream<S, R> {
       let packet: R;
       try {
         packet = this.codec.decodeRecv(res.payload);
-      } catch {
+      } catch (e) {
+        const error = e instanceof Error ? e : new Error(String(e));
+        this.onError?.("decode", error);
         this.close();
         return;
       }
       if (this.fastPath?.(packet) === true) {
-        void Promise.resolve(this.handler(packet)).catch(() => {
+        void Promise.resolve(this.handler(packet)).catch((e) => {
+          const error = e instanceof Error ? e : new Error(String(e));
+          this.onError?.("handler", error);
           this.close();
         });
       } else {
@@ -326,7 +339,9 @@ export class Stream<S, R> {
         const packet = this.queue.shift()!;
         try {
           await this.handler(packet);
-        } catch {
+        } catch (e) {
+          const error = e instanceof Error ? e : new Error(String(e));
+          this.onError?.("handler", error);
           this.close();
           return;
         }

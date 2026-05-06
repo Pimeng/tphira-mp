@@ -214,7 +214,13 @@ export class Logger {
   }
 
   private rotate(dateKey: string): void {
-    this.stream?.end();
+    const oldStream = this.stream;
+    if (oldStream) {
+      // 优雅关闭旧流，确保已缓冲的数据被写入
+      oldStream.end(() => {
+        oldStream.destroy();
+      });
+    }
     this.currentDateKey = dateKey;
 
     const fileName = `${dateKey}.log`;

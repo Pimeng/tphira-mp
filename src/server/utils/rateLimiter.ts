@@ -1,6 +1,6 @@
 /**
  * 日志限流和IP黑名单系统
- * 当日志输出频率过高时（>10条/s），暂停连接日志输出，并对源IP进行临时黑名单处理
+ * 按 IP 统计日志频率，超过阈值时将该 IP 加入临时黑名单
  */
 
 export type RateLimiterOptions = {
@@ -12,13 +12,18 @@ export type RateLimiterOptions = {
   windowSizeMs?: number;
 };
 
+type IpStats = {
+  timestamps: number[];
+  blacklistedUntil: number;
+};
+
 export class RateLimiter {
   private readonly threshold: number;
   private readonly blacklistDuration: number;
   private readonly windowSize: number;
 
-  private logTimestamps: number[] = [];
-  private blacklistedIps: Map<string, number> = new Map(); // IP -> 黑名单过期时间
+  /** 按 IP 统计日志频率 */
+  private ipStats: Map<string, IpStats> = new Map();
 
   constructor(options: RateLimiterOptions = {}) {
     this.threshold = options.logsPerSecondThreshold ?? 10;
@@ -32,53 +37,40 @@ export class RateLimiter {
    * @returns true 表示应该输出，false 表示应该跳过
    */
   shouldLogConnection(ip: string): boolean {
+    const now = Date.now();
+    let stats = this.ipStats.get(ip);
+    if (!stats) {
+      stats = { timestamps: [], blacklistedUntil: 0 };
+      this.ipStats.set(ip, stats);
+    }
+
     // 检查IP是否在黑名单中
-    if (this.isBlacklisted(ip)) {
+    if (now < stats.blacklistedUntil) {
       return false;
+    }
+    // 黑名单已过期，清理标记
+    if (stats.blacklistedUntil > 0) {
+      stats.blacklistedUntil = 0;
     }
 
     // 记录当前日志时间戳
-    const now = Date.now();
-    this.logTimestamps.push(now);
+    stats.timestamps.push(now);
 
     // 清理过期的时间戳（超过窗口时间的）
     const windowStart = now - this.windowSize;
-    this.logTimestamps = this.logTimestamps.filter((ts) => ts > windowStart);
+    stats.timestamps = stats.timestamps.filter((ts) => ts > windowStart);
 
     // 检查是否超过阈值
-    const logsInWindow = this.logTimestamps.length;
+    const logsInWindow = stats.timestamps.length;
     if (logsInWindow > this.threshold) {
       // 触发限流：将该IP加入黑名单
-      this.blacklistIp(ip);
+      stats.blacklistedUntil = now + this.blacklistDuration;
+      // 清理时间戳释放内存
+      stats.timestamps = [];
       return false;
     }
 
     return true;
-  }
-
-  /**
-   * 检查IP是否在黑名单中
-   */
-  private isBlacklisted(ip: string): boolean {
-    const expireTime = this.blacklistedIps.get(ip);
-    if (expireTime === undefined) return false;
-
-    const now = Date.now();
-    if (now >= expireTime) {
-      // 黑名单已过期，移除
-      this.blacklistedIps.delete(ip);
-      return false;
-    }
-
-    return true;
-  }
-
-  /**
-   * 将IP加入黑名单
-   */
-  private blacklistIp(ip: string): void {
-    const expireTime = Date.now() + this.blacklistDuration;
-    this.blacklistedIps.set(ip, expireTime);
   }
 
   /**
@@ -88,11 +80,11 @@ export class RateLimiter {
     const now = Date.now();
     const result: Array<{ ip: string; expiresIn: number }> = [];
 
-    for (const [ip, expireTime] of this.blacklistedIps.entries()) {
-      if (now < expireTime) {
+    for (const [ip, stats] of this.ipStats.entries()) {
+      if (now < stats.blacklistedUntil) {
         result.push({
           ip,
-          expiresIn: expireTime - now
+          expiresIn: stats.blacklistedUntil - now
         });
       }
     }
@@ -104,23 +96,35 @@ export class RateLimiter {
    * 手动将IP从黑名单中移除
    */
   removeFromBlacklist(ip: string): void {
-    this.blacklistedIps.delete(ip);
+    const stats = this.ipStats.get(ip);
+    if (stats) {
+      stats.blacklistedUntil = 0;
+      stats.timestamps = [];
+    }
   }
 
   /**
    * 清空所有黑名单
    */
   clearBlacklist(): void {
-    this.blacklistedIps.clear();
+    this.ipStats.clear();
   }
 
   /**
    * 获取当前日志频率（条/秒）
+   * 返回所有IP中的最高频率
    */
   getCurrentRate(): number {
     const now = Date.now();
     const windowStart = now - this.windowSize;
-    const recentLogs = this.logTimestamps.filter((ts) => ts > windowStart);
-    return (recentLogs.length / this.windowSize) * 1000;
+    let maxRate = 0;
+
+    for (const stats of this.ipStats.values()) {
+      const recentLogs = stats.timestamps.filter((ts) => ts > windowStart);
+      const rate = (recentLogs.length / this.windowSize) * 1000;
+      if (rate > maxRate) maxRate = rate;
+    }
+
+    return maxRate;
   }
 }

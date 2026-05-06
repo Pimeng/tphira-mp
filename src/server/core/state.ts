@@ -220,11 +220,21 @@ export class ServerState {
     await this.mutex.runExclusive(async () => {
       try {
         const text = await readFile(this.adminDataPath, "utf8");
-        const raw = JSON.parse(text) as Partial<AdminDataFile>;
-        if (raw.version !== 1) return;
-        const bannedUsers = Array.isArray(raw.bannedUsers) ? raw.bannedUsers : [];
-        const bannedRoomUsers = raw.bannedRoomUsers && typeof raw.bannedRoomUsers === "object" ? (raw.bannedRoomUsers as Record<string, number[]>) : {};
-        this.applyAdminDataFile({ version: 1, bannedUsers: bannedUsers as number[], bannedRoomUsers });
+        const raw = JSON.parse(text);
+        // 运行时验证：确保是对象且版本正确
+        if (!raw || typeof raw !== "object" || raw.version !== 1) return;
+        const bannedUsers = Array.isArray(raw.bannedUsers)
+          ? raw.bannedUsers.filter((n: unknown) => Number.isInteger(n))
+          : [];
+        const bannedRoomUsers: Record<string, number[]> = {};
+        if (raw.bannedRoomUsers && typeof raw.bannedRoomUsers === "object" && !Array.isArray(raw.bannedRoomUsers)) {
+          for (const [key, val] of Object.entries(raw.bannedRoomUsers)) {
+            if (Array.isArray(val)) {
+              bannedRoomUsers[key] = val.filter((n: unknown) => Number.isInteger(n));
+            }
+          }
+        }
+        this.applyAdminDataFile({ version: 1, bannedUsers, bannedRoomUsers });
       } catch {
         // 文件不存在或格式错误时静默忽略
       }

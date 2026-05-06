@@ -32,6 +32,8 @@ export function startReplayCleanup(opts: { baseDir?: string; ttlDays: number; lo
         }
       })();
     }, delay);
+    // 允许进程在定时器触发前退出
+    timer.unref?.();
   };
 
   schedule();

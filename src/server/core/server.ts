@@ -303,6 +303,9 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
         fastPath: (cmd) => cmd.type === "Ping",
         handler: async (cmd) => {
           await session.onCommand(cmd);
+        },
+        onError: (phase, err) => {
+          logger.log("WARN", `[${id}] Stream ${phase} error: ${err.message}`, undefined, { ip: remoteIp, userId: session.user?.id });
         }
       });
 
@@ -467,11 +470,24 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
         stopCli();
         broadcastRoomLog = null;
         if (httpService) await httpService.close();
-        await new Promise<void>((resolve, reject) => {
-          server.close((err) => {
-            if (err) reject(err);
-            else resolve();
-          });
+        // 关闭 TCP 服务器，设置 10 秒超时强制结束
+        await Promise.race([
+          new Promise<void>((resolve, reject) => {
+            server.close((err) => {
+              if (err) reject(err);
+              else resolve();
+            });
+          }),
+          new Promise<void>((_, reject) => {
+            const timer = setTimeout(() => reject(new Error("server-close-timeout")), 10000);
+            timer.unref?.();
+          })
+        ]).catch((err) => {
+          logger.warn(`Server close timed out or failed: ${err instanceof Error ? err.message : String(err)}`);
+          // 强制销毁所有活跃连接
+          for (const socket of (server as any).connections || []) {
+            try { socket.destroy(); } catch { /* ignore */ }
+          }
         });
         logger.mark(tl(state.serverLang, "log-server-stopped"));
       } finally {

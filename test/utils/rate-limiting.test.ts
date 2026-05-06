@@ -52,7 +52,7 @@ describe("RateLimiter", () => {
       expect(rateLimiter.shouldLogConnection(ip)).toBe(false);
     });
 
-    it("不同IP共享全局频率限制", () => {
+    it("不同IP独立限流", () => {
       const ip1 = "192.168.1.100";
       const ip2 = "192.168.1.101";
 
@@ -61,13 +61,13 @@ describe("RateLimiter", () => {
         rateLimiter.shouldLogConnection(ip1);
       }
 
-      // ip2也会被限流，因为全局时间窗口已满
-      // 但ip2不在黑名单中，所以会被加入黑名单
-      expect(rateLimiter.shouldLogConnection(ip2)).toBe(false);
+      // ip2不受ip1影响，因为是按IP限流
+      expect(rateLimiter.shouldLogConnection(ip2)).toBe(true);
       
-      // 验证ip2被加入黑名单
+      // 只有ip1在黑名单中
       const blacklist = rateLimiter.getBlacklistedIps();
-      expect(blacklist.some(item => item.ip === ip2)).toBe(true);
+      expect(blacklist.some(item => item.ip === ip1)).toBe(true);
+      expect(blacklist.some(item => item.ip === ip2)).toBe(false);
     });
   });
 
@@ -118,7 +118,7 @@ describe("RateLimiter", () => {
       expect(rateLimiter.getBlacklistedIps().length).toBe(0);
     });
 
-    it("移除后仍受全局频率限制", async () => {
+    it("移除黑名单后重新开始计数", async () => {
       const ip = "192.168.1.100";
       for (let i = 0; i < 11; i++) {
         rateLimiter.shouldLogConnection(ip);
@@ -126,9 +126,8 @@ describe("RateLimiter", () => {
 
       rateLimiter.removeFromBlacklist(ip);
 
-      // 移除黑名单后，仍然受全局频率限制
-      // 因为时间窗口内已经有11条日志
-      expect(rateLimiter.shouldLogConnection(ip)).toBe(false);
+      // 移除黑名单后，历史计数被清空，可以重新开始记录
+      expect(rateLimiter.shouldLogConnection(ip)).toBe(true);
       
       // 等待时间窗口过期
       await new Promise((resolve) => setTimeout(resolve, 1100));

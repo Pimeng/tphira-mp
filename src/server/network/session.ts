@@ -47,6 +47,8 @@ let roomListCache: RoomListCache = {
 
 /** 房间列表缓存有效期（2秒） */
 const ROOM_LIST_CACHE_TTL_MS = 2000;
+/** 最大缓存语言数，防止内存泄漏 */
+const ROOM_LIST_MAX_CACHED_LANGS = 10;
 
 /**
  * 从数组中随机选择一个元素
@@ -230,7 +232,9 @@ export class Session {
     if (!stream) return;
     try {
       await stream.send(cmd);
-    } catch {
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      this.state.logger.log("DEBUG", `[${this.id}] Send failed: ${msg}`, undefined, { userId: this.user?.id });
       await this.markLost();
     }
   }
@@ -265,7 +269,17 @@ export class Session {
         proxy: this.state.config.outbound_proxy
       }, FETCH_TIMEOUT_MS).then(async (r) => {
         if (!r.ok) throw new Error("auth-fetch-me-failed");
-        return (await r.json()) as { id: number; name: string; language: string };
+        const data: unknown = await r.json();
+        // 运行时验证 API 响应结构
+        if (!data || typeof data !== "object" || data === null) throw new Error("auth-invalid-response");
+        const obj = data as Record<string, unknown>;
+        if (!Number.isInteger(obj.id)) throw new Error("auth-invalid-user-id");
+        if (typeof obj.name !== "string" || !obj.name.trim()) throw new Error("auth-invalid-user-name");
+        return {
+          id: obj.id as number,
+          name: obj.name.trim(),
+          language: typeof obj.language === "string" ? obj.language : ""
+        };
       });
 
       // Don't reject banned users at auth time - allow them to connect
@@ -384,6 +398,13 @@ export class Session {
     const text = items.join(joiner);
     
     // 更新缓存
+    if (roomListCache.text.size >= ROOM_LIST_MAX_CACHED_LANGS) {
+      // 清理最旧的缓存条目
+      const firstKey = roomListCache.text.keys().next().value;
+      if (firstKey !== undefined) {
+        roomListCache.text.delete(firstKey);
+      }
+    }
     roomListCache.text.set(lang.lang, text);
     roomListCache.timestamp = now;
     
