@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { BinaryWriter } from "../../common/binary.js";
 import { encodeTouchFrame, type JudgeEvent, type TouchFrame, type UserInfo } from "../../common/commands.js";
-import { roomIdToString, type RoomId } from "../../common/roomId.js";
+import { parseRoomId, roomIdToString, type RoomId } from "../../common/roomId.js";
 import type { Chart } from "../core/types.js";
 import { ensureReplayDir, replayFilePath } from "../replay/replayStorage.js";
 import {
@@ -131,6 +131,13 @@ export class ReplayRecorder {
       .map((it) => it.value);
     if (completed.length > 0) this.completedFilesByRoom.set(roomKey, completed);
     this.log("DEBUG", `endRoom completed: ${keys.size} recordings closed`);
+  }
+
+  async closeAll(): Promise<void> {
+    const roomKeys = [...this.keysByRoom.keys()];
+    if (roomKeys.length === 0) return;
+    this.log("DEBUG", `closeAll: flushing ${roomKeys.length} inflight room(s)`);
+    await Promise.allSettled(roomKeys.map((roomKey) => this.endRoom(parseRoomId(roomKey))));
   }
 
   setRecordId(roomId: RoomId, userId: number, recordId: number): void {

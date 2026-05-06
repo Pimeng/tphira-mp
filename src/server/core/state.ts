@@ -64,6 +64,8 @@ export class ServerState {
   serverLang: Language;
   /** 管理员数据文件路径 */
   readonly adminDataPath: string;
+  /** 服务器配置文件路径（用于持久化运行时配置变更） */
+  readonly configPath: string;
   /** 是否启用回放录制 */
   replayEnabled: boolean;
   /** 是否允许创建新房间 */
@@ -138,13 +140,15 @@ export class ServerState {
    * @param logger - 日志记录器
    * @param serverName - 服务器名称
    * @param adminDataPath - 管理员数据文件路径
+   * @param configPath - 服务器配置文件路径（admin API 持久化运行时配置变更使用）
    */
-  constructor(config: ServerConfig, logger: Logger, serverName: string, adminDataPath: string) {
+  constructor(config: ServerConfig, logger: Logger, serverName: string, adminDataPath: string, configPath: string) {
     this.config = config;
     this.logger = logger;
     this.serverName = serverName;
     this.serverLang = new Language(config.lang ?? "");
     this.adminDataPath = adminDataPath;
+    this.configPath = configPath;
     this.replayEnabled = Boolean(config.replay_enabled);
     this.roomCreationEnabled = true;
     const replayBaseDir = config.replay_base_dir ?? defaultReplayBaseDir();

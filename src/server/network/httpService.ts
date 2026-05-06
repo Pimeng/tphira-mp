@@ -21,7 +21,6 @@ import { deleteReplayForUser, listReplaysForUser, readReplayHeader, replayFilePa
 import { createAutoUploadHandler } from "../replay/autoUpload.js";
 import { uploadToShareStation, setReplayVisibility } from "../utils/shareStation.js";
 import { startWebSocketService, type WebSocketService } from "../network/websocketService.js";
-import { getAppPaths } from "../utils/appPaths.js";
 import { logRoomInfo } from "../utils/logUtils.js";
 import { refreshRoomLive } from "../game/roomUtils.js";
 import { buildAdminRoomsData } from "../game/adminViews.js";
@@ -836,7 +835,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
 
           // 持久化配置到文件
           try {
-            const { configPath } = getAppPaths();
+            const configPath = state.configPath;
             const configText = await readFile(configPath, "utf8").catch(() => "");
             const loadedConfig = yaml.load(configText);
             const configObj =

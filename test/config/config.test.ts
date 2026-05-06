@@ -142,6 +142,8 @@ MONITORS:
   });
 
   it("watches config file changes and updates runtime config", async () => {
+    const recordBefore = join(tempDir, "record-before");
+    const recordAfter = join(tempDir, "record-after");
     writeFileSync(
       configPath,
       `
@@ -150,7 +152,7 @@ MONITORS:
   - 2
 ROOM_MAX_USERS: 8
 REPLAY_ENABLED: false
-REPLAY_BASE_DIR: "./record-before"
+REPLAY_BASE_DIR: ${JSON.stringify(recordBefore)}
 `,
       "utf8"
     );
@@ -160,7 +162,7 @@ REPLAY_BASE_DIR: "./record-before"
       expect(running.state.serverName).toBe("Before");
       expect(running.state.config.monitors).toEqual([2]);
       expect(running.state.replayEnabled).toBe(false);
-      expect(running.state.replayRecorder.baseDir).toBe("./record-before");
+      expect(running.state.replayRecorder.baseDir).toBe(recordBefore);
 
       writeFileSync(
         configPath,
@@ -170,7 +172,7 @@ MONITORS:
   - 123
 ROOM_MAX_USERS: 3
 REPLAY_ENABLED: true
-REPLAY_BASE_DIR: "./record-after"
+REPLAY_BASE_DIR: ${JSON.stringify(recordAfter)}
 `,
         "utf8"
       );
@@ -179,7 +181,7 @@ REPLAY_BASE_DIR: "./record-after"
       expect(running.state.config.monitors).toEqual([123]);
       expect(running.state.config.room_max_users).toBe(3);
       expect(running.state.replayEnabled).toBe(true);
-      expect(running.state.replayRecorder.baseDir).toBe("./record-after");
+      expect(running.state.replayRecorder.baseDir).toBe(recordAfter);
     } finally {
       await running.close();
     }

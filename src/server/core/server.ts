@@ -247,7 +247,7 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
   });
   const serverName = mergedCfg.server_name || "Phira MP";
   const adminDataPath = mergedCfg.admin_data_path ?? paths.adminDataPath;
-  state = new ServerState(mergedCfg, logger, serverName, adminDataPath);
+  state = new ServerState(mergedCfg, logger, serverName, adminDataPath, configPath);
   await state.loadAdminData();
   const replayCleanup = startReplayCleanup({ ttlDays: 4, logger });
 
@@ -491,6 +491,9 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
         });
         logger.mark(tl(state.serverLang, "log-server-stopped"));
       } finally {
+        await state.replayRecorder.closeAll().catch((err) => {
+          logger.warn(`Replay recorder closeAll failed: ${err instanceof Error ? err.message : String(err)}`);
+        });
         replayCleanup.stop();
         logger.close();
       }

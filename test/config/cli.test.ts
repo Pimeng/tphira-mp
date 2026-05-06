@@ -33,7 +33,7 @@ describe("CLI 命令逻辑测试", () => {
     };
 
     logger = new Logger({ logsDir: tempDir, minLevel: "ERROR" });
-    state = new ServerState(config, logger, "测试服务器", `${tempDir}/test_admin_data.json`);
+    state = new ServerState(config, logger, "测试服务器", `${tempDir}/test_admin_data.json`, `${tempDir}/test_server_config.yml`);
   });
 
   afterEach(async () => {

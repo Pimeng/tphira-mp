@@ -27,3 +27,7 @@ $RECYCLE.BIN/
 
 # 临时文件
 data/tmp/*
+
+# 录制文件（运行时或测试残留）
+record/
+record-*/
