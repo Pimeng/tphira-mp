@@ -383,7 +383,7 @@ export class Room {
 
         if (this.isCycle()) {
           const users = this.userIds();
-          if (users.length > 0) {
+          if (users.length > 1) {
             const index = Math.max(0, users.indexOf(this.hostId));
             const newHost = users[(index + 1) % users.length]!;
             const oldHost = this.hostId;
