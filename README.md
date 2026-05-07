@@ -1,6 +1,9 @@
-<h1 align="center">🔷Phira MP Typescript</h1>
-
-Phira MP 的 Typescript 实现，目前正在逐步完善，还请多多包涵
+<img src=".github/resources/tsmp.png" alt="tphira-mp logo" align="right" width="23%">
+<div align="center">
+  <h1>Typescript Phira-MP</h1>
+  <h3>Phira MP 的 <b>Typescript</b> 实现</h3>
+  <h5><i>目前正在逐步完善，还请多多包涵</i></h5>
+</div>
 
 > [!NOTE]
 > 本项目由各种AI工具开发，存在一定的问题，见谅，如有更好的实现欢迎 PR<br>
@@ -93,7 +96,7 @@ pnpm run package:sea
 
 ## 📋 环境要求
 
-- Node.js >= 22
+- Node.js >= 24
 - pnpm >= 10.26.0
 
 ## 🏗️ 项目架构
@@ -225,6 +228,5 @@ LOG_LEVEL=DEBUG pnpm run dev:server
 
 - [Dmocken](https://github.com/Dmocken)
 - [RainCore1115](https://github.com/RainCore1115)
-- [RENaa_FD](https://github.com/lRENyaaa)
 
 在这里大力的感谢你们！谢谢！没有你们就没有本项目的今天！
