@@ -79,6 +79,10 @@ export function createAutoUploadHandler(state: ServerState): AutoUploadHandler {
             userMeta.set(chartId, chartMeta);
           }
           chartMeta.push({ scoreId: uploadResult.scoreId, chartId, timestamp });
+          // 限制每个 chart 最多保留 50 条元数据，防止内存泄漏
+          if (chartMeta.length > 50) {
+            chartMeta.splice(0, chartMeta.length - 50);
+          }
 
           // 根据用户配置设置显示状态（默认不显示，show=true 时设为可见）
           const config = state.autoUploadConfigs.get(userId);

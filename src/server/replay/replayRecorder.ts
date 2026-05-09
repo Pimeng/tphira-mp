@@ -175,6 +175,12 @@ export class ReplayRecorder {
     return out;
   }
 
+  /** 清理已完成回放文件记录（防止已解散房间的元数据泄漏） */
+  clearRoomFiles(roomId: RoomId): void {
+    const roomKey = roomIdToString(roomId);
+    this.completedFilesByRoom.delete(roomKey);
+  }
+
   fakeMonitorInfo(): UserInfo {
     return { id: 2_000_000_000, name: "回放录制器", monitor: true };
   }

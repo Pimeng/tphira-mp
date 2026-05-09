@@ -15,6 +15,7 @@ export type RateLimiterOptions = {
 type IpStats = {
   timestamps: number[];
   blacklistedUntil: number;
+  lastAccess: number;
 };
 
 export class RateLimiter {
@@ -24,6 +25,12 @@ export class RateLimiter {
 
   /** 按 IP 统计日志频率 */
   private ipStats: Map<string, IpStats> = new Map();
+  /** 最后一次清理过期 IP 的时间 */
+  private lastCleanup = 0;
+  /** 清理间隔（毫秒） */
+  private static readonly CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // 1小时
+  /** IP 统计最大存活时间（毫秒） */
+  private static readonly STALE_IP_TTL_MS = 24 * 60 * 60 * 1000; // 24小时
 
   constructor(options: RateLimiterOptions = {}) {
     this.threshold = options.logsPerSecondThreshold ?? 10;
@@ -38,11 +45,18 @@ export class RateLimiter {
    */
   shouldLogConnection(ip: string): boolean {
     const now = Date.now();
+
+    // 定期清理过期的 IP 统计（每小时执行一次）
+    if (now - this.lastCleanup > RateLimiter.CLEANUP_INTERVAL_MS) {
+      this.cleanupStaleEntries(now);
+    }
+
     let stats = this.ipStats.get(ip);
     if (!stats) {
-      stats = { timestamps: [], blacklistedUntil: 0 };
+      stats = { timestamps: [], blacklistedUntil: 0, lastAccess: now };
       this.ipStats.set(ip, stats);
     }
+    stats.lastAccess = now;
 
     // 检查IP是否在黑名单中
     if (now < stats.blacklistedUntil) {
@@ -71,6 +85,18 @@ export class RateLimiter {
     }
 
     return true;
+  }
+
+  /**
+   * 清理长时间未访问的 IP 统计条目，防止内存泄漏
+   */
+  private cleanupStaleEntries(now: number): void {
+    this.lastCleanup = now;
+    for (const [ip, stats] of this.ipStats.entries()) {
+      if (now - stats.lastAccess > RateLimiter.STALE_IP_TTL_MS) {
+        this.ipStats.delete(ip);
+      }
+    }
   }
 
   /**

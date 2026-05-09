@@ -297,15 +297,15 @@ export class Session {
   private async handleGameEnd(room: Room): Promise<void> {
     // 结束回放录制
     await this.state.replayRecorder.endRoom(room.id);
-    
+
     // 触发自动上传（如果启用）
     if (this.state.autoUploadCallback && room.chart && room.state.type === "Playing") {
       const chartId = room.chart.id;
       const results = room.state.results;
-      
+
       // 获取房间的文件信息
       const roomFiles = this.state.replayRecorder.listRoomFiles(room.id);
-      
+
       for (const [userId, recordData] of results.entries()) {
         // 查找该用户的回放文件
         const userFile = roomFiles.find(f => f.userId === userId);
@@ -315,6 +315,9 @@ export class Session {
         }
       }
     }
+
+    // 清理已完成回放文件记录，防止已解散房间的元数据泄漏
+    this.state.replayRecorder.clearRoomFiles(room.id);
   }
 
   private async startReplayRecording(room: Room): Promise<void> {
@@ -371,10 +374,10 @@ export class Session {
     if (isBanned) {
       this.state.logger.log("INFO", tl(this.state.serverLang, "log-user-dangle", { user: user.name }), undefined, { userId: user.id });
       const room2 = user.room;
+      await this.state.mutex.runExclusive(async () => {
+        this.state.users.delete(user.id);
+      });
       if (room2) {
-        await this.state.mutex.runExclusive(async () => {
-          this.state.users.delete(user.id);
-        });
         await this.handleUserLeaveRoom(user, room2);
       }
       return;
@@ -386,7 +389,13 @@ export class Session {
       if (!user.isStillDangling(token)) return;
       void (async () => {
         const room2 = user.room;
-        if (!room2) return;
+        if (!room2) {
+          // 用户已不在房间，直接从状态管理中移除
+          await this.state.mutex.runExclusive(async () => {
+            this.state.users.delete(user.id);
+          });
+          return;
+        }
         logRoomWarn(this.state.logger, this.state.serverLang, room2.id, "log-user-dangle-timeout-remove", { user: user.name }, { userId: user.id });
         await this.state.mutex.runExclusive(async () => {
           this.state.users.delete(user.id);
