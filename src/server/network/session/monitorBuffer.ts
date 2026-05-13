@@ -5,15 +5,19 @@
  * 默认聚合窗口为 50ms,期间收集的同一玩家的数据会合并后统一转发给观战者。
  */
 import type { JudgeEvent, ServerCommand, TouchFrame } from "../../../common/commands.js";
+import type { Room } from "../../game/room.js";
 
 /** 观战数据缓冲选项 */
 export type MonitorBufferOptions = {
   /** 聚合间隔(毫秒) */
   flushIntervalMs: number;
-  /** 获取当前监视者 ID 列表的回调,返回 null 表示丢弃缓冲 */
-  getMonitorIds: () => number[] | null;
   /** 广播命令到指定 ID 列表的回调(fire-and-forget) */
   broadcastFast: (ids: number[], cmd: ServerCommand) => void;
+};
+
+type MonitorTargets = {
+  room: Room;
+  ids: number[];
 };
 
 /**
@@ -23,8 +27,8 @@ export type MonitorBufferOptions = {
  * flush 时会按玩家合并多次推入的数据,然后一次性广播给所有观战者。
  */
 export class MonitorBuffer {
-  private touchBuffer: Array<{ player: number; frames: TouchFrame[] }> = [];
-  private judgeBuffer: Array<{ player: number; judges: JudgeEvent[] }> = [];
+  private touchBuffer: Array<{ targets: MonitorTargets; player: number; frames: TouchFrame[] }> = [];
+  private judgeBuffer: Array<{ targets: MonitorTargets; player: number; judges: JudgeEvent[] }> = [];
   private flushTimer: NodeJS.Timeout | null = null;
   private readonly opts: MonitorBufferOptions;
 
@@ -33,48 +37,51 @@ export class MonitorBuffer {
   }
 
   /** 推入一批 touches 帧 */
-  bufferTouches(player: number, frames: TouchFrame[]): void {
-    this.touchBuffer.push({ player, frames });
+  bufferTouches(room: Room, monitorIds: number[], player: number, frames: TouchFrame[]): void {
+    const ids = this.normalizeMonitorIds(monitorIds);
+    if (ids.length === 0) return;
+    this.touchBuffer.push({ targets: { room, ids }, player, frames });
     this.scheduleFlush();
   }
 
   /** 推入一批 judges 事件 */
-  bufferJudges(player: number, judges: JudgeEvent[]): void {
-    this.judgeBuffer.push({ player, judges });
+  bufferJudges(room: Room, monitorIds: number[], player: number, judges: JudgeEvent[]): void {
+    const ids = this.normalizeMonitorIds(monitorIds);
+    if (ids.length === 0) return;
+    this.judgeBuffer.push({ targets: { room, ids }, player, judges });
     this.scheduleFlush();
   }
 
   /** 立即 flush 缓冲区,合并并广播 */
   flush(): void {
-    const monitorIds = this.opts.getMonitorIds();
-    if (!monitorIds) {
-      this.touchBuffer = [];
-      this.judgeBuffer = [];
-      return;
-    }
-
     if (this.touchBuffer.length > 0) {
-      const merged = new Map<number, TouchFrame[]>();
+      const merged = new Map<string, { ids: number[]; player: number; frames: TouchFrame[] }>();
       for (const item of this.touchBuffer) {
-        const existing = merged.get(item.player);
-        if (existing) existing.push(...item.frames);
-        else merged.set(item.player, [...item.frames]);
+        const ids = this.liveMonitorIds(item.targets);
+        if (ids.length === 0) continue;
+        const key = this.mergeKey(ids, item.player);
+        const existing = merged.get(key);
+        if (existing) existing.frames.push(...item.frames);
+        else merged.set(key, { ids, player: item.player, frames: [...item.frames] });
       }
-      for (const [player, frames] of merged) {
-        this.opts.broadcastFast(monitorIds, { type: "Touches", player, frames });
+      for (const { ids, player, frames } of merged.values()) {
+        this.opts.broadcastFast(ids, { type: "Touches", player, frames });
       }
       this.touchBuffer = [];
     }
 
     if (this.judgeBuffer.length > 0) {
-      const merged = new Map<number, JudgeEvent[]>();
+      const merged = new Map<string, { ids: number[]; player: number; judges: JudgeEvent[] }>();
       for (const item of this.judgeBuffer) {
-        const existing = merged.get(item.player);
-        if (existing) existing.push(...item.judges);
-        else merged.set(item.player, [...item.judges]);
+        const ids = this.liveMonitorIds(item.targets);
+        if (ids.length === 0) continue;
+        const key = this.mergeKey(ids, item.player);
+        const existing = merged.get(key);
+        if (existing) existing.judges.push(...item.judges);
+        else merged.set(key, { ids, player: item.player, judges: [...item.judges] });
       }
-      for (const [player, judges] of merged) {
-        this.opts.broadcastFast(monitorIds, { type: "Judges", player, judges });
+      for (const { ids, player, judges } of merged.values()) {
+        this.opts.broadcastFast(ids, { type: "Judges", player, judges });
       }
       this.judgeBuffer = [];
     }
@@ -96,5 +103,18 @@ export class MonitorBuffer {
         this.flush();
       }, this.opts.flushIntervalMs);
     }
+  }
+
+  private normalizeMonitorIds(ids: number[]): number[] {
+    return [...new Set(ids)].sort((a, b) => a - b);
+  }
+
+  private liveMonitorIds(targets: MonitorTargets): number[] {
+    const current = new Set(targets.room.monitorIds());
+    return targets.ids.filter((id) => current.has(id));
+  }
+
+  private mergeKey(ids: number[], player: number): string {
+    return `${ids.join(",")}:${player}`;
   }
 }

@@ -116,10 +116,6 @@ export class Session {
 
     this.monitorBuffer = new MonitorBuffer({
       flushIntervalMs: MONITOR_FLUSH_INTERVAL_MS,
-      getMonitorIds: () => {
-        const room = this.user?.room;
-        return room ? room.monitorIds() : null;
-      },
       broadcastFast: (ids, cmd) => this.broadcastToIdsFast(ids, cmd)
     });
 

@@ -106,8 +106,9 @@ export async function processClientCommand(
         { userId: user.id }
       );
       // monitor 数据转发: 聚合缓冲,避免高频实时数据冲击网络
-      if (room.monitorIds().length > 0) {
-        ctx.monitorBuffer.bufferTouches(user.id, cmd.frames);
+      const monitorIds = room.monitorIds();
+      if (monitorIds.length > 0) {
+        ctx.monitorBuffer.bufferTouches(room, monitorIds, user.id, cmd.frames);
       }
       // 录制回放: 独立判断、独立执行
       if (state.replayEnabled && room.replayEligible) {
@@ -127,8 +128,9 @@ export async function processClientCommand(
         { judges: cmd.judges },
         { userId: user.id }
       );
-      if (room.monitorIds().length > 0) {
-        ctx.monitorBuffer.bufferJudges(user.id, cmd.judges);
+      const monitorIds = room.monitorIds();
+      if (monitorIds.length > 0) {
+        ctx.monitorBuffer.bufferJudges(room, monitorIds, user.id, cmd.judges);
       }
       if (state.replayEnabled && room.replayEligible) {
         state.replayRecorder.appendJudges(room.id, user.id, cmd.judges);

@@ -3,7 +3,7 @@ import { describe, expect, test, beforeAll, afterAll } from "vitest";
 import { startServer } from "../../src/server/core/server.js";
 import { Client } from "../../src/client/client.js";
 import { setupMockFetch, sleep, waitFor, createTempDir, cleanupTempDir } from "../helpers.js";
-import type { TouchFrame } from "../../src/common/commands.js";
+import type { JudgeEvent, TouchFrame } from "../../src/common/commands.js";
 
 describe("观战数据聚合缓冲", () => {
   const { originalFetch, mockFetch } = setupMockFetch();
@@ -119,6 +119,63 @@ describe("观战数据聚合缓冲", () => {
       // 聚合后每个玩家的多批数据应合并为一批或保持分批（取决于时序）
       expect(aliceFrames.length).toBeGreaterThanOrEqual(1);
       expect(bobFrames.length).toBeGreaterThanOrEqual(1);
+    } finally {
+      await alice.close();
+      await bob.close();
+      await carol.close();
+      await running.close();
+      await cleanupTempDir(tempDir);
+    }
+  });
+
+  test.each([false, true])("玩家离房前缓冲的数据仍应转发给多个观战者(replay=%s)", async (replayEnabled) => {
+    const tempDir = await createTempDir("monitor-buffer-test");
+    const running = await startServer({
+      port: 0,
+      config: { monitors: [200, 300], replay_enabled: replayEnabled, replay_base_dir: tempDir }
+    });
+    const port = running.address().port;
+
+    const alice = await Client.connect("127.0.0.1", port);
+    const bob = await Client.connect("127.0.0.1", port);
+    const carol = await Client.connect("127.0.0.1", port);
+
+    try {
+      await alice.authenticate("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+      await bob.authenticate("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+      await carol.authenticate("cccccccccccccccccccccccccccccccc");
+
+      await alice.createRoom("room1");
+      await bob.joinRoom("room1", true);
+      await carol.joinRoom("room1", true);
+
+      await alice.selectChart(1);
+      await alice.requestStart();
+      await bob.ready();
+      await carol.ready();
+
+      await waitFor(() => alice.roomState()?.type === "Playing", 2000);
+
+      const frames: TouchFrame[] = [{ time: 1, points: [[0, { x: 1, y: 1 }]] }];
+      const judges: JudgeEvent[] = [{ time: 1, line_id: 1, note_id: 1, judgement: 0 }];
+
+      await alice.sendTouches(frames);
+      await alice.sendJudges(judges);
+      await alice.leaveRoom();
+
+      await waitFor(() => {
+        return (
+          bob.livePlayer(100).touch_frames.length >= 1 &&
+          bob.livePlayer(100).judge_events.length >= 1 &&
+          carol.livePlayer(100).touch_frames.length >= 1 &&
+          carol.livePlayer(100).judge_events.length >= 1
+        );
+      }, 2000);
+
+      expect(bob.livePlayer(100).touch_frames).toEqual(frames);
+      expect(bob.livePlayer(100).judge_events).toEqual(judges);
+      expect(carol.livePlayer(100).touch_frames).toEqual(frames);
+      expect(carol.livePlayer(100).judge_events).toEqual(judges);
     } finally {
       await alice.close();
       await bob.close();
