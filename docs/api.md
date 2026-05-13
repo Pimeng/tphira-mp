@@ -19,8 +19,8 @@
   - `HTTP_SERVICE=true`
   - `HTTP_PORT=12347`（可选，默认 12347）
 - 配置文件 `server_config.yml`：
-  - `http_service: true`
-  - `http_port: 12347`
+  - `HTTP_SERVICE: true`
+  - `HTTP_PORT: 12347`
 
 ### 设置 ADMIN_TOKEN
 
@@ -157,6 +157,8 @@ Body（CLI 模式）：
 - CLI 模式批准被拒：`403 { "ok": false, "error": "approval-denied", "status": "denied" }`
 - CLI 模式仍待批准：`202 { "ok": false, "error": "pending-approval", "status": "pending" }`
 - TOKEN过期或IP不匹配：`401 { "ok": false, "error": "token-expired" }`
+- OTP尝试次数过多（IP被封禁）：`403 { "ok": false, "error": "ip-banned-too-many-attempts" }`
+- OTP尝试次数过多（会话被封禁）：`403 { "ok": false, "error": "ssid-banned-too-many-attempts" }`
 
 ## 数据持久化（封禁相关）
 
@@ -220,12 +222,12 @@ Body：
 ```json
 {
   "ok": true,
-  "rate": {
-    "logsPerSecond": 10.5,
-    "threshold": 100
-  }
+  "rate": 10.5
 }
 ```
+
+说明：
+- `rate` 为当前所有 IP 中的最高日志频率（条/秒）
 
 ## 公共接口
 
@@ -429,7 +431,6 @@ curl -X POST -H "Content-Type: application/json" \
 
 - 参数不合法：`400 { "ok": false, "error": "bad-request" }`
 - TOKEN无效：`401 { "ok": false, "error": "unauthorized" }`
-- 路径不合法（路径穿透）：`403 { "ok": false, "error": "path-not-allowed" }`
 - 回放不存在或无权访问：`404 { "ok": false, "error": "not-found" }`
 - 分享站未配置：`503 { "ok": false, "error": "share-station-not-configured" }`
 - 上传失败：`500 { "ok": false, "error": "upload-failed" }`
@@ -586,7 +587,7 @@ SHARE_STATION:
           "name": "Alice",
           "connected": true,
           "is_host": true,
-          "game_time": -Infinity,
+          "game_time": null,
           "language": "zh-CN"
         }
       ],
@@ -827,6 +828,10 @@ Body：
   - 对局中断线会尽量保持房间其他玩家流程正常（会发送 Abort 并触发结算检查）
 
 返回：`200 { "ok": true }`
+
+常见错误：
+
+- 参数不合法（`userId` 不是整数）：`400 { "ok": false, "error": "bad-user-id" }`
 
 ### 4) 禁止某玩家进入某个房间（房间级黑名单）
 

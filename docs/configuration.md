@@ -328,6 +328,27 @@ Base directory for replay recording files.
 REPLAY_BASE_DIR: "./record"
 ```
 
+#### REPLAY_AUTO_UPLOAD
+
+是否启用游戏结束后自动上传回放到分享站。
+
+Whether to enable automatic replay upload to share station after game ends.
+
+- 类型 / Type: `boolean`
+- 默认值 / Default: `false`
+- 环境变量 / Environment: `REPLAY_AUTO_UPLOAD`
+
+示例 / Example:
+```yaml
+REPLAY_AUTO_UPLOAD: true
+```
+
+注意 / Note:
+- 需要同时配置 `SHARE_STATION` 才能实际生效
+- Requires `SHARE_STATION` to be configured to take effect
+- 用户可通过 `/replay/auto-upload/config` 接口控制上传后是否显示
+- Users can control visibility after upload via `/replay/auto-upload/config`
+
 #### LANG
 
 服务器默认语言，影响日志、CLI 控制台、HTTP 默认输出语言。
@@ -403,7 +424,7 @@ TEST_ACCOUNT_IDS:
 Admin interface authentication token.
 
 - 类型 / Type: `string`
-- 默认值 / Default: `"replace_me"`（建议修改）
+- 默认值 / Default: `undefined`（未配置，管理员 API 默认禁用）
 - 环境变量 / Environment: `ADMIN_TOKEN`
 
 示例 / Example:
@@ -587,16 +608,16 @@ Some configurations support command-line argument override.
 pnpm run dev:server --port 12346 --host 0.0.0.0
 
 # 生产模式
-node dist/server/main.js --port 12346 --http-service --http-port 12347
+node dist/server/main.js --port 12346 --httpService true --httpPort 12347
 ```
 
 支持的参数 / Supported arguments:
-- `--port <number>` - 游戏端口
+- `-p, --port <number>` - 游戏端口
 - `--host <string>` - 监听地址
-- `--http-service` - 启用 HTTP 服务
-- `--http-port <number>` - HTTP 端口
-- `--server-name <string>` - 服务器名称
-- `--room-max-users <number>` - 房间最大人数
+- `--httpService <boolean>` - 启用 HTTP 服务（`true` / `false`）
+- `--httpPort <number>` - HTTP 端口
+- `--serverName <string>` - 服务器名称
+- `--roomMaxUsers <number>` - 房间最大人数
 - `--monitors <ids>` - 观战用户ID列表（逗号分隔）
 
 ## Docker 环境变量 / Docker Environment Variables

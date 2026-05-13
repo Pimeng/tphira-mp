@@ -20,11 +20,15 @@ src/
 │   ├── utils.ts     # 通用工具函数
 │   └── uuid.ts      # UUID生成
 └── server/          # 服务端代码
-    ├── auth/        # 认证模块（Token验证、OTP临时认证）
     ├── cli/         # 命令行接口
     ├── core/        # 核心模块（服务器状态、配置）
     ├── game/        # 游戏逻辑（房间、用户）
-    ├── network/     # 网络服务（TCP、HTTP、WebSocket）
+    ├── network/     # 网络服务（TCP、HTTP、WebSocket、认证）
+    │   ├── session.ts      # TCP 会话管理与 Phira Token 认证
+    │   ├── routes/         # HTTP 路由
+    │   │   ├── auth.ts     # 管理员 Token 鉴权
+    │   │   └── otpRoutes.ts # OTP / CLI 临时认证
+    │   └── websocketService.ts # WebSocket 服务
     ├── replay/      # 回放录制
     └── utils/       # 服务端工具（日志、限流、本地化）
 ```
