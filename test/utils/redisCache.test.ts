@@ -84,7 +84,7 @@ vi.mock("ioredis", () => {
   }
 
   (globalThis as Record<string, unknown>).__redisMockStore = mockStore;
-  return { default: MockRedis };
+  return { default: MockRedis, Redis: MockRedis };
 });
 
 import { Cache, initRedisCache } from "../../src/server/utils/cache.js";
