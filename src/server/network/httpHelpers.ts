@@ -39,7 +39,7 @@ export function cleanupExpiringMaps(...maps: ReadonlyArray<Map<string, { expires
 /**
  * 调用 Phira API 验证 token 并取出 user ID。失败时返回 null。
  */
-export async function verifyUserTokenViaApi(state: ServerState, token: string, timeoutMs = 8000): Promise<number | null> {
+export async function verifyUserTokenViaApi(state: ServerState, token: string, timeoutMs = 60000): Promise<number | null> {
   const endpoint = state.config.phira_api_endpoint || DEFAULT_PHIRA_API_ENDPOINT;
   try {
     const resp = await fetchWithRetry(`${endpoint}/me`, {

@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { Client } from "../../src/client/client.js";
 import { startServer } from "../../src/server/core/server.js";
+import { chartCache } from "../../src/server/utils/cache.js";
 
 describe("Phira API 端点配置", () => {
   const originalFetch = globalThis.fetch;
@@ -56,8 +57,9 @@ describe("Phira API 端点配置", () => {
     }) as typeof fetch;
   };
 
-  beforeEach(() => {
+  beforeEach(async () => {
     fetchCalls = [];
+    await chartCache.clear();
   });
 
   afterEach(() => {

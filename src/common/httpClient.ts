@@ -239,14 +239,14 @@ function isRetryableResponse(res: Response): boolean {
 }
 
 /**
- * 发送带重试的 fetch 请求，默认最多重试 2 次
+ * 发送带重试的 fetch 请求，默认最多重试 5 次
  * 使用指数退避 + 抖动策略，自动跳过不可重试错误（4xx）
  */
 export async function fetchWithRetry(
   input: string | URL,
   init: FetchWithProxyInit,
   timeoutMs: number,
-  maxRetries: number = 2
+  maxRetries: number = 5
 ): Promise<Response> {
   let lastError: Error | null = null;
 
