@@ -54,6 +54,8 @@ export type ServerConfig = {
   replay_auto_upload?: boolean;
   /** Redis 缓存配置 */
   redis?: RedisConfig;
+  /** 一言 API 地址，默认 https://v1.hitokoto.cn/ */
+  hitokoto_api_url?: string;
 };
 
 export type Chart = {

@@ -155,7 +155,8 @@ export const CONFIG_FIELDS: ReadonlyArray<ConfigField> = [
       PASSWORD: process.env.REDIS_PASSWORD,
       DB: process.env.REDIS_DB
     })
-  })
+  }),
+  field({ key: "hitokoto_api_url", envName: "HITOKOTO_API_URL", parse: parseStringValue })
 ];
 
 /**
@@ -183,7 +184,8 @@ export function mergeConfig(base: ServerConfig, override: Partial<ServerConfig>)
   return {
     ...merged,
     monitors: merged.monitors ?? [2],
-    test_account_ids: merged.test_account_ids ?? [1739989]
+    test_account_ids: merged.test_account_ids ?? [1739989],
+    hitokoto_api_url: merged.hitokoto_api_url
   } as ServerConfig;
 }
 
@@ -200,7 +202,8 @@ export function buildConfigFromRecord(raw: unknown): ServerConfig {
   }
   return {
     ...out,
-    monitors: out.monitors ?? [2]
+    monitors: out.monitors ?? [2],
+    hitokoto_api_url: out.hitokoto_api_url
   } as ServerConfig;
 }
 

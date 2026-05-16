@@ -21,7 +21,7 @@ describe("核心功能", () => {
     process.env.ROOM_LIST_TIP = "群：123456；查房间：example.com";
 
     const tempDir = await createTempDir("core-test");
-    const running = await startServer({ port: 0, config: { monitors: [200], replay_enabled: true, replay_base_dir: tempDir } });
+    const running = await startServer({ port: 0, config: { monitors: [200], replay_enabled: true, replay_base_dir: tempDir, hitokoto_api_url: "https://v1.hitokoto.cn/" } });
     const port = running.address().port;
 
     const alice = await Client.connect("127.0.0.1", port);

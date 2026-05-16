@@ -67,6 +67,9 @@ SERVER_NAME: Phira MP
 # 默认：https://phira.5wyxi.com
 PHIRA_API_ENDPOINT: "https://phira.5wyxi.com"
 
+# 一言 API 地址，用于欢迎消息中的随机句子
+HITOKOTO_API_URL: "https://v1.hitokoto.cn/"
+
 # 服务端出站代理配置
 # 不配置：保持当前环境里的默认代理行为
 # false / False：强制直连，不走代理

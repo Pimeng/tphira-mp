@@ -28,7 +28,7 @@ export async function sendWelcomeExtras(opts: {
   try {
     const lang = user.lang;
     const tip = state.config.room_list_tip;
-    const hitokoto = await getHitokotoCached(state.config.outbound_proxy);
+    const hitokoto = await getHitokotoCached(state.config.outbound_proxy, state.config.hitokoto_api_url);
 
     // 30 行换行用于清屏
     let message = "\n".repeat(30);
@@ -41,8 +41,6 @@ export async function sendWelcomeExtras(opts: {
     if (hitokoto) {
       const fromText = hitokoto.from ? hitokoto.from : lang.format("chat-hitokoto-from-unknown");
       message += `${hitokoto.quote} —— ${fromText}`;
-    } else {
-      message += lang.format("chat-hitokoto-unavailable");
     }
     await sendSystemChat(message);
   } catch (e) {
