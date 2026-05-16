@@ -27,7 +27,7 @@ describe("late-join / basic", () => {
 
       // Dave 在游戏进行中加入
       const joinResp = await dave.joinRoom("room1", false);
-      expect(joinResp.state.type).toBe("Playing");
+      expect(joinResp.state.type).toBe("SelectChart");
 
       // Dave 收到状态同步后状态应为 Playing
       await waitFor(() => dave.roomState()?.type === "Playing");

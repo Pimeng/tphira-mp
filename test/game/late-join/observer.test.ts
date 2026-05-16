@@ -28,7 +28,7 @@ describe("late-join / observer", () => {
 
       // Dave 作为观战者在游戏进行中加入
       const joinResp = await dave.joinRoom("room4", true);
-      expect(joinResp.state.type).toBe("Playing");
+      expect(joinResp.state.type).toBe("SelectChart");
 
       // Alice 发送 touches，Dave 应该能收到
       const frames: TouchFrame[] = [{ time: 1, points: [[0, { x: 0, y: 1 }]] }];

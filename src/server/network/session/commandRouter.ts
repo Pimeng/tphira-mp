@@ -245,6 +245,7 @@ export async function processClientCommand(
         type: "Ready",
         result: await ctx.errToStr(async () => {
           const room = ctx.requireRoom(user);
+          if (room.state.type === "Playing") throw new Error(user.lang.format("room-invalid-state"));
           if (room.state.type === "WaitForReady") {
             if (room.state.started.has(user.id)) throw new Error(user.lang.format("room-already-ready"));
             room.state.started.add(user.id);
@@ -262,6 +263,7 @@ export async function processClientCommand(
         type: "CancelReady",
         result: await ctx.errToStr(async () => {
           const room = ctx.requireRoom(user);
+          if (room.state.type === "Playing") throw new Error(user.lang.format("room-invalid-state"));
           if (room.state.type === "WaitForReady") {
             if (!room.state.started.delete(user.id)) throw new Error(user.lang.format("room-not-ready"));
             if (room.hostId === user.id) {

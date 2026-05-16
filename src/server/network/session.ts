@@ -489,16 +489,28 @@ export class Session {
       .filter((it): it is User => Boolean(it))
       .map((it) => it.toInfo());
 
+    let respState = room.clientRoomState();
+    // ProtocolHack：如果当前不是选谱状态但已有谱面，响应中伪装成 SelectChart 让客户端先获知谱面 ID
+    if (room.state.type !== "SelectChart" && room.chart) {
+      respState = { type: "SelectChart", id: room.chart.id };
+    }
+
     const resp: JoinRoomResponse = {
-      state: room.clientRoomState(),
+      state: respState,
       users,
       live: room.isLive()
     };
 
-    // 状态同步：如果正在游戏中，先发送 SelectChart 状态让客户端知道当前谱面，再发送 Playing 状态
-    if (room.state.type === "Playing" && room.chart) {
-      await user.trySend({ type: "ChangeState", state: { type: "SelectChart", id: room.chart.id } });
-      await user.trySend({ type: "ChangeState", state: { type: "Playing" } });
+    // 延迟修正客户端状态：先再次确认 SelectChart，再发送真实状态（如 Playing）
+    if (room.state.type !== "SelectChart" && room.chart) {
+      const chartId = room.chart.id;
+      const realState = room.clientRoomState();
+      setTimeout(() => {
+        void user.trySend({ type: "ChangeState", state: { type: "SelectChart", id: chartId } });
+        setTimeout(() => {
+          void user.trySend({ type: "ChangeState", state: realState });
+        }, 2);
+      }, 2);
     }
 
     if (this.state.replayEnabled && room.replayEligible) {
