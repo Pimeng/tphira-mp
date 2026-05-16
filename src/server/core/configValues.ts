@@ -71,6 +71,23 @@ export function parseShareStationValue(value: unknown): ServerConfig["share_stat
   return url && token ? { url, token } : undefined;
 }
 
+export function parseRedisValue(value: unknown): ServerConfig["redis"] {
+  if (!isRecord(value)) return undefined;
+  const enabled = parseBoolValue(value.ENABLED);
+  if (enabled === undefined) return undefined;
+  const host = parseStringValue(value.HOST) ?? "127.0.0.1";
+  const port = parsePortValue(value.PORT) ?? 6379;
+  const password = parseStringValue(value.PASSWORD);
+  const dbRaw = value.DB;
+  let db = 0;
+  if (dbRaw !== undefined && dbRaw !== null && dbRaw !== "") {
+    const dbNum = Number(dbRaw);
+    if (!Number.isInteger(dbNum) || dbNum < 0) return undefined;
+    db = dbNum;
+  }
+  return { enabled, host, port, password, db };
+}
+
 /**
  * 配置字段的元数据。每条记录定义一个配置项的所有信息，
  * 让加载/合并/对比/分类等操作都能从这一张表派生。
@@ -125,6 +142,19 @@ export const CONFIG_FIELDS: ReadonlyArray<ConfigField> = [
     envName: "SHARE_STATION",
     parse: parseShareStationValue,
     envInput: () => ({ URL: process.env.SHARE_STATION_URL, TOKEN: process.env.SHARE_STATION_TOKEN })
+  }),
+  field({
+    key: "redis",
+    envName: "REDIS",
+    parse: parseRedisValue,
+    startupOnly: true,
+    envInput: () => ({
+      ENABLED: process.env.REDIS_ENABLED,
+      HOST: process.env.REDIS_HOST,
+      PORT: process.env.REDIS_PORT,
+      PASSWORD: process.env.REDIS_PASSWORD,
+      DB: process.env.REDIS_DB
+    })
   })
 ];
 

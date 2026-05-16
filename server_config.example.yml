@@ -81,3 +81,17 @@ SHARE_STATION:
   # 服务端认证 token（用于自动上传等内部接口）
   # 如需Token，请访问 https://rymc.ltd/e 询问 Evidence 相关Token事宜
   TOKEN: "your_share_station_token_here"
+
+# Redis 缓存配置
+# 启用后，所有本地缓存（谱面缓存、一言缓存等）将迁移到 Redis，不再使用本地内存和磁盘缓存
+REDIS:
+  # 是否启用 Redis 缓存，默认 false
+  ENABLED: false
+  # Redis 服务器地址
+  HOST: "127.0.0.1"
+  # Redis 服务器端口
+  PORT: 6379
+  # Redis 认证密码（如无密码可留空或注释）
+  # PASSWORD: "your_redis_password"
+  # Redis 数据库号，默认 0
+  DB: 0

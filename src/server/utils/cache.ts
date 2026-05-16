@@ -1,7 +1,8 @@
 import { promises as fs } from "node:fs";
 import { join } from "node:path";
+import Redis from "ioredis";
 import { getAppPaths } from "./appPaths.js";
-import type { Chart } from "../core/types.js";
+import type { Chart, RedisConfig } from "../core/types.js";
 
 type CacheEntry<V> = {
   value: V;
@@ -25,6 +26,51 @@ export type CacheStats = {
   size: number;
 };
 
+let redisClient: Redis | null = null;
+const allCaches: Cache<string | number, unknown>[] = [];
+
+/**
+ * 初始化 Redis 缓存支持。
+ * 如果配置中启用了 Redis，会建立连接并将所有本地缓存数据迁移到 Redis。
+ * 如果未启用或配置变更，会断开已有连接。
+ */
+export async function initRedisCache(config: RedisConfig | undefined): Promise<void> {
+  if (!config?.enabled) {
+    if (redisClient) {
+      redisClient.disconnect();
+      redisClient = null;
+    }
+    return;
+  }
+
+  const newClient = new Redis({
+    host: config.host ?? "127.0.0.1",
+    port: config.port ?? 6379,
+    password: config.password,
+    db: config.db ?? 0,
+    lazyConnect: true,
+    retryStrategy: (times) => {
+      if (times > 3) return null;
+      return Math.min(times * 100, 3000);
+    }
+  });
+
+  await newClient.connect();
+
+  if (redisClient) {
+    redisClient.disconnect();
+  }
+  redisClient = newClient;
+
+  for (const cache of allCaches) {
+    await cache.migrateToRedis();
+  }
+}
+
+export function getRedisClient(): Redis | null {
+  return redisClient;
+}
+
 export class Cache<K extends string | number, V> {
   private memoryCache = new Map<K, CacheEntry<V>>();
   private cacheFilePath: string;
@@ -35,16 +81,28 @@ export class Cache<K extends string | number, V> {
   private persistToDisk: boolean;
   private keyType: "string" | "number";
   private _stats = { hits: 0, misses: 0 };
+  private _approxSize = 0;
   private saveTimer: NodeJS.Timeout | null = null;
   private pendingSave = false;
+  private readonly fileName: string;
 
   constructor(options: CacheOptions<K>) {
+    this.fileName = options.fileName;
     const paths = getAppPaths();
     this.cacheFilePath = join(paths.dataDir, "tmp", "cache", options.fileName);
     this.maxMemorySize = options.maxMemorySize ?? 100;
     this.ttl = options.ttl;
     this.persistToDisk = options.persistToDisk ?? true;
     this.keyType = options.keyType ?? "string";
+    allCaches.push(this as unknown as Cache<string | number, unknown>);
+  }
+
+  private get useRedis(): boolean {
+    return redisClient !== null;
+  }
+
+  private redisKey(key: K): string {
+    return `cache:${this.fileName}:${key}`;
   }
 
   private async ensureInitialized(): Promise<void> {
@@ -76,6 +134,7 @@ export class Cache<K extends string | number, V> {
           cachedAt: entry.cachedAt,
           lastAccessedAt: now
         });
+        this._approxSize++;
       }
     } catch {
       // 文件不存在或解析失败，忽略错误
@@ -112,7 +171,70 @@ export class Cache<K extends string | number, V> {
     }
   }
 
+  /**
+   * 将本地缓存数据迁移到 Redis，并清空本地内存和磁盘文件。
+   * 仅在启用 Redis 时调用。
+   */
+  async migrateToRedis(): Promise<void> {
+    if (!redisClient) return;
+    await this.ensureInitialized();
+
+    const now = Date.now();
+    const pipeline = redisClient.pipeline();
+    let count = 0;
+
+    for (const [key, entry] of this.memoryCache.entries()) {
+      if (this.ttl && now - entry.cachedAt > this.ttl) continue;
+      const redisKey = this.redisKey(key);
+      pipeline.set(redisKey, JSON.stringify({ value: entry.value, cachedAt: entry.cachedAt }));
+      if (this.ttl) {
+        const remaining = Math.max(1, this.ttl - (now - entry.cachedAt));
+        pipeline.pexpire(redisKey, remaining);
+      }
+      count++;
+    }
+
+    if (count > 0) {
+      await pipeline.exec();
+    }
+
+    this.memoryCache.clear();
+    this._approxSize = count;
+    this._stats.hits = 0;
+    this._stats.misses = 0;
+
+    // 停止待写入的磁盘保存任务（内存已清空，无需再写）
+    if (this.persistToDisk) {
+      this.pendingSave = false;
+      if (this.saveTimer) {
+        clearTimeout(this.saveTimer);
+        this.saveTimer = null;
+      }
+    }
+  }
+
   async get(key: K): Promise<V | null> {
+    if (this.useRedis) {
+      const data = await redisClient!.get(this.redisKey(key));
+      if (data === null) {
+        this._stats.misses++;
+        return null;
+      }
+      try {
+        const parsed = JSON.parse(data) as { value: V; cachedAt: number };
+        if (this.ttl && Date.now() - parsed.cachedAt > this.ttl) {
+          await redisClient!.del(this.redisKey(key));
+          this._stats.misses++;
+          return null;
+        }
+        this._stats.hits++;
+        return parsed.value;
+      } catch {
+        this._stats.misses++;
+        return null;
+      }
+    }
+
     await this.ensureInitialized();
 
     const entry = this.memoryCache.get(key);
@@ -124,6 +246,7 @@ export class Cache<K extends string | number, V> {
     // 检查是否过期
     if (this.ttl && Date.now() - entry.cachedAt > this.ttl) {
       this.memoryCache.delete(key);
+      this._approxSize--;
       this._stats.misses++;
       return null;
     }
@@ -135,14 +258,32 @@ export class Cache<K extends string | number, V> {
   }
 
   async set(key: K, value: V): Promise<void> {
+    if (this.useRedis) {
+      const cachedAt = Date.now();
+      const existed = await redisClient!.exists(this.redisKey(key));
+      await redisClient!.set(this.redisKey(key), JSON.stringify({ value, cachedAt }));
+      if (this.ttl) {
+        await redisClient!.pexpire(this.redisKey(key), this.ttl);
+      }
+      if (!existed) {
+        this._approxSize++;
+      }
+      return;
+    }
+
     await this.ensureInitialized();
 
+    const existed = this.memoryCache.has(key);
     const now = Date.now();
     this.memoryCache.set(key, {
       value,
       cachedAt: now,
       lastAccessedAt: now
     });
+
+    if (!existed) {
+      this._approxSize++;
+    }
 
     // LRU 淘汰：移除最久未访问的
     if (this.memoryCache.size > this.maxMemorySize) {
@@ -156,6 +297,7 @@ export class Cache<K extends string | number, V> {
       }
       if (oldestKey !== undefined) {
         this.memoryCache.delete(oldestKey);
+        this._approxSize--;
       }
     }
 
@@ -180,14 +322,43 @@ export class Cache<K extends string | number, V> {
   }
 
   async delete(key: K): Promise<void> {
+    if (this.useRedis) {
+      const deleted = await redisClient!.del(this.redisKey(key));
+      if (deleted > 0) {
+        this._approxSize--;
+      }
+      return;
+    }
+
     await this.ensureInitialized();
-    this.memoryCache.delete(key);
+    if (this.memoryCache.delete(key)) {
+      this._approxSize--;
+    }
     this.scheduleSaveToDisk();
   }
 
   async clear(): Promise<void> {
+    if (this.useRedis) {
+      const pattern = this.redisKey("*" as K);
+      let cursor = "0";
+      do {
+        const reply = await redisClient!.scan(cursor, "MATCH", pattern, "COUNT", 100);
+        cursor = reply[0];
+        const keys = reply[1];
+        if (keys.length > 0) {
+          await redisClient!.del(...keys);
+        }
+      } while (cursor !== "0");
+
+      this._approxSize = 0;
+      this._stats.hits = 0;
+      this._stats.misses = 0;
+      return;
+    }
+
     await this.ensureInitialized();
     this.memoryCache.clear();
+    this._approxSize = 0;
     this._stats.hits = 0;
     this._stats.misses = 0;
     if (this.persistToDisk) {
@@ -204,6 +375,40 @@ export class Cache<K extends string | number, V> {
    * 返回当前缓存中所有有效的 key
    */
   async keys(): Promise<K[]> {
+    if (this.useRedis) {
+      const pattern = this.redisKey("*" as K);
+      const result: K[] = [];
+      let cursor = "0";
+      const now = Date.now();
+
+      do {
+        const reply = await redisClient!.scan(cursor, "MATCH", pattern, "COUNT", 100);
+        cursor = reply[0];
+        for (const fullKey of reply[1]) {
+          const prefix = `cache:${this.fileName}:`;
+          const keyStr = fullKey.slice(prefix.length);
+          const key = (this.keyType === "number" ? parseInt(keyStr, 10) : keyStr) as K;
+          if (this.ttl) {
+            const data = await redisClient!.get(fullKey);
+            if (data) {
+              try {
+                const parsed = JSON.parse(data) as { cachedAt: number };
+                if (now - parsed.cachedAt <= this.ttl) {
+                  result.push(key);
+                }
+              } catch {
+                // 忽略解析错误
+              }
+            }
+          } else {
+            result.push(key);
+          }
+        }
+      } while (cursor !== "0");
+
+      return result;
+    }
+
     await this.ensureInitialized();
     const result: K[] = [];
     const now = Date.now();
@@ -218,6 +423,10 @@ export class Cache<K extends string | number, V> {
    * 返回当前缓存中有效条目数量
    */
   async size(): Promise<number> {
+    if (this.useRedis) {
+      const keys = await this.keys();
+      return keys.length;
+    }
     const keys = await this.keys();
     return keys.length;
   }
@@ -234,7 +443,7 @@ export class Cache<K extends string | number, V> {
       misses,
       total,
       hitRate: total > 0 ? hits / total : 0,
-      size: this.memoryCache.size
+      size: this.useRedis ? this._approxSize : this.memoryCache.size
     };
   }
 

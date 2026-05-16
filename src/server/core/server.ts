@@ -29,6 +29,7 @@ import { startReplayCleanup } from "../replay/replayCleanup.js";
 import { parseProxyProtocol } from "../network/proxyProtocol.js";
 import { startCli } from "../cli/cli.js";
 import { parseRoomId, type RoomId } from "../../common/roomId.js";
+import { initRedisCache, getRedisClient } from "../utils/cache.js";
 import {
   buildConfigFromRecord,
   changedConfigKeys,
@@ -168,6 +169,17 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
   });
   const serverName = mergedCfg.server_name || "Phira MP";
   const adminDataPath = mergedCfg.admin_data_path ?? paths.adminDataPath;
+
+  // 初始化 Redis 缓存（如果配置启用）
+  if (mergedCfg.redis?.enabled) {
+    try {
+      await initRedisCache(mergedCfg.redis);
+      logger.mark("Redis cache enabled");
+    } catch (e) {
+      logger.warn(`Failed to initialize Redis cache: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
   state = new ServerState(mergedCfg, logger, serverName, adminDataPath, configPath);
   await state.loadAdminData();
   const replayCleanup = startReplayCleanup({ ttlDays: 4, logger });
@@ -390,6 +402,10 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
         configWatcher?.close();
         stopCli();
         broadcastRoomLog = null;
+        const redis = getRedisClient();
+        if (redis) {
+          redis.disconnect();
+        }
         if (httpService) await httpService.close();
         // 关闭 TCP 服务器，设置 10 秒超时强制结束
         await Promise.race([

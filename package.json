@@ -2,7 +2,7 @@
   "name": "tphira-mp",
   "author": "Pimeng",
   "license": "AGPL-3.0",
-  "version": "1.8.3",
+  "version": "1.8.4",
   "type": "module",
   "engines": {
     "node": ">=22"
@@ -20,6 +20,7 @@
   "dependencies": {
     "@fluent/bundle": "^0.18.0",
     "@fluent/langneg": "^0.7.0",
+    "ioredis": "^5.10.1",
     "js-yaml": "^4.1.0",
     "uuid": "^11.1.0",
     "ws": "^8.18.0"

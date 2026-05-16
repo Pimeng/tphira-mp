@@ -5,6 +5,19 @@ export type ShareStationConfig = {
   token: string;
 };
 
+export type RedisConfig = {
+  /** 是否启用 Redis 缓存 */
+  enabled: boolean;
+  /** Redis 服务器地址，默认 127.0.0.1 */
+  host?: string;
+  /** Redis 服务器端口，默认 6379 */
+  port?: number;
+  /** Redis 认证密码 */
+  password?: string;
+  /** Redis 数据库号，默认 0 */
+  db?: number;
+};
+
 export type ServerConfig = {
   monitors: number[];
   /** 测试账号 ID 列表。默认值：[1739989] */
@@ -39,6 +52,8 @@ export type ServerConfig = {
   share_station?: ShareStationConfig;
   /** 是否启用游戏结束后自动上传回放到分享站，默认 false。需要同时配置 share_station 才能实际生效 */
   replay_auto_upload?: boolean;
+  /** Redis 缓存配置 */
+  redis?: RedisConfig;
 };
 
 export type Chart = {
