@@ -1,6 +1,6 @@
 import { promises as fs } from "node:fs";
 import { join } from "node:path";
-import Redis from "ioredis";
+import { Redis } from "ioredis";
 import { getAppPaths } from "./appPaths.js";
 import type { Chart, RedisConfig } from "../core/types.js";
 
