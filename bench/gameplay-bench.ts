@@ -3,6 +3,10 @@ import { Judgement } from "../src/common/commands.js";
 import { parseRoomArgs, printRoomHelp } from "./lib/args.js";
 import { createMetricsCollector, summarizeMetrics } from "./lib/metrics.js";
 import {
+  createServerProcessMetricsCollector,
+  summarizeServerProcessMetrics,
+} from "./lib/serverProcessMetrics.js";
+import {
   printProgress,
   clearProgress,
   saveReport,
@@ -63,6 +67,11 @@ async function run(): Promise<void> {
 
   const metrics = createMetricsCollector(1000);
   metrics.start();
+
+  const serverMetrics = args.serverPid
+    ? createServerProcessMetricsCollector(args.serverPid, 1000)
+    : null;
+  serverMetrics?.start();
 
   const startTime = Date.now();
 
@@ -274,6 +283,10 @@ async function run(): Promise<void> {
   const endedAt = Date.now();
   const metricsSamples = metrics.stop();
   const metricsSummary = summarizeMetrics(metricsSamples);
+  const serverMetricsSamples = serverMetrics?.stop() ?? [];
+  const serverMetricsSummary = serverMetricsSamples.length > 0
+    ? summarizeServerProcessMetrics(serverMetricsSamples)
+    : undefined;
 
   const actualDurationSec = (endedAt - startTime) / 1000;
   const messagesPerSecond = actualDurationSec > 0 ? messagesSent / actualDurationSec : 0;
@@ -322,12 +335,14 @@ async function run(): Promise<void> {
     errors: [...errorSummary.entries()].map(([message, count]) => ({ message, count })),
     metricsSamples,
     metricsSummary,
+    serverMetricsSamples: serverMetricsSamples.length > 0 ? serverMetricsSamples : undefined,
+    serverMetricsSummary,
   };
 
   const filepath = saveReport(report);
   console.log(`Report saved to: ${filepath}`);
 
-  printBenchFooter(report, metricsSummary);
+  printBenchFooter(report, metricsSummary, serverMetricsSummary);
 }
 
 run().catch((e) => {

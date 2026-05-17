@@ -5,6 +5,7 @@ export type ConnectBenchArgs = {
   rate: number;
   duration: number;
   token: string;
+  serverPid?: number;
 };
 
 export type RoomBenchArgs = {
@@ -17,6 +18,7 @@ export type RoomBenchArgs = {
   duration: number;
   tokens: string[];
   hz?: number;
+  serverPid?: number;
 };
 
 export function parseConnectArgs(argv: string[]): ConnectBenchArgs {
@@ -49,6 +51,9 @@ export function parseConnectArgs(argv: string[]): ConnectBenchArgs {
         break;
       case "--token":
         args.token = argv[++i] ?? args.token;
+        break;
+      case "--server-pid":
+        args.serverPid = Number(argv[++i]) || undefined;
         break;
     }
   }
@@ -108,6 +113,9 @@ export function parseRoomArgs(argv: string[]): RoomBenchArgs {
           if (t) args.tokens.push(t);
         }
         break;
+      case "--server-pid":
+        args.serverPid = Number(argv[++i]) || undefined;
+        break;
     }
   }
 
@@ -129,6 +137,7 @@ Options:
   --rate      <number>   New connections per second (default: 10)
   --duration  <number>   Benchmark duration in seconds (default: 30)
   --token     <string>   Auth token (or set BENCH_TOKEN env)
+  --server-pid <number>  Server process PID to collect server-side metrics
 `);
 }
 
@@ -144,5 +153,6 @@ Options:
   --rate                <number>   Operations per second (default: 10)
   --duration            <number>   Benchmark duration in seconds (default: 30)
   --token               <string>   Auth token (or set BENCH_TOKEN env)
+  --server-pid          <number>   Server process PID to collect server-side metrics
 `);
 }

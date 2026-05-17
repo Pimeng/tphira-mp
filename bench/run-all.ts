@@ -1,9 +1,47 @@
-import { spawn } from "node:child_process";
+import { spawn, execSync } from "node:child_process";
 import fs from "node:fs";
 import { startMockAuthServer } from "./lib/mockAuthServer.js";
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function resolveServerPid(parentPid: number): Promise<number | null> {
+  if (process.platform === "linux") {
+    try {
+      const children = execSync(
+        `cat /proc/${parentPid}/task/${parentPid}/children 2>/dev/null || pgrep -P ${parentPid} 2>/dev/null`,
+        { encoding: "utf-8", timeout: 5000 }
+      ).trim();
+      if (children) {
+        const pids = children
+          .split(/\s+/)
+          .map(Number)
+          .filter((n) => !Number.isNaN(n) && n > 0);
+        if (pids.length > 0) return pids[0]!;
+      }
+    } catch {
+      // ignore
+    }
+  } else if (process.platform === "win32") {
+    try {
+      const cmd = `powershell -NoProfile -Command "Get-WmiObject Win32_Process -Filter 'ParentProcessId=${parentPid}' | Select-Object ProcessId | ConvertTo-Json"`;
+      const output = execSync(cmd, { encoding: "utf-8", timeout: 5000 }).trim();
+      if (!output) return null;
+      const data = JSON.parse(output);
+      if (Array.isArray(data)) {
+        const pids = data
+          .map((item) => item.ProcessId)
+          .filter((n: unknown) => typeof n === "number" && n > 0);
+        if (pids.length > 0) return pids[0];
+      } else if (data && typeof data.ProcessId === "number") {
+        return data.ProcessId;
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return null;
 }
 
 function runCommand(cmd: string, args: string[], env?: NodeJS.ProcessEnv): Promise<number> {
@@ -130,11 +168,21 @@ async function run(): Promise<void> {
 
   // 等待服务端就绪
   await sleep(3000);
+
+  const rawPid = server.pid;
+  let serverPid: number | undefined;
+  if (rawPid) {
+    const resolved = await resolveServerPid(rawPid);
+    serverPid = resolved ?? rawPid;
+    console.log(`Server PID detected: ${serverPid}${resolved ? ` (resolved from parent ${rawPid})` : ""}`);
+  }
+
   console.log("Server should be ready.\n");
 
   const benchEnv = { BENCH_TOKEN: args.tokens };
   const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
   const tokenArgs = args.tokens.includes(",") ? ["--tokens", args.tokens] : ["--token", args.tokens];
+  const serverPidArgs = serverPid ? ["--server-pid", String(serverPid)] : [];
   let exitCode = 0;
 
   // 1. Connect bench
@@ -147,6 +195,7 @@ async function run(): Promise<void> {
     "--rate", String(args.rate),
     "--duration", String(args.duration),
     ...tokenArgs,
+    ...serverPidArgs,
   ], benchEnv);
   if (connectCode !== 0) {
     console.warn(`connect-bench exited with code ${connectCode}`);
@@ -164,6 +213,7 @@ async function run(): Promise<void> {
     "--monitors-per-room", String(args.monitorsPerRoom),
     "--duration", String(args.duration),
     ...tokenArgs,
+    ...serverPidArgs,
   ], benchEnv);
   if (roomCode !== 0) {
     console.warn(`room-bench exited with code ${roomCode}`);
@@ -182,6 +232,7 @@ async function run(): Promise<void> {
     "--hz", String(args.hz),
     "--duration", String(args.duration),
     ...tokenArgs,
+    ...serverPidArgs,
   ], benchEnv);
   if (gameplayCode !== 0) {
     console.warn(`gameplay-bench exited with code ${gameplayCode}`);

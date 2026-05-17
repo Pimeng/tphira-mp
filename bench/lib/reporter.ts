@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { MetricsSample, MetricsSummary } from "./metrics.js";
+import type { ServerProcessMetricsSample, ServerProcessMetricsSummary } from "./serverProcessMetrics.js";
 
 export type BenchReport = {
   benchType: string;
@@ -12,6 +13,8 @@ export type BenchReport = {
   errors: Array<{ message: string; count: number }>;
   metricsSamples: MetricsSample[];
   metricsSummary: MetricsSummary;
+  serverMetricsSamples?: ServerProcessMetricsSample[];
+  serverMetricsSummary?: ServerProcessMetricsSummary;
 };
 
 export function printProgress(label: string, current: number, total: number, extra?: string): void {
@@ -46,7 +49,11 @@ export function printBenchHeader(benchType: string, params: Record<string, unkno
   console.log("");
 }
 
-export function printBenchFooter(report: BenchReport, metricsSummary: MetricsSummary): void {
+export function printBenchFooter(
+  report: BenchReport,
+  metricsSummary: MetricsSummary,
+  serverMetricsSummary?: ServerProcessMetricsSummary
+): void {
   console.log(`\n========== Results ==========`);
   for (const [k, v] of Object.entries(report.summary)) {
     console.log(`  ${k}: ${v}`);
@@ -58,6 +65,14 @@ export function printBenchFooter(report: BenchReport, metricsSummary: MetricsSum
   console.log(`  EventLoopDelay p95:  ${metricsSummary.eventLoopDelayP95Max} ms (max)`);
   console.log(`  EventLoopDelay p99:  ${metricsSummary.eventLoopDelayP99Max} ms (max)`);
   console.log(`  EventLoopDelay max:  ${metricsSummary.eventLoopDelayMaxPeak} ms (peak)`);
+
+  if (serverMetricsSummary) {
+    console.log(`\n--- Server Process Metrics ---`);
+    console.log(`  RSS avg/peak:        ${formatBytes(serverMetricsSummary.rssAvg)} / ${formatBytes(serverMetricsSummary.rssPeak)}`);
+    console.log(`  CPU avg/peak:        ${serverMetricsSummary.cpuAvg}% / ${serverMetricsSummary.cpuPeak}%`);
+    console.log(`  Memory avg/peak:     ${serverMetricsSummary.memoryAvg.toFixed(2)}% / ${serverMetricsSummary.memoryPeak.toFixed(2)}%`);
+  }
+
   console.log(`=============================\n`);
 }
 
