@@ -74,13 +74,14 @@ function main() {
 
   const lines: string[] = [];
 
-  lines.push(`# Release Benchmark Report`);
+  lines.push(`# Release Benchmark Report / 发布基准测试报告`);
   lines.push(``);
   lines.push(`> This benchmark was run on GitHub Actions and is intended for version-to-version comparison, not as an absolute production capacity guarantee.`);
+  lines.push(`> 本次基准测试在 GitHub Actions 上运行，仅用于版本间对比，不代表绝对的生产环境容量保证。`);
   lines.push(``);
 
   // --- Benchmark Parameters ---
-  lines.push(`## Benchmark Parameters`);
+  lines.push(`## Benchmark Parameters / 基准测试参数`);
   lines.push(``);
   lines.push(`| Benchmark | Parameters |`);
   lines.push(`|---|---|`);
@@ -96,7 +97,7 @@ function main() {
   lines.push(``);
 
   // --- Summary ---
-  lines.push(`## Results Summary`);
+  lines.push(`## Results Summary / 结果摘要`);
   lines.push(``);
   lines.push(`| Benchmark | Key Metric | Value |`);
   lines.push(`|---|---|---|`);
@@ -118,9 +119,10 @@ function main() {
   lines.push(``);
 
   // --- Client Process Metrics ---
-  lines.push(`## Client Process Metrics`);
+  lines.push(`## Client Process Metrics / 客户端进程指标`);
   lines.push(``);
   lines.push(`Metrics from the **benchmark client process** (not the server under test).`);
+  lines.push(`指标来自 **benchmark 客户端进程**（而非被测服务端）。`);
   lines.push(``);
   lines.push(`| Benchmark | RSS Avg | RSS Peak | HeapUsed Avg | HeapUsed Peak | EL Delay Mean | EL Delay P95 Max |`);
   lines.push(`|---|---|---|---|---|---|---|`);
@@ -134,9 +136,10 @@ function main() {
   lines.push(``);
 
   // --- Server Process Metrics ---
-  lines.push(`## Server Process Metrics`);
+  lines.push(`## Server Process Metrics / 服务端进程指标`);
   lines.push(``);
   lines.push(`Metrics from the **server process under test** (sampled externally via /proc).`);
+  lines.push(`指标来自 **被测服务端进程**（通过外部读取 /proc 采样）。`);
   lines.push(``);
   if (serverMetrics) {
     const s = serverMetrics.summary;
@@ -162,23 +165,30 @@ function main() {
     lines.push(``);
   } else {
     lines.push(`> Server process metrics not available.`);
+    lines.push(`> 服务端进程指标不可用。`);
     lines.push(``);
   }
 
   // --- Notes ---
-  lines.push(`## Notes`);
+  lines.push(`## Notes / 备注`);
   lines.push(``);
   lines.push(`- **Client process metrics** are collected from the benchmark runner process itself (memory usage, event loop delay, etc.).`);
+  lines.push(`  客户端进程指标采集自 benchmark 运行进程本身（内存占用、事件循环延迟等）。`);
   lines.push(`- **Server process metrics** are collected by reading /proc/<pid>/stat and /proc/<pid>/status on Linux.`);
+  lines.push(`  服务端进程指标通过在 Linux 上读取 /proc/<pid>/stat 与 /proc/<pid>/status 采集。`);
   lines.push(`- CPU percentage is relative to a single core (100% = one full core).`);
+  lines.push(`  CPU 占用率以单核为基准（100% = 一个完整核心）。`);
   lines.push(`- Memory percentage is the process RSS as a percentage of total system memory.`);
+  lines.push(`  内存百分比为进程 RSS 占系统总内存的比例。`);
   lines.push(`- GitHub Actions runner performance varies; use these numbers for version-to-version comparison only.`);
+  lines.push(`  GitHub Actions 运行器性能存在波动，这些数据仅供版本间对比参考。`);
   lines.push(``);
 
   const output = lines.join("\n");
   const outputPath = path.join(resultsDir, "performance-report.md");
   fs.writeFileSync(outputPath, output, "utf-8");
-  console.log(`Performance report written to ${outputPath}`);
+  fs.writeFileSync("performance-report.md", output, "utf-8");
+  console.log(`Performance report written to ${outputPath} and performance-report.md`);
 }
 
 main();

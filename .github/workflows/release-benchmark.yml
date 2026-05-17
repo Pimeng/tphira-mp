@@ -5,12 +5,21 @@ on:
     types: [published]
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
   benchmark:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      SERVER_PORT: 12346
+      BENCH_HOST: 127.0.0.1
+      BENCH_DURATION: 60
+      BENCH_TOKEN: bench
+      BENCH_CONNECT_CLIENTS: 300
+      BENCH_CONNECT_RATE: 50
+      BENCH_ROOMS: 50
+      BENCH_PLAYERS_PER_ROOM: 4
+      BENCH_GAMEPLAY_HZ: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -20,132 +29,165 @@ jobs:
         with:
           version: 10
 
-      - name: Setup Node.js 22
+      - name: Setup Node.js 24
         uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: pnpm
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build project
-        run: pnpm run build
-
-      - name: Run benchmark suite
+      - name: Install dependencies and build
         run: |
-          # Prepare server config if missing
+          pnpm install --frozen-lockfile
+          pnpm run build
+
+      - name: Prepare server config
+        run: |
           if [ ! -f server_config.yml ]; then
             cp server_config.example.yml server_config.yml
           fi
-
           mkdir -p bench-results
 
-          # Start mock auth server and capture its URL
-          ./node_modules/.bin/tsx bench/start-mock-auth.ts > mock-auth.url &
-          MOCK_AUTH_PID=$!
-          echo "Mock auth server started, PID=$MOCK_AUTH_PID"
-          sleep 2
-          MOCK_AUTH_URL=$(cat mock-auth.url)
-          echo "Mock auth URL=$MOCK_AUTH_URL"
+      - name: Start services and run benchmarks
+        shell: bash
+        run: |
+          set -euo pipefail
 
-          # Start production server
-          PHIRA_API_ENDPOINT="$MOCK_AUTH_URL" node dist/server/main.js --port 12346 > server.log 2>&1 &
-          SERVER_PID=$!
-          echo "$SERVER_PID" > server.pid
-          echo "Server started, PID=$SERVER_PID"
-          sleep 3
+          # ── Service helpers ───────────────────────────────────────────────
+          start_services() {
+            echo ">>> Starting mock auth server..."
+            ./node_modules/.bin/tsx bench/start-mock-auth.ts > mock-auth.url &
+            MOCK_AUTH_PID=$!
+            echo "Mock auth server started, PID=$MOCK_AUTH_PID"
+            sleep 2
+            MOCK_AUTH_URL=$(cat mock-auth.url)
+            echo "Mock auth URL=$MOCK_AUTH_URL"
+            export PHIRA_API_ENDPOINT="$MOCK_AUTH_URL"
 
-          # Start server process metrics recorder
-          ./node_modules/.bin/tsx bench/server-metrics-recorder.ts \
-            --pid "$SERVER_PID" \
-            --output bench-results/server-process-metrics.json \
-            --stop-file bench-results/.stop-metrics &
-          METRICS_PID=$!
-          echo "$METRICS_PID" > metrics.pid
-          echo "Metrics recorder started, PID=$METRICS_PID"
+            echo ""
+            echo ">>> Starting production server..."
+            node dist/server/main.js --port "$SERVER_PORT" > server.log 2>&1 &
+            SERVER_PID=$!
+            echo "Server started, PID=$SERVER_PID"
+            sleep 3
 
-          # Run benchmarks
-          BENCH_TOKEN="bench"
+            echo ""
+            echo ">>> Starting metrics recorder..."
+            ./node_modules/.bin/tsx bench/server-metrics-recorder.ts \
+              --pid "$SERVER_PID" \
+              --output bench-results/server-process-metrics.json \
+              --stop-file bench-results/.stop-metrics &
+            METRICS_PID=$!
+            echo "Metrics recorder started, PID=$METRICS_PID"
+          }
 
-          echo ""
-          echo ">>> Running connect-bench <<<"
-          pnpm run bench:connect -- \
-            --host 127.0.0.1 --port 12346 \
-            --clients 300 --rate 50 --duration 60 \
-            --token "$BENCH_TOKEN"
+          stop_services() {
+            echo ""
+            echo ">>> Stopping background processes..."
 
-          echo ""
-          echo ">>> Running room-bench <<<"
-          pnpm run bench:room -- \
-            --host 127.0.0.1 --port 12346 \
-            --rooms 50 --players-per-room 4 --duration 60 \
-            --token "$BENCH_TOKEN"
-
-          echo ""
-          echo ">>> Running gameplay-bench <<<"
-          pnpm run bench:gameplay -- \
-            --host 127.0.0.1 --port 12346 \
-            --rooms 50 --players-per-room 4 --hz 20 --duration 60 \
-            --token "$BENCH_TOKEN"
-
-          # Stop metrics recorder (graceful with timeout, avoid wait hang)
-          if [ -f metrics.pid ]; then
-            METRICS_PID="$(cat metrics.pid)"
-            echo "Stopping metrics recorder (PID=$METRICS_PID)..."
-            # Signal stop via file (fallback if SIGTERM doesn't propagate)
-            touch bench-results/.stop-metrics 2>/dev/null || true
-            sleep 1
-            kill "$METRICS_PID" 2>/dev/null || true
-            for i in $(seq 1 10); do
-              if ! kill -0 "$METRICS_PID" 2>/dev/null; then
-                echo "Metrics recorder stopped."
-                break
-              fi
-              sleep 0.5
-            done
-            kill -9 "$METRICS_PID" 2>/dev/null || true
-            rm -f bench-results/.stop-metrics
-          fi
-
-          # Stop server (graceful with timeout)
-          if [ -f server.pid ]; then
-            SERVER_PID="$(cat server.pid)"
-            echo "Stopping server (PID=$SERVER_PID)..."
-            kill "$SERVER_PID" 2>/dev/null || true
-            for i in $(seq 1 10); do
-              if ! kill -0 "$SERVER_PID" 2>/dev/null; then
-                echo "Server stopped."
-                break
-              fi
-              sleep 0.5
-            done
-            kill -9 "$SERVER_PID" 2>/dev/null || true
-          fi
-
-          # Stop mock auth server (graceful with timeout)
-          echo "Stopping mock auth server (PID=$MOCK_AUTH_PID)..."
-          kill "$MOCK_AUTH_PID" 2>/dev/null || true
-          for i in $(seq 1 10); do
-            if ! kill -0 "$MOCK_AUTH_PID" 2>/dev/null; then
-              echo "Mock auth server stopped."
-              break
+            if [ -n "${METRICS_PID:-}" ] && kill -0 "$METRICS_PID" 2>/dev/null; then
+              echo "Stopping metrics recorder (PID=$METRICS_PID)..."
+              touch bench-results/.stop-metrics 2>/dev/null || true
+              sleep 1
+              kill "$METRICS_PID" 2>/dev/null || true
+              for i in $(seq 1 10); do
+                if ! kill -0 "$METRICS_PID" 2>/dev/null; then
+                  echo "Metrics recorder stopped."
+                  break
+                fi
+                sleep 0.5
+              done
+              kill -9 "$METRICS_PID" 2>/dev/null || true
+              rm -f bench-results/.stop-metrics
             fi
-            sleep 0.5
-          done
-          kill -9 "$MOCK_AUTH_PID" 2>/dev/null || true
 
-          # Copy server log into bench-results
-          cp server.log bench-results/server.log
+            if [ -n "${SERVER_PID:-}" ] && kill -0 "$SERVER_PID" 2>/dev/null; then
+              echo "Stopping server (PID=$SERVER_PID)..."
+              kill "$SERVER_PID" 2>/dev/null || true
+              for i in $(seq 1 10); do
+                if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+                  echo "Server stopped."
+                  break
+                fi
+                sleep 0.5
+              done
+              kill -9 "$SERVER_PID" 2>/dev/null || true
+            fi
 
-          # Generate performance report
-          echo ""
-          echo "Generating performance report..."
-          ./node_modules/.bin/tsx bench/generate-performance-report.ts
+            if [ -n "${MOCK_AUTH_PID:-}" ] && kill -0 "$MOCK_AUTH_PID" 2>/dev/null; then
+              echo "Stopping mock auth server (PID=$MOCK_AUTH_PID)..."
+              kill "$MOCK_AUTH_PID" 2>/dev/null || true
+              for i in $(seq 1 10); do
+                if ! kill -0 "$MOCK_AUTH_PID" 2>/dev/null; then
+                  echo "Mock auth server stopped."
+                  break
+                fi
+                sleep 0.5
+              done
+              kill -9 "$MOCK_AUTH_PID" 2>/dev/null || true
+            fi
+          }
 
-          echo ""
-          echo "Benchmark suite complete."
-        continue-on-error: true
+          copy_logs() {
+            if [ -f server.log ]; then
+              cp server.log bench-results/server.log || true
+            fi
+          }
+
+          generate_report() {
+            echo ""
+            echo ">>> Generating performance report..."
+            ./node_modules/.bin/tsx bench/generate-performance-report.ts || echo "Warning: performance report generation failed."
+          }
+
+          cleanup() {
+            local exit_code=$?
+            stop_services
+            copy_logs
+            generate_report
+            echo ""
+            echo "Benchmark suite finished with exit code $exit_code."
+            exit $exit_code
+          }
+          trap cleanup EXIT INT TERM
+
+          # ── Benchmark helpers ─────────────────────────────────────────────
+          run_benchmarks() {
+            echo ""
+            echo ">>> Running connect-bench <<<"
+            pnpm run bench:connect -- \
+              --host "$BENCH_HOST" --port "$SERVER_PORT" \
+              --clients "$BENCH_CONNECT_CLIENTS" --rate "$BENCH_CONNECT_RATE" --duration "$BENCH_DURATION" \
+              --token "$BENCH_TOKEN"
+
+            echo ""
+            echo ">>> Running room-bench <<<"
+            pnpm run bench:room -- \
+              --host "$BENCH_HOST" --port "$SERVER_PORT" \
+              --rooms "$BENCH_ROOMS" --players-per-room "$BENCH_PLAYERS_PER_ROOM" --duration "$BENCH_DURATION" \
+              --token "$BENCH_TOKEN"
+
+            echo ""
+            echo ">>> Running gameplay-bench <<<"
+            pnpm run bench:gameplay -- \
+              --host "$BENCH_HOST" --port "$SERVER_PORT" \
+              --rooms "$BENCH_ROOMS" --players-per-room "$BENCH_PLAYERS_PER_ROOM" --hz "$BENCH_GAMEPLAY_HZ" --duration "$BENCH_DURATION" \
+              --token "$BENCH_TOKEN"
+          }
+
+          # ── Main ──────────────────────────────────────────────────────────
+          main() {
+            start_services
+            run_benchmarks
+            echo ""
+            echo "All benchmarks completed successfully."
+          }
+
+          main
+
+      - name: Package results
+        if: always()
+        run: |
+          tar -czf benchmark-results.tar.gz bench-results/ server.log performance-report.md || true
 
       - name: Upload benchmark results artifact
         if: always()
@@ -156,14 +198,99 @@ jobs:
             bench-results/
             server.log
             performance-report.md
+            benchmark-results.tar.gz
+          if-no-files-found: ignore
 
-      - name: Package results for release
+      - name: Write Job Summary
         if: always()
         run: |
-          tar -czf benchmark-results.tar.gz bench-results/ server.log
+          {
+            echo "## 📊 Benchmark Summary"
+            echo ""
+            if [ -f performance-report.md ]; then
+              cat performance-report.md
+            else
+              echo "> ⚠️ performance-report.md not found."
+            fi
+            echo ""
+            echo "---"
+            echo "*Triggered by: ${{ github.event_name }}* · *Run: ${{ github.run_id }}*"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Generate AI Summary
+        if: always()
+        env:
+          LLM_BASEURL: ${{ vars.LLM_BASEURL }}
+          LLM_MODEL: ${{ vars.LLM_MODEL }}
+          LLM_KEY: ${{ secrets.LLM_KEY }}
+        run: |
+          if [ -z "$LLM_BASEURL" ] || [ -z "$LLM_MODEL" ] || [ -z "$LLM_KEY" ]; then
+            echo "⚠️ LLM configuration missing, skipping AI summary."
+            exit 0
+          fi
+
+          if [ ! -f performance-report.md ]; then
+            echo "⚠️ performance-report.md not found, skipping AI summary."
+            exit 0
+          fi
+
+          API_ENDPOINT="${LLM_BASEURL%/}/chat/completions"
+          REPORT_CONTENT=$(cat performance-report.md)
+
+          PAYLOAD=$(jq -n \
+            --arg model "$LLM_MODEL" \
+            --arg content "$REPORT_CONTENT" \
+            '{
+              model: $model,
+              messages: [
+                {role: "system", content: "You are a DevOps performance analyst. Summarize the following benchmark report concisely. Highlight any regressions, anomalies, or notable metrics. Provide the summary in both English and Chinese."},
+                {role: "user", content: $content}
+              ],
+              temperature: 0.7,
+              max_tokens: 1500
+            }')
+
+          RESPONSE=$(curl -s -w "\n%{http_code}" "$API_ENDPOINT" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $LLM_KEY" \
+            -d "$PAYLOAD")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+
+          if [ "$HTTP_CODE" -ne 200 ]; then
+            echo "⚠️ LLM API request failed (HTTP $HTTP_CODE)."
+            echo "Response body: $BODY"
+            exit 0
+          fi
+
+          AI_SUMMARY=$(echo "$BODY" | jq -r '.choices[0].message.content // empty')
+
+          if [ -n "$AI_SUMMARY" ]; then
+            {
+              echo ""
+              echo "## 🤖 AI Summary / AI 智能总结"
+              echo ""
+              echo "$AI_SUMMARY"
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "AI summary appended to job summary."
+          else
+            echo "⚠️ LLM returned empty content."
+          fi
+
+  release-asset:
+    needs: benchmark
+    if: github.event_name == 'release' && always() && needs.benchmark.result != 'cancelled'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download benchmark artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: benchmark-results
 
       - name: Upload to release assets
-        if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
           files: benchmark-results.tar.gz
