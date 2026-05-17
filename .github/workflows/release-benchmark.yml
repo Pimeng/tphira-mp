@@ -160,7 +160,7 @@ jobs:
       - name: Package results for release
         if: always()
         run: |
-          tar -czf benchmark-results.tar.gz bench-results/ server.log performance-report.md
+          tar -czf benchmark-results.tar.gz bench-results/ server.log
 
       - name: Upload to release assets
         if: github.event_name == 'release'

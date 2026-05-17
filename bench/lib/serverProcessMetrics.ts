@@ -64,6 +64,17 @@ function parseProcStatus(pid: number): { vmRssKb: number; vmSizeKb: number } | n
   }
 }
 
+function parseMemInfo(): { memTotalKb: number } | null {
+  try {
+    const data = fs.readFileSync("/proc/meminfo", "utf-8");
+    const match = data.match(/^MemTotal:\s+(\d+)\s+kB/im);
+    if (!match) return null;
+    return { memTotalKb: Number(match[1]) };
+  } catch {
+    return null;
+  }
+}
+
 function parseSystemUptime(): number | null {
   try {
     const data = fs.readFileSync("/proc/uptime", "utf-8").trim();
