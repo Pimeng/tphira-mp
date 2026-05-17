@@ -8,6 +8,7 @@ function parseArgs(argv: string[]) {
   let pid: number | undefined;
   let output = "bench-results/server-process-metrics.json";
   let intervalMs = 1000;
+  let stopFile: string | undefined;
 
   for (let i = 0; i < argv.length; i++) {
     switch (argv[i]) {
@@ -20,10 +21,13 @@ function parseArgs(argv: string[]) {
       case "--interval":
         intervalMs = Number(argv[++i]) || intervalMs;
         break;
+      case "--stop-file":
+        stopFile = argv[++i];
+        break;
     }
   }
 
-  return { pid, output, intervalMs };
+  return { pid, output, intervalMs, stopFile };
 }
 
 async function main() {
@@ -31,7 +35,7 @@ async function main() {
 
   if (!args.pid || Number.isNaN(args.pid)) {
     console.error(
-      "Usage: tsx bench/server-metrics-recorder.ts --pid <pid> --output <path> [--interval <ms>]"
+      "Usage: tsx bench/server-metrics-recorder.ts --pid <pid> --output <path> [--interval <ms>] [--stop-file <path>]"
     );
     process.exit(1);
   }
@@ -71,6 +75,16 @@ async function main() {
 
   process.once("SIGINT", shutdown);
   process.once("SIGTERM", shutdown);
+
+  // Fallback: if a stop-file is provided, poll for its existence
+  if (args.stopFile) {
+    const stopTimer = setInterval(() => {
+      if (fs.existsSync(args.stopFile!)) {
+        clearInterval(stopTimer);
+        shutdown();
+      }
+    }, 500);
+  }
 }
 
 main().catch((e) => {

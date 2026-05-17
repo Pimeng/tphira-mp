@@ -42,7 +42,7 @@ jobs:
           mkdir -p bench-results
 
           # Start mock auth server and capture its URL
-          pnpm tsx bench/start-mock-auth.ts > mock-auth.url &
+          ./node_modules/.bin/tsx bench/start-mock-auth.ts > mock-auth.url &
           MOCK_AUTH_PID=$!
           echo "Mock auth server started, PID=$MOCK_AUTH_PID"
           sleep 2
@@ -57,7 +57,10 @@ jobs:
           sleep 3
 
           # Start server process metrics recorder
-          pnpm tsx bench/server-metrics-recorder.ts --pid "$SERVER_PID" --output bench-results/server-process-metrics.json &
+          ./node_modules/.bin/tsx bench/server-metrics-recorder.ts \
+            --pid "$SERVER_PID" \
+            --output bench-results/server-process-metrics.json \
+            --stop-file bench-results/.stop-metrics &
           METRICS_PID=$!
           echo "$METRICS_PID" > metrics.pid
           echo "Metrics recorder started, PID=$METRICS_PID"
@@ -86,26 +89,51 @@ jobs:
             --rooms 50 --players-per-room 4 --hz 20 --duration 60 \
             --token "$BENCH_TOKEN"
 
-          # Stop metrics recorder
+          # Stop metrics recorder (graceful with timeout, avoid wait hang)
           if [ -f metrics.pid ]; then
             METRICS_PID="$(cat metrics.pid)"
             echo "Stopping metrics recorder (PID=$METRICS_PID)..."
-            kill "$METRICS_PID" || true
-            wait "$METRICS_PID" || true
+            # Signal stop via file (fallback if SIGTERM doesn't propagate)
+            touch bench-results/.stop-metrics 2>/dev/null || true
+            sleep 1
+            kill "$METRICS_PID" 2>/dev/null || true
+            for i in $(seq 1 10); do
+              if ! kill -0 "$METRICS_PID" 2>/dev/null; then
+                echo "Metrics recorder stopped."
+                break
+              fi
+              sleep 0.5
+            done
+            kill -9 "$METRICS_PID" 2>/dev/null || true
+            rm -f bench-results/.stop-metrics
           fi
 
-          # Stop server
+          # Stop server (graceful with timeout)
           if [ -f server.pid ]; then
             SERVER_PID="$(cat server.pid)"
             echo "Stopping server (PID=$SERVER_PID)..."
-            kill "$SERVER_PID" || true
-            wait "$SERVER_PID" || true
+            kill "$SERVER_PID" 2>/dev/null || true
+            for i in $(seq 1 10); do
+              if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+                echo "Server stopped."
+                break
+              fi
+              sleep 0.5
+            done
+            kill -9 "$SERVER_PID" 2>/dev/null || true
           fi
 
-          # Stop mock auth server
+          # Stop mock auth server (graceful with timeout)
           echo "Stopping mock auth server (PID=$MOCK_AUTH_PID)..."
-          kill "$MOCK_AUTH_PID" || true
-          wait "$MOCK_AUTH_PID" || true
+          kill "$MOCK_AUTH_PID" 2>/dev/null || true
+          for i in $(seq 1 10); do
+            if ! kill -0 "$MOCK_AUTH_PID" 2>/dev/null; then
+              echo "Mock auth server stopped."
+              break
+            fi
+            sleep 0.5
+          done
+          kill -9 "$MOCK_AUTH_PID" 2>/dev/null || true
 
           # Copy server log into bench-results
           cp server.log bench-results/server.log
