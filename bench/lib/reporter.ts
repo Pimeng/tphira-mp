@@ -70,7 +70,9 @@ export function printBenchFooter(
     console.log(`\n--- Server Process Metrics ---`);
     console.log(`  RSS avg/peak:        ${formatBytes(serverMetricsSummary.rssAvg)} / ${formatBytes(serverMetricsSummary.rssPeak)}`);
     console.log(`  CPU avg/peak:        ${serverMetricsSummary.cpuAvg}% / ${serverMetricsSummary.cpuPeak}%`);
-    console.log(`  Memory avg/peak:     ${serverMetricsSummary.memoryAvg.toFixed(2)}% / ${serverMetricsSummary.memoryPeak.toFixed(2)}%`);
+    if (serverMetricsSummary.memoryPercentAvg !== undefined) {
+      console.log(`  Memory%% avg/peak:   ${serverMetricsSummary.memoryPercentAvg.toFixed(2)}% / ${serverMetricsSummary.memoryPercentPeak?.toFixed(2)}%`);
+    }
   }
 
   console.log(`=============================\n`);

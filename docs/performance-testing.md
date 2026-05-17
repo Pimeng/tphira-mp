@@ -107,7 +107,7 @@ bench-results/
   server.log
 ```
 
-### 客户端进程指标（压测进程自身）
+### 客户端进程指标（Client Process Metrics）
 
 每个 bench JSON 报告包含以下字段：
 - `benchType`：压测类型
@@ -118,18 +118,23 @@ bench-results/
 - `metricsSamples`：**压测客户端进程**指标采样（每秒采集）
 - `metricsSummary`：**压测客户端进程**指标汇总（RSS、堆内存、事件循环延迟等）
 
-> **重要**：`metricsSamples` 和 `metricsSummary` 采集的是**压测客户端进程**的指标，**不是服务端指标**。
+> **重要**：`metricsSamples` 和 `metricsSummary` 采集的是**压测客户端进程**的指标（即运行 `bench:connect`/`bench:room`/`bench:gameplay` 脚本自身的 Node.js 进程），**不是被压测的服务端指标**。观察服务端真实资源占用请参考 `server-process-metrics.json`。
 
-### 服务端进程指标
+### 服务端进程指标（Server Process Metrics）
 
-Release benchmark 工作流会额外生成 `server-process-metrics.json`，包含被压测服务端进程的真实资源占用：
+Release benchmark 工作流会额外生成 `server-process-metrics.json`，包含**被压测服务端进程**的真实资源占用：
 
 - `pid`：服务端进程 PID
 - `startedAt` / `endedAt`：采集起止时间
-- `samples`：每秒采样数组，包含 `rssBytes`、`vmSizeBytes`、`cpuPercent`、`uptimeSeconds`
-- `summary`：汇总统计，包含 `rssMinBytes`、`rssMaxBytes`、`rssAvgBytes`、`vmSizeMaxBytes`、`cpuAvgPercent`、`cpuMaxPercent`
+- `samples`：每秒采样数组，包含 `rssBytes`、`cpuPercent`、`memoryPercent`、`uptimeSeconds`
+- `summary`：汇总统计
+  - `rssAvgBytes` / `rssMaxBytes` / `rssMinBytes`：RSS 内存
+  - `cpuAvgPercent` / `cpuMaxPercent`：CPU 占用（相对单核）
+  - `memoryPercentAvg` / `memoryPercentPeak`：进程 RSS 占系统总内存百分比
 
-服务端进程指标在 Linux 下通过读取 `/proc/<pid>/stat` 和 `/proc/<pid>/status` 计算得出。非 Linux 环境可能无法计算 `cpuPercent`，此时该字段会缺失。
+> **注意**：`vmSizeBytes` 也包含在采样中，但**不作为重点展示**，因为 Node/V8 的虚拟地址空间（VmSize）通常很大，不能代表真实物理内存占用。报告以 **RSS** 为准。
+
+服务端进程指标在 Linux 下通过读取 `/proc/<pid>/stat` 和 `/proc/<pid>/status` 计算得出。非 Linux 环境可能无法计算 `cpuPercent` 和 `memoryPercent`，此时对应字段会缺失。
 
 你也可以手动启动指标采集器：
 

@@ -8,6 +8,7 @@ export type ServerProcessMetricSample = {
   rssBytes: number;
   vmSizeBytes?: number;
   cpuPercent?: number;
+  memoryPercent?: number;
   uptimeSeconds?: number;
 };
 
@@ -113,6 +114,13 @@ function getLinuxMetrics(
     }
   }
 
+  let memoryPercent: number | undefined;
+  const memInfo = parseMemInfo();
+  if (memInfo) {
+    memoryPercent = Math.round((status.vmRssKb / memInfo.memTotalKb) * 100 * 100) / 100;
+    if (memoryPercent < 0) memoryPercent = 0;
+  }
+
   let uptimeSeconds: number | undefined;
   const systemUptime = parseSystemUptime();
   if (systemUptime !== null) {
@@ -127,6 +135,7 @@ function getLinuxMetrics(
       rssBytes,
       vmSizeBytes,
       cpuPercent,
+      memoryPercent,
       uptimeSeconds,
     },
     state: { utime: stat.utime, stime: stat.stime, timestamp: now },
@@ -188,14 +197,14 @@ export type ServerProcessMetricsSummary = {
   vmSizeMaxBytes?: number;
   cpuAvgPercent?: number;
   cpuMaxPercent?: number;
+  memoryPercentAvg?: number;
+  memoryPercentPeak?: number;
 
   // Old fields (backward compatibility for existing bench scripts / reporter)
   rssAvg: number;
   rssPeak: number;
   cpuAvg: number;
   cpuPeak: number;
-  memoryAvg: number;
-  memoryPeak: number;
 };
 
 export function summarizeServerProcessMetrics(
@@ -211,8 +220,6 @@ export function summarizeServerProcessMetrics(
       rssPeak: 0,
       cpuAvg: 0,
       cpuPeak: 0,
-      memoryAvg: 0,
-      memoryPeak: 0,
     };
   }
 
@@ -235,6 +242,14 @@ export function summarizeServerProcessMetrics(
     : undefined;
   const cpuMax = cpuValues.length > 0 ? Math.max(...cpuValues) : undefined;
 
+  const memoryValues = samples
+    .map((s) => s.memoryPercent)
+    .filter((v): v is number => v !== undefined);
+  const memoryAvg = memoryValues.length > 0
+    ? memoryValues.reduce((a, b) => a + b, 0) / memoryValues.length
+    : undefined;
+  const memoryPeak = memoryValues.length > 0 ? Math.max(...memoryValues) : undefined;
+
   const out: ServerProcessMetricsSummary = {
     samples: samples.length,
     rssMinBytes: Math.round(rssMin),
@@ -244,8 +259,6 @@ export function summarizeServerProcessMetrics(
     rssPeak: Math.round(rssMax),
     cpuAvg: cpuAvg !== undefined ? Math.round(cpuAvg * 100) / 100 : 0,
     cpuPeak: cpuMax !== undefined ? Math.round(cpuMax * 100) / 100 : 0,
-    memoryAvg: 0,
-    memoryPeak: 0,
   };
 
   if (vmSizeMax !== undefined) {
@@ -256,6 +269,12 @@ export function summarizeServerProcessMetrics(
   }
   if (cpuMax !== undefined) {
     out.cpuMaxPercent = Math.round(cpuMax * 100) / 100;
+  }
+  if (memoryAvg !== undefined) {
+    out.memoryPercentAvg = Math.round(memoryAvg * 100) / 100;
+  }
+  if (memoryPeak !== undefined) {
+    out.memoryPercentPeak = Math.round(memoryPeak * 100) / 100;
   }
 
   return out;

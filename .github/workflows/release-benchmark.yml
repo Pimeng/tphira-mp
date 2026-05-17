@@ -138,6 +138,11 @@ jobs:
           # Copy server log into bench-results
           cp server.log bench-results/server.log
 
+          # Generate performance report
+          echo ""
+          echo "Generating performance report..."
+          ./node_modules/.bin/tsx bench/generate-performance-report.ts
+
           echo ""
           echo "Benchmark suite complete."
         continue-on-error: true
@@ -150,11 +155,12 @@ jobs:
           path: |
             bench-results/
             server.log
+            performance-report.md
 
       - name: Package results for release
         if: always()
         run: |
-          tar -czf benchmark-results.tar.gz bench-results/ server.log
+          tar -czf benchmark-results.tar.gz bench-results/ server.log performance-report.md
 
       - name: Upload to release assets
         if: github.event_name == 'release'
