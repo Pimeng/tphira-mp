@@ -206,14 +206,9 @@ export class Session {
         const existing = this.state.users.get(me.id);
         if (existing) {
           let staleSession: Session | null = null;
-          if (existing.session) {
-            const sock = existing.session.socket;
-            if (sock.destroyed || sock.readyState !== "open") {
-              staleSession = existing.session;
-              existing.setSession(null);
-            } else {
-              throw new Error("auth-account-already-online");
-            }
+          if (existing.session && existing.session !== this) {
+            staleSession = existing.session;
+            existing.setSession(null);
           }
           existing.setSession(this);
           return { user: existing, staleSession };
