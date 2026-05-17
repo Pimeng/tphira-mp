@@ -34,10 +34,84 @@ jobs:
 
       - name: Run benchmark suite
         run: |
-          pnpm bench -- \
-            --clients 300 --rate 50 \
-            --rooms 50 --players-per-room 4 \
-            --hz 20 --duration 60
+          # Prepare server config if missing
+          if [ ! -f server_config.yml ]; then
+            cp server_config.example.yml server_config.yml
+          fi
+
+          mkdir -p bench-results
+
+          # Start mock auth server and capture its URL
+          pnpm tsx bench/start-mock-auth.ts > mock-auth.url &
+          MOCK_AUTH_PID=$!
+          echo "Mock auth server started, PID=$MOCK_AUTH_PID"
+          sleep 2
+          MOCK_AUTH_URL=$(cat mock-auth.url)
+          echo "Mock auth URL=$MOCK_AUTH_URL"
+
+          # Start production server
+          PHIRA_API_ENDPOINT="$MOCK_AUTH_URL" node dist/server/main.js --port 12346 > server.log 2>&1 &
+          SERVER_PID=$!
+          echo "$SERVER_PID" > server.pid
+          echo "Server started, PID=$SERVER_PID"
+          sleep 3
+
+          # Start server process metrics recorder
+          pnpm tsx bench/server-metrics-recorder.ts --pid "$SERVER_PID" --output bench-results/server-process-metrics.json &
+          METRICS_PID=$!
+          echo "$METRICS_PID" > metrics.pid
+          echo "Metrics recorder started, PID=$METRICS_PID"
+
+          # Run benchmarks
+          BENCH_TOKEN="bench"
+
+          echo ""
+          echo ">>> Running connect-bench <<<"
+          pnpm run bench:connect -- \
+            --host 127.0.0.1 --port 12346 \
+            --clients 300 --rate 50 --duration 60 \
+            --token "$BENCH_TOKEN"
+
+          echo ""
+          echo ">>> Running room-bench <<<"
+          pnpm run bench:room -- \
+            --host 127.0.0.1 --port 12346 \
+            --rooms 50 --players-per-room 4 --duration 60 \
+            --token "$BENCH_TOKEN"
+
+          echo ""
+          echo ">>> Running gameplay-bench <<<"
+          pnpm run bench:gameplay -- \
+            --host 127.0.0.1 --port 12346 \
+            --rooms 50 --players-per-room 4 --hz 20 --duration 60 \
+            --token "$BENCH_TOKEN"
+
+          # Stop metrics recorder
+          if [ -f metrics.pid ]; then
+            METRICS_PID="$(cat metrics.pid)"
+            echo "Stopping metrics recorder (PID=$METRICS_PID)..."
+            kill "$METRICS_PID" || true
+            wait "$METRICS_PID" || true
+          fi
+
+          # Stop server
+          if [ -f server.pid ]; then
+            SERVER_PID="$(cat server.pid)"
+            echo "Stopping server (PID=$SERVER_PID)..."
+            kill "$SERVER_PID" || true
+            wait "$SERVER_PID" || true
+          fi
+
+          # Stop mock auth server
+          echo "Stopping mock auth server (PID=$MOCK_AUTH_PID)..."
+          kill "$MOCK_AUTH_PID" || true
+          wait "$MOCK_AUTH_PID" || true
+
+          # Copy server log into bench-results
+          cp server.log bench-results/server.log
+
+          echo ""
+          echo "Benchmark suite complete."
         continue-on-error: true
 
       - name: Upload benchmark results artifact
@@ -47,11 +121,12 @@ jobs:
           name: benchmark-results
           path: |
             bench-results/
+            server.log
 
       - name: Package results for release
         if: always()
         run: |
-          tar -czf benchmark-results.tar.gz bench-results/
+          tar -czf benchmark-results.tar.gz bench-results/ server.log
 
       - name: Upload to release assets
         if: github.event_name == 'release'

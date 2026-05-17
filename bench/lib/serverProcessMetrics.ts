@@ -1,18 +1,26 @@
 import fs from "node:fs";
-import os from "node:os";
 import { execSync } from "node:child_process";
 
-export type ServerProcessMetricsSample = {
+// New sample type (requested API)
+export type ServerProcessMetricSample = {
   timestamp: number;
-  rss: number; // bytes
-  cpuPercent: number; // percentage relative to a single core (0-100+)
-  memoryPercent: number; // 0-100
-  eventLoopDelay?: number; // ms, if the server exposes it
+  pid: number;
+  rssBytes: number;
+  vmSizeBytes?: number;
+  cpuPercent?: number;
+  uptimeSeconds?: number;
 };
+
+// Backward-compatible alias used by existing bench scripts
+export type ServerProcessMetricsSample = ServerProcessMetricSample;
 
 export type ServerProcessMetricsCollector = {
   start: () => void;
-  stop: () => ServerProcessMetricsSample[];
+  stop: () => ServerProcessMetricSample[];
+};
+
+export type ServerProcessMetricsCollectorOptions = {
+  intervalMs?: number;
 };
 
 type ProcState = {
@@ -21,41 +29,46 @@ type ProcState = {
   timestamp: number;
 };
 
-function parseProcStat(pid: number): { utime: number; stime: number } | null {
+function parseProcStat(pid: number): { utime: number; stime: number; starttime: number } | null {
   try {
     const data = fs.readFileSync(`/proc/${pid}/stat`, "utf-8").trim();
-    // pid (comm) state ppid pgrp session tty_nr tpgid flags minflt cminflt majflt cmajflt utime stime ...
+    // pid (comm) state ppid pgrp session tty_nr tpgid flags minflt cminflt majflt cmajflt utime stime cutime cstime priority nice num_threads itrealvalue starttime ...
     const match = data.match(/^\d+ \((.+)\) \S (.*)$/);
     if (!match) return null;
     const parts = match[2]!.split(" ");
-    // parts indices after state:
-    // 0=ppid,1=pgrp,2=session,3=tty_nr,4=tpgid,5=flags,6=minflt,7=cminflt,8=majflt,9=cmajflt,10=utime,11=stime
+    // 0=ppid,1=pgrp,2=session,3=tty_nr,4=tpgid,5=flags,6=minflt,7=cminflt,8=majflt,9=cmajflt,
+    // 10=utime,11=stime,12=cutime,13=cstime,14=priority,15=nice,16=num_threads,17=itrealvalue,18=starttime
     const utime = Number(parts[10]);
     const stime = Number(parts[11]);
-    if (Number.isNaN(utime) || Number.isNaN(stime)) return null;
-    return { utime, stime };
+    const starttime = Number(parts[18]);
+    if (Number.isNaN(utime) || Number.isNaN(stime) || Number.isNaN(starttime)) return null;
+    return { utime, stime, starttime };
   } catch {
     return null;
   }
 }
 
-function parseProcStatus(pid: number): { vmRssKb: number } | null {
+function parseProcStatus(pid: number): { vmRssKb: number; vmSizeKb: number } | null {
   try {
     const data = fs.readFileSync(`/proc/${pid}/status`, "utf-8");
-    const match = data.match(/^VmRSS:\s+(\d+)\s+kB/im);
-    if (!match) return null;
-    return { vmRssKb: Number(match[1]) };
+    const rssMatch = data.match(/^VmRSS:\s+(\d+)\s+kB/im);
+    const sizeMatch = data.match(/^VmSize:\s+(\d+)\s+kB/im);
+    if (!rssMatch) return null;
+    return {
+      vmRssKb: Number(rssMatch[1]),
+      vmSizeKb: sizeMatch ? Number(sizeMatch[1]) : 0,
+    };
   } catch {
     return null;
   }
 }
 
-function parseMemInfo(): { memTotalKb: number } | null {
+function parseSystemUptime(): number | null {
   try {
-    const data = fs.readFileSync("/proc/meminfo", "utf-8");
-    const match = data.match(/^MemTotal:\s+(\d+)\s+kB/im);
-    if (!match) return null;
-    return { memTotalKb: Number(match[1]) };
+    const data = fs.readFileSync("/proc/uptime", "utf-8").trim();
+    const seconds = Number(data.split(/\s+/)[0]);
+    if (Number.isNaN(seconds)) return null;
+    return seconds;
   } catch {
     return null;
   }
@@ -63,113 +76,72 @@ function parseMemInfo(): { memTotalKb: number } | null {
 
 function getClkTck(): number {
   try {
-    const out = execSync("getconf CLK_TCK", { encoding: "utf-8", timeout: 5000, stdio: ["pipe", "pipe", "pipe"] }).trim();
+    const out = execSync("getconf CLK_TCK", {
+      encoding: "utf-8",
+      timeout: 5000,
+      stdio: ["pipe", "pipe", "pipe"],
+    }).trim();
     const n = Number(out);
     if (!Number.isNaN(n) && n > 0) return n;
   } catch {
     // fallthrough
   }
-  return 100; // default on virtually all Linux systems
+  return 100;
 }
 
 function getLinuxMetrics(
   pid: number,
   prev: ProcState | null,
   clkTck: number
-): { sample: ServerProcessMetricsSample; state: ProcState } | null {
+): { sample: ServerProcessMetricSample; state: ProcState } | null {
   const stat = parseProcStat(pid);
   const status = parseProcStatus(pid);
   if (!stat || !status) return null;
 
   const now = Date.now();
-  const rss = status.vmRssKb * 1024;
+  const rssBytes = status.vmRssKb * 1024;
+  const vmSizeBytes = status.vmSizeKb > 0 ? status.vmSizeKb * 1024 : undefined;
 
-  let cpuPercent = 0;
+  let cpuPercent: number | undefined;
   if (prev) {
     const ticksDiff = stat.utime + stat.stime - (prev.utime + prev.stime);
     const wallDiffMs = now - prev.timestamp;
     if (wallDiffMs > 0) {
       const wallDiffSec = wallDiffMs / 1000;
-      cpuPercent = (ticksDiff / clkTck) / wallDiffSec * 100;
-      if (cpuPercent < 0) cpuPercent = 0;
+      const raw = (ticksDiff / clkTck) / wallDiffSec * 100;
+      cpuPercent = raw < 0 ? 0 : Math.round(raw * 100) / 100;
     }
   }
 
-  const memInfo = parseMemInfo();
-  const memoryPercent = memInfo ? (status.vmRssKb / memInfo.memTotalKb) * 100 : 0;
+  let uptimeSeconds: number | undefined;
+  const systemUptime = parseSystemUptime();
+  if (systemUptime !== null) {
+    uptimeSeconds = Math.round((systemUptime - stat.starttime / clkTck) * 100) / 100;
+    if (uptimeSeconds < 0) uptimeSeconds = 0;
+  }
 
   return {
     sample: {
       timestamp: now,
-      rss,
-      cpuPercent: Math.round(cpuPercent * 100) / 100,
-      memoryPercent: Math.round(memoryPercent * 100) / 100,
+      pid,
+      rssBytes,
+      vmSizeBytes,
+      cpuPercent,
+      uptimeSeconds,
     },
     state: { utime: stat.utime, stime: stat.stime, timestamp: now },
   };
 }
 
-function getWindowsMetrics(
-  pid: number,
-  prev: ProcState | null
-): { sample: ServerProcessMetricsSample; state: ProcState } | null {
-  try {
-    const psCmd = `powershell -NoProfile -Command "Get-Process -Id ${pid} | Select-Object WorkingSet,TotalProcessorTime | ConvertTo-Json"`;
-    const output = execSync(psCmd, { encoding: "utf-8", timeout: 5000, stdio: ["pipe", "pipe", "pipe"] });
-    const info = JSON.parse(output);
-
-    const rss = info.WorkingSet ?? 0;
-    const totalProcTimeMs = info.TotalProcessorTime
-      ? (info.TotalProcessorTime.TotalMilliseconds ?? 0)
-      : 0;
-
-    const now = Date.now();
-    let cpuPercent = 0;
-    if (prev) {
-      const procDiffMs = totalProcTimeMs - prev.utime;
-      const wallDiffMs = now - prev.timestamp;
-      if (wallDiffMs > 0) {
-        cpuPercent = (procDiffMs / wallDiffMs / os.cpus().length) * 100;
-        if (cpuPercent < 0) cpuPercent = 0;
-      }
-    }
-
-    let memoryPercent = 0;
-    try {
-      const memCmd = `powershell -NoProfile -Command "Get-CimInstance Win32_ComputerSystem | Select-Object TotalPhysicalMemory | ConvertTo-Json"`;
-      const memOutput = execSync(memCmd, { encoding: "utf-8", timeout: 5000, stdio: ["pipe", "pipe", "pipe"] });
-      const memInfo = JSON.parse(memOutput);
-      const totalMem = memInfo.TotalPhysicalMemory ?? 0;
-      if (totalMem > 0) {
-        memoryPercent = (rss / totalMem) * 100;
-      }
-    } catch {
-      // ignore
-    }
-
-    return {
-      sample: {
-        timestamp: now,
-        rss,
-        cpuPercent: Math.round(cpuPercent * 100) / 100,
-        memoryPercent: Math.round(memoryPercent * 100) / 100,
-      },
-      state: {
-        utime: totalProcTimeMs,
-        stime: 0,
-        timestamp: now,
-      },
-    };
-  } catch {
-    return null;
-  }
-}
-
 export function createServerProcessMetricsCollector(
   pid: number,
-  intervalMs = 1000
+  options?: ServerProcessMetricsCollectorOptions | number
 ): ServerProcessMetricsCollector {
-  const samples: ServerProcessMetricsSample[] = [];
+  const opts: ServerProcessMetricsCollectorOptions =
+    typeof options === "number" ? { intervalMs: options } : options ?? {};
+  const { intervalMs = 1000 } = opts;
+
+  const samples: ServerProcessMetricSample[] = [];
   let timer: NodeJS.Timeout | null = null;
   let prev: ProcState | null = null;
 
@@ -177,24 +149,23 @@ export function createServerProcessMetricsCollector(
   const clkTck = isLinux ? getClkTck() : 0;
 
   const sample = (): void => {
-    let result: { sample: ServerProcessMetricsSample; state: ProcState } | null = null;
-
     if (isLinux) {
-      result = getLinuxMetrics(pid, prev, clkTck);
-    } else if (process.platform === "win32") {
-      result = getWindowsMetrics(pid, prev);
+      const result = getLinuxMetrics(pid, prev, clkTck);
+      if (result) {
+        samples.push(result.sample);
+        prev = result.state;
+      }
+      // Silently skip intervals where the process is unreadable.
+      return;
     }
 
-    if (result) {
-      samples.push(result.sample);
-      prev = result.state;
-    }
+    // Non-Linux: graceful degradation — no samples collected.
   };
 
   return {
     start: () => {
       if (timer) return;
-      sample(); // immediate first sample (CPU will be 0 for this sample)
+      sample(); // immediate first sample (CPU will be undefined for this sample)
       timer = setInterval(sample, intervalMs);
     },
     stop: () => {
@@ -207,11 +178,35 @@ export function createServerProcessMetricsCollector(
   };
 }
 
+// Summary with both new (requested) and old (backward-compatible) properties
+export type ServerProcessMetricsSummary = {
+  // New fields (requested API)
+  samples: number;
+  rssMinBytes: number;
+  rssMaxBytes: number;
+  rssAvgBytes: number;
+  vmSizeMaxBytes?: number;
+  cpuAvgPercent?: number;
+  cpuMaxPercent?: number;
+
+  // Old fields (backward compatibility for existing bench scripts / reporter)
+  rssAvg: number;
+  rssPeak: number;
+  cpuAvg: number;
+  cpuPeak: number;
+  memoryAvg: number;
+  memoryPeak: number;
+};
+
 export function summarizeServerProcessMetrics(
-  samples: ServerProcessMetricsSample[]
+  samples: ServerProcessMetricSample[]
 ): ServerProcessMetricsSummary {
   if (samples.length === 0) {
     return {
+      samples: 0,
+      rssMinBytes: 0,
+      rssMaxBytes: 0,
+      rssAvgBytes: 0,
       rssAvg: 0,
       rssPeak: 0,
       cpuAvg: 0,
@@ -221,28 +216,47 @@ export function summarizeServerProcessMetrics(
     };
   }
 
-  const rssAvg = samples.reduce((s, v) => s + v.rss, 0) / samples.length;
-  const rssPeak = Math.max(...samples.map((v) => v.rss));
-  const cpuAvg = samples.reduce((s, v) => s + v.cpuPercent, 0) / samples.length;
-  const cpuPeak = Math.max(...samples.map((v) => v.cpuPercent));
-  const memoryAvg = samples.reduce((s, v) => s + v.memoryPercent, 0) / samples.length;
-  const memoryPeak = Math.max(...samples.map((v) => v.memoryPercent));
+  const rssValues = samples.map((s) => s.rssBytes);
+  const rssSum = rssValues.reduce((a, b) => a + b, 0);
+  const rssMin = Math.min(...rssValues);
+  const rssMax = Math.max(...rssValues);
+  const rssAvg = rssSum / samples.length;
 
-  return {
+  const vmSizeValues = samples
+    .map((s) => s.vmSizeBytes)
+    .filter((v): v is number => v !== undefined);
+  const vmSizeMax = vmSizeValues.length > 0 ? Math.max(...vmSizeValues) : undefined;
+
+  const cpuValues = samples
+    .map((s) => s.cpuPercent)
+    .filter((v): v is number => v !== undefined);
+  const cpuAvg = cpuValues.length > 0
+    ? cpuValues.reduce((a, b) => a + b, 0) / cpuValues.length
+    : undefined;
+  const cpuMax = cpuValues.length > 0 ? Math.max(...cpuValues) : undefined;
+
+  const out: ServerProcessMetricsSummary = {
+    samples: samples.length,
+    rssMinBytes: Math.round(rssMin),
+    rssMaxBytes: Math.round(rssMax),
+    rssAvgBytes: Math.round(rssAvg),
     rssAvg: Math.round(rssAvg),
-    rssPeak,
-    cpuAvg: Math.round(cpuAvg * 100) / 100,
-    cpuPeak: Math.round(cpuPeak * 100) / 100,
-    memoryAvg: Math.round(memoryAvg * 100) / 100,
-    memoryPeak: Math.round(memoryPeak * 100) / 100,
+    rssPeak: Math.round(rssMax),
+    cpuAvg: cpuAvg !== undefined ? Math.round(cpuAvg * 100) / 100 : 0,
+    cpuPeak: cpuMax !== undefined ? Math.round(cpuMax * 100) / 100 : 0,
+    memoryAvg: 0,
+    memoryPeak: 0,
   };
-}
 
-export type ServerProcessMetricsSummary = {
-  rssAvg: number;
-  rssPeak: number;
-  cpuAvg: number;
-  cpuPeak: number;
-  memoryAvg: number;
-  memoryPeak: number;
-};
+  if (vmSizeMax !== undefined) {
+    out.vmSizeMaxBytes = Math.round(vmSizeMax);
+  }
+  if (cpuAvg !== undefined) {
+    out.cpuAvgPercent = Math.round(cpuAvg * 100) / 100;
+  }
+  if (cpuMax !== undefined) {
+    out.cpuMaxPercent = Math.round(cpuMax * 100) / 100;
+  }
+
+  return out;
+}

@@ -152,6 +152,8 @@ async function run(): Promise<void> {
   }
 
   // 启动服务端（通过环境变量覆盖 phira_api_endpoint）
+  // 优先使用生产构建 dist/server/main.js，避免 pnpm 产生的 ELIFECYCLE 污染日志
+  const useProductionBuild = fs.existsSync("dist/server/main.js");
   console.log("Starting server...");
   const serverEnv = {
     ...process.env,
@@ -159,9 +161,21 @@ async function run(): Promise<void> {
     PHIRA_API_ENDPOINT: mockAuth.url,
   };
   const isWin = process.platform === "win32";
-  const server = isWin
-    ? spawn("pnpm run dev:server", [], { stdio: ["ignore", "pipe", "pipe"], env: serverEnv, shell: true })
-    : spawn("pnpm", ["run", "dev:server"], { stdio: ["ignore", "pipe", "pipe"], env: serverEnv, shell: false });
+  let server: ReturnType<typeof spawn>;
+  if (useProductionBuild) {
+    console.log("Using production build: dist/server/main.js");
+    const nodeCmd = isWin ? "node.exe" : "node";
+    server = spawn(nodeCmd, ["dist/server/main.js", "--port", String(args.port)], {
+      stdio: ["ignore", "pipe", "pipe"],
+      env: serverEnv,
+      shell: false,
+    });
+  } else {
+    console.log("Production build not found, falling back to pnpm run dev:server");
+    server = isWin
+      ? spawn("pnpm run dev:server", [], { stdio: ["ignore", "pipe", "pipe"], env: serverEnv, shell: true })
+      : spawn("pnpm", ["run", "dev:server"], { stdio: ["ignore", "pipe", "pipe"], env: serverEnv, shell: false });
+  }
   let serverLog = "";
   server.stdout?.on("data", (d) => { serverLog += d.toString(); });
   server.stderr?.on("data", (d) => { serverLog += d.toString(); });
