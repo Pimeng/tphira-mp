@@ -26,7 +26,6 @@ import { logRoomInfo, logRoomMark, logRoomWarn } from "../utils/logUtils.js";
 import { MonitorBuffer } from "./session/monitorBuffer.js";
 import {
   DEFAULT_PHIRA_API_ENDPOINT,
-  FETCH_TIMEOUT_MS,
   fetchPhiraChart,
   fetchPhiraRecord,
   fetchPhiraUserInfo
@@ -432,19 +431,7 @@ export class Session {
     refreshRoomLiveState(room, this.state.replayEnabled);
     logRoomMark(this.state.logger, this.state.serverLang, room.id, "log-room-created", { user: user.name }, { userId: user.id });
     await this.broadcastRoomMessage(room, { type: "CreateRoom", user: user.id });
-    if (this.state.replayEnabled && room.replayEligible) {
-      const fake = this.state.replayRecorder.fakeMonitorInfo();
-      // 使用 setImmediate 确保在当前事件循环后执行
-      setImmediate(() => {
-        void (async () => {
-          const me = this.user;
-          if (!me) return;
-          if (!me.room || me.room.id !== room.id) return;
-          await me.trySend({ type: "OnJoinRoom", info: fake });
-          await me.trySend({ type: "Message", message: { type: "JoinRoom", user: fake.id, name: fake.name } });
-        })();
-      });
-    }
+    this.sendFakeMonitorJoin(user, room);
     return {};
   }
 
@@ -508,19 +495,21 @@ export class Session {
       }, 2);
     }
 
-    if (this.state.replayEnabled && room.replayEligible) {
-      const fake = this.state.replayRecorder.fakeMonitorInfo();
-      // 使用 setImmediate 确保在当前事件循环后执行
-      setImmediate(() => {
-        void (async () => {
-          if (!user.room || user.room.id !== room.id) return;
-          await user.trySend({ type: "OnJoinRoom", info: fake });
-          await user.trySend({ type: "Message", message: { type: "JoinRoom", user: fake.id, name: fake.name } });
-        })();
-      });
-    }
+    this.sendFakeMonitorJoin(user, room);
 
     return resp;
+  }
+
+  private sendFakeMonitorJoin(targetUser: User, room: Room): void {
+    if (!this.state.replayEnabled || !room.replayEligible) return;
+    const fake = this.state.replayRecorder.fakeMonitorInfo(this.state.serverLang);
+    setImmediate(() => {
+      void (async () => {
+        if (!targetUser.room || targetUser.room.id !== room.id) return;
+        await targetUser.trySend({ type: "OnJoinRoom", info: fake });
+        await targetUser.trySend({ type: "Message", message: { type: "JoinRoom", user: fake.id, name: fake.name } });
+      })();
+    });
   }
 
   private async process(cmd: ClientCommand): Promise<ServerCommand | null> {
@@ -591,7 +580,8 @@ export class Session {
     return room.send(
       (c) => this.broadcastRoom(room, c),
       msg,
-      (id) => this.state.users.get(id)
+      (id) => this.state.users.get(id),
+      this.state.serverLang
     );
   }
 

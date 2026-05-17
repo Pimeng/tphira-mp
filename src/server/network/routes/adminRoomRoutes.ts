@@ -25,7 +25,7 @@ export async function tryHandleAdminRoomRoutes(ctx: RequestContext): Promise<boo
     const raw = (body ?? {}) as { maxUsers?: unknown };
     const maxUsers = Number(raw.maxUsers);
     if (!Number.isInteger(maxUsers) || maxUsers < 1 || maxUsers > 64) {
-      write(400, { ok: false, error: "bad-max-users" });
+      write(400, { ok: false, error: "bad-max-users", message: ctx.t("cli-bad-max-users") });
       return true;
     }
     const updated = await state.mutex.runExclusive(async () => {
@@ -35,7 +35,7 @@ export async function tryHandleAdminRoomRoutes(ctx: RequestContext): Promise<boo
       return roomIdToString(room.id);
     });
     if (!updated) {
-      write(404, { ok: false, error: "room-not-found" });
+      write(404, { ok: false, error: "room-not-found", message: ctx.t("room-not-found") });
       return true;
     }
     write(200, { ok: true, roomid: updated, max_users: maxUsers });
@@ -50,7 +50,7 @@ export async function tryHandleAdminRoomRoutes(ctx: RequestContext): Promise<boo
 
     const room = await state.mutex.runExclusive(async () => state.rooms.get(rid) ?? null);
     if (!room) {
-      write(404, { ok: false, error: "room-not-found" });
+      write(404, { ok: false, error: "room-not-found", message: ctx.t("room-not-found") });
       return true;
     }
 
@@ -90,18 +90,18 @@ export async function tryHandleAdminRoomRoutes(ctx: RequestContext): Promise<boo
     const raw = (body ?? {}) as { message?: unknown };
     const message = typeof raw.message === "string" ? raw.message.trim() : "";
     if (!message) {
-      write(400, { ok: false, error: "bad-message" });
+      write(400, { ok: false, error: "bad-message", message: ctx.t("cli-message-empty") });
       return true;
     }
     if (message.length > 200) {
-      write(400, { ok: false, error: "message-too-long" });
+      write(400, { ok: false, error: "message-too-long", message: ctx.t("cli-message-too-long", { max: 200 }) });
       return true;
     }
 
     const room = state.rooms.get(rid);
 
     if (!room) {
-      write(404, { ok: false, error: "room-not-found" });
+      write(404, { ok: false, error: "room-not-found", message: ctx.t("room-not-found") });
       return true;
     }
 

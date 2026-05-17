@@ -12,7 +12,7 @@ export async function tryHandleOtpRoutes(ctx: RequestContext): Promise<boolean> 
   if (req.method === "POST" && url.pathname === "/admin/otp/request") {
     const adminToken = state.config.admin_token?.trim() || "";
     if (adminToken) {
-      write(403, { ok: false, error: "otp-disabled-when-token-configured" });
+      write(403, { ok: false, error: "otp-disabled-when-token-configured", message: ctx.t("otp-disabled-when-token-configured") });
       return true;
     }
 
@@ -79,7 +79,7 @@ export async function tryHandleOtpRoutes(ctx: RequestContext): Promise<boolean> 
     }
 
     if (!ssid) {
-      write(400, { ok: false, error: "bad-request" });
+      write(400, { ok: false, error: "bad-request", message: ctx.t("bad-request") });
       return true;
     }
 
@@ -90,21 +90,21 @@ export async function tryHandleOtpRoutes(ctx: RequestContext): Promise<boolean> 
       const session = state.cliApprovalSessions.get(ssid);
       if (!session || Date.now() > session.expiresAt) {
         state.cliApprovalSessions.delete(ssid);
-        write(401, { ok: false, error: "invalid-or-expired-session" });
+        write(401, { ok: false, error: "invalid-or-expired-session", message: ctx.t("invalid-or-expired-session") });
         return true;
       }
       // 仅允许同 IP 轮询
       if (session.ip !== clientIp) {
-        write(403, { ok: false, error: "ip-mismatch" });
+        write(403, { ok: false, error: "ip-mismatch", message: ctx.t("ip-mismatch") });
         return true;
       }
       if (session.status === "pending") {
-        write(202, { ok: false, error: "pending-approval", status: "pending" });
+        write(202, { ok: false, error: "pending-approval", status: "pending", message: ctx.t("pending-approval") });
         return true;
       }
       if (session.status === "denied") {
         state.cliApprovalSessions.delete(ssid);
-        write(403, { ok: false, error: "approval-denied", status: "denied" });
+        write(403, { ok: false, error: "approval-denied", status: "denied", message: ctx.t("approval-denied") });
         return true;
       }
       // approved
@@ -113,7 +113,7 @@ export async function tryHandleOtpRoutes(ctx: RequestContext): Promise<boolean> 
       if (!token || !tokenExpiresAt) {
         // 状态异常，清理后报错
         state.cliApprovalSessions.delete(ssid);
-        write(500, { ok: false, error: "token-not-issued" });
+        write(500, { ok: false, error: "token-not-issued", message: ctx.t("token-not-issued") });
         return true;
       }
       // 一次性会话：取出后立即清理
@@ -131,23 +131,23 @@ export async function tryHandleOtpRoutes(ctx: RequestContext): Promise<boolean> 
     // 默认 OTP 验证模式
     const otp = typeof raw.otp === "string" ? raw.otp.trim() : "";
     if (!otp) {
-      write(400, { ok: false, error: "bad-request" });
+      write(400, { ok: false, error: "bad-request", message: ctx.t("bad-request") });
       return true;
     }
 
     // 检查 IP 和 SSID 是否已被封禁
     if (otpBannedIps.has(clientIp)) {
-      write(403, { ok: false, error: "ip-banned-too-many-attempts" });
+      write(403, { ok: false, error: "ip-banned-too-many-attempts", message: ctx.t("ip-banned-too-many-attempts") });
       return true;
     }
     if (otpBannedSsids.has(ssid)) {
-      write(403, { ok: false, error: "ssid-banned-too-many-attempts" });
+      write(403, { ok: false, error: "ssid-banned-too-many-attempts", message: ctx.t("ssid-banned-too-many-attempts") });
       return true;
     }
 
     const otpData = otpSessions.get(ssid);
     if (!otpData || Date.now() > otpData.expiresAt) {
-      write(401, { ok: false, error: "invalid-or-expired-otp" });
+      write(401, { ok: false, error: "invalid-or-expired-otp", message: ctx.t("invalid-or-expired-otp") });
       return true;
     }
 
@@ -172,7 +172,7 @@ export async function tryHandleOtpRoutes(ctx: RequestContext): Promise<boolean> 
         process.stdout.write(`\x1b[31m[${new Date().toISOString()}] [WARN] ${message}\x1b[0m\n`);
       }
 
-      write(401, { ok: false, error: "invalid-or-expired-otp" });
+      write(401, { ok: false, error: "invalid-or-expired-otp", message: ctx.t("invalid-or-expired-otp") });
       return true;
     }
 

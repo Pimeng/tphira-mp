@@ -19,7 +19,7 @@ export async function tryHandleReplayPublicRoutes(ctx: RequestContext): Promise<
     const body = await read();
     const token = typeof (body as any)?.token === "string" ? String((body as any).token).trim() : "";
     if (!token) {
-      write(400, { ok: false, error: "bad-token" });
+      write(400, { ok: false, error: "bad-token", message: ctx.t("bad-token") });
       return true;
     }
 
@@ -35,7 +35,7 @@ export async function tryHandleReplayPublicRoutes(ctx: RequestContext): Promise<
     }).catch(() => null);
 
     if (!me || !Number.isInteger(me.id)) {
-      write(401, { ok: false, error: "unauthorized" });
+      write(401, { ok: false, error: "unauthorized", message: ctx.t("auth-unauthorized") });
       return true;
     }
 
@@ -91,7 +91,7 @@ export async function tryHandleReplayPublicRoutes(ctx: RequestContext): Promise<
     const chartId = Number(url.searchParams.get("chartId") ?? "");
     const timestamp = Number(url.searchParams.get("timestamp") ?? "");
     if (!sessionToken || !Number.isInteger(chartId) || !Number.isInteger(timestamp) || chartId < 0 || timestamp <= 0) {
-      write(400, { ok: false, error: "bad-request" });
+      write(400, { ok: false, error: "bad-request", message: ctx.t("bad-request") });
       return true;
     }
 
@@ -99,7 +99,7 @@ export async function tryHandleReplayPublicRoutes(ctx: RequestContext): Promise<
 
     const sess = replaySessions.get(sessionToken);
     if (!sess || Date.now() > sess.expiresAt) {
-      write(401, { ok: false, error: "unauthorized" });
+      write(401, { ok: false, error: "unauthorized", message: ctx.t("auth-unauthorized") });
       return true;
     }
 
@@ -111,7 +111,7 @@ export async function tryHandleReplayPublicRoutes(ctx: RequestContext): Promise<
     if (info && info.isFile()) {
       const header = await readReplayHeader(filePath).catch(() => null);
       if (!header || header.userId !== sess.userId || header.chartId !== chartId) {
-        write(404, { ok: false, error: "not-found" });
+        write(404, { ok: false, error: "not-found", message: ctx.t("http-not-found") });
         return true;
       }
 
@@ -151,7 +151,7 @@ export async function tryHandleReplayPublicRoutes(ctx: RequestContext): Promise<
       return true;
     }
 
-    write(404, { ok: false, error: "not-found" });
+    write(404, { ok: false, error: "not-found", message: ctx.t("http-not-found") });
     return true;
   }
 
@@ -161,7 +161,7 @@ export async function tryHandleReplayPublicRoutes(ctx: RequestContext): Promise<
     const chartId = Number((body as any)?.chartId ?? "");
     const timestamp = Number((body as any)?.timestamp ?? "");
     if (!sessionToken || !Number.isInteger(chartId) || !Number.isInteger(timestamp) || chartId < 0 || timestamp <= 0) {
-      write(400, { ok: false, error: "bad-request" });
+      write(400, { ok: false, error: "bad-request", message: ctx.t("bad-request") });
       return true;
     }
 
@@ -169,7 +169,7 @@ export async function tryHandleReplayPublicRoutes(ctx: RequestContext): Promise<
 
     const sess = replaySessions.get(sessionToken);
     if (!sess || Date.now() > sess.expiresAt) {
-      write(401, { ok: false, error: "unauthorized" });
+      write(401, { ok: false, error: "unauthorized", message: ctx.t("auth-unauthorized") });
       return true;
     }
 
@@ -226,13 +226,13 @@ export async function tryHandleReplayPublicRoutes(ctx: RequestContext): Promise<
     // 验证用户 TOKEN
     const userId = await verifyUserToken(token);
     if (userId === null) {
-      write(401, { ok: false, error: "unauthorized" });
+      write(401, { ok: false, error: "unauthorized", message: ctx.t("auth-unauthorized") });
       return true;
     }
 
     // 检查分享站是否配置
     if (!state.shareStationConfigured) {
-      write(503, { ok: false, error: "share-station-not-configured" });
+      write(503, { ok: false, error: "share-station-not-configured", message: ctx.t("share-station-not-configured") });
       return true;
     }
 
@@ -243,14 +243,14 @@ export async function tryHandleReplayPublicRoutes(ctx: RequestContext): Promise<
     // 验证文件头和权限
     const header = await readReplayHeader(filePath).catch(() => null);
     if (!header || header.userId !== userId || header.chartId !== chartId) {
-      write(404, { ok: false, error: "not-found" });
+      write(404, { ok: false, error: "not-found", message: ctx.t("http-not-found") });
       return true;
     }
 
     // 检查文件是否存在
     const fileInfo = await stat(filePath).catch(() => null);
     if (!fileInfo || !fileInfo.isFile()) {
-      write(404, { ok: false, error: "not-found" });
+      write(404, { ok: false, error: "not-found", message: ctx.t("http-not-found") });
       return true;
     }
 
@@ -259,7 +259,7 @@ export async function tryHandleReplayPublicRoutes(ctx: RequestContext): Promise<
     try {
       fileBuffer = await readFile(filePath);
     } catch {
-      write(500, { ok: false, error: "upload-failed" });
+      write(500, { ok: false, error: "upload-failed", message: ctx.t("upload-failed") });
       return true;
     }
 
@@ -274,7 +274,7 @@ export async function tryHandleReplayPublicRoutes(ctx: RequestContext): Promise<
     });
 
     if (!uploadResult.success) {
-      write(500, { ok: false, error: uploadResult.message || "upload-failed" });
+      write(500, { ok: false, error: uploadResult.message || "upload-failed", message: ctx.t("upload-failed") });
       return true;
     }
 
@@ -320,14 +320,14 @@ export async function tryHandleReplayPublicRoutes(ctx: RequestContext): Promise<
   if (req.method === "GET" && url.pathname === "/replay/auto-upload/config") {
     const token = (url.searchParams.get("token") ?? "").trim();
     if (!token) {
-      write(400, { ok: false, error: "bad-token" });
+      write(400, { ok: false, error: "bad-token", message: ctx.t("bad-token") });
       return true;
     }
 
     // 验证用户 TOKEN
     const userId = await verifyUserToken(token);
     if (userId === null) {
-      write(401, { ok: false, error: "unauthorized" });
+      write(401, { ok: false, error: "unauthorized", message: ctx.t("auth-unauthorized") });
       return true;
     }
 

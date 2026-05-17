@@ -11,6 +11,29 @@ start-no-chart-selected = 还没有选择谱面
 http-not-found = 未找到
 http-internal-error = 服务器内部错误
 
+bad-enabled = 缺少 enabled 参数
+auth-unauthorized = 未授权
+token-expired = 令牌已过期
+admin-disabled = 管理员功能未启用
+otp-disabled-when-token-configured = 已配置管理员令牌，OTP 功能已禁用
+bad-request = 请求参数错误
+invalid-or-expired-session = 会话无效或已过期
+ip-mismatch = IP 地址不匹配
+pending-approval = 等待管理员批准
+approval-denied = 提权申请已被拒绝
+token-not-issued = 令牌未签发
+ip-banned-too-many-attempts = 该 IP 因尝试次数过多已被封禁
+ssid-banned-too-many-attempts = 该会话因尝试次数过多已被封禁
+invalid-or-expired-otp = 验证码无效或已过期
+bad-token = 令牌不能为空
+upload-failed = 上传失败
+share-station-not-configured = 分享站未配置
+upload-success = 上传成功
+user-must-be-disconnected = 用户必须处于离线状态
+user-not-in-room = 用户不在房间中
+cannot-move-while-playing = 游戏进行中无法移动用户
+target-room-not-idle = 目标房间不处于空闲状态
+
 cli-invalid-port = 端口号不合法
 cli-invalid-http-service = HTTP_SERVICE 不合法
 cli-invalid-http-port = HTTP 端口号不合法
@@ -18,6 +41,7 @@ cli-invalid-room-max-users = ROOM_MAX_USERS 不合法
 cli-invalid-monitors = MONITORS 不合法
 
 label-monitor-suffix = （观战者）
+replay-recorder-name = 回放录制器
 
 chat-welcome = "{ $userName }"你好！欢迎来到 { $serverName } 服务器！
 chat-hitokoto = { $quote } —— { $from }
@@ -41,6 +65,9 @@ auth-invalid-token = token 不合法
 auth-fetch-me-failed = 获取用户信息失败
 auth-account-already-online = 连接过快，请等待5秒后再试
 auth-failed = 认证失败
+auth-invalid-response = 认证响应无效
+auth-invalid-user-id = 认证响应中用户ID无效
+auth-invalid-user-name = 认证响应中用户名无效
 auth-repeated-authenticate = 重复认证
 auth-banned = 你已被封禁，无法进入服务器
 user-banned-by-server = 你已被服务器封禁，无法进行任何操作。
@@ -123,6 +150,31 @@ log-user-judges = “{ $user }” 在房间 “{ $room }” 上报判定事件 {
 log-room-created = “{ $user }” 创建房间 “{ $room }”
 log-room-joined = “{ $user }”{ $suffix } 加入房间 “{ $room }”
 log-room-left = “{ $user }”{ $suffix } 离开房间 “{ $room }”
+
+log-msg-create-room = { $user } 创建了房间
+log-msg-join-room = { $name } 加入了房间
+log-msg-leave-room = { $name } 离开了房间
+log-msg-new-host = { $user } 成为了新的房主
+log-msg-select-chart = 房主 { $user } 选择了谱面 { $name } (#{ $id })
+log-msg-game-start = 房主 { $user } 开始了游戏，请其他玩家准备
+log-msg-ready = { $user } 已就绪
+log-msg-cancel-ready = { $user } 取消了准备
+log-msg-cancel-game = { $user } 取消了对局
+log-msg-start-playing = 游戏开始
+log-msg-played = { $user } 结束了游玩：{ $score } ({ $acc }%){ $fc ->
+    [true] ，全连
+   *[false] {""}
+}
+log-msg-game-end = 游戏结束
+log-msg-abort = { $user } 放弃了游戏
+log-msg-lock-room = { $lock ->
+    [true] 房间已锁定
+   *[false] 房间已解锁
+}
+log-msg-cycle-room = { $cycle ->
+    [true] 房间已切换为循环模式
+   *[false] 房间已切换为普通模式
+}
 
 log-room-lock = “{ $user }” 将房间 “{ $room }”{ $lock ->
     [true] 设为锁定
@@ -277,6 +329,10 @@ cli-contest-disabled = 已禁用房间 { $room } 的比赛模式
 cli-contest-no-user-id = 请提供至少一个用户ID
 cli-contest-not-enabled = 房间不存在或未启用比赛模式
 cli-contest-whitelist-updated = 已更新房间 { $room } 的白名单
+contest-room-not-found = 比赛房间不存在
+room-not-waiting = 房间不在等待准备状态
+no-chart-selected = 未选择谱面
+not-all-ready = 并非所有玩家都已准备
 cli-contest-cannot-start = 无法开始比赛：{ $reason }
 cli-contest-started = 已开始房间 { $room } 的比赛
 cli-contest-unknown-subcommand = 未知子命令。可用：enable、disable、whitelist、start

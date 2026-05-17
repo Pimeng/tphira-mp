@@ -11,6 +11,29 @@ start-no-chart-selected = No chart selected
 http-not-found = Not found
 http-internal-error = Internal error
 
+bad-enabled = Missing enabled parameter
+auth-unauthorized = Unauthorized
+token-expired = Token expired
+admin-disabled = Admin feature is disabled
+otp-disabled-when-token-configured = OTP is disabled when admin token is configured
+bad-request = Bad request
+invalid-or-expired-session = Invalid or expired session
+ip-mismatch = IP address mismatch
+pending-approval = Pending approval
+approval-denied = Approval denied
+token-not-issued = Token not issued
+ip-banned-too-many-attempts = IP banned due to too many attempts
+ssid-banned-too-many-attempts = Session banned due to too many attempts
+invalid-or-expired-otp = Invalid or expired OTP
+bad-token = Token cannot be empty
+upload-failed = Upload failed
+share-station-not-configured = Share station is not configured
+upload-success = Upload successful
+user-must-be-disconnected = User must be disconnected
+user-not-in-room = User is not in a room
+cannot-move-while-playing = Cannot move user while playing
+target-room-not-idle = Target room is not idle
+
 cli-invalid-port = Invalid port number
 cli-invalid-http-service = Invalid HTTP service flag
 cli-invalid-http-port = Invalid HTTP port number
@@ -18,6 +41,7 @@ cli-invalid-room-max-users = Invalid ROOM_MAX_USERS
 cli-invalid-monitors = Invalid MONITORS
 
 label-monitor-suffix = (monitor)
+replay-recorder-name = Replay Recorder
 
 chat-welcome = Hello "{ $userName }"! Welcome to { $serverName }!
 chat-hitokoto = { $quote } — { $from }
@@ -41,6 +65,9 @@ auth-invalid-token = Invalid token
 auth-fetch-me-failed = Failed to fetch user info
 auth-account-already-online = Account is already online. Duplicate connection blocked.
 auth-failed = Authentication failed
+auth-invalid-response = Invalid auth response
+auth-invalid-user-id = Invalid user ID in auth response
+auth-invalid-user-name = Invalid user name in auth response
 auth-repeated-authenticate = Repeated authenticate
 auth-banned = You are banned from this server
 user-banned-by-server = You have been banned from this server and cannot perform any operations.
@@ -123,6 +150,31 @@ log-user-judges = "{ $user }" reported { $count } judge events in room "{ $room 
 log-room-created = "{ $user }" created room "{ $room }"
 log-room-joined = "{ $user }"{ $suffix } joined room "{ $room }"
 log-room-left = "{ $user }"{ $suffix } left room "{ $room }"
+
+log-msg-create-room = { $user } created the room
+log-msg-join-room = { $name } joined the room
+log-msg-leave-room = { $name } left the room
+log-msg-new-host = { $user } became the new host
+log-msg-select-chart = Host { $user } selected chart { $name } (#{ $id })
+log-msg-game-start = Host { $user } started the game, please get ready
+log-msg-ready = { $user } is ready
+log-msg-cancel-ready = { $user } canceled ready
+log-msg-cancel-game = { $user } canceled the game
+log-msg-start-playing = Game started
+log-msg-played = { $user } finished playing: { $score } ({ $acc }%){ $fc ->
+    [true] , FC
+   *[false] {""}
+}
+log-msg-game-end = Game ended
+log-msg-abort = { $user } aborted the game
+log-msg-lock-room = { $lock ->
+    [true] Room locked
+   *[false] Room unlocked
+}
+log-msg-cycle-room = { $cycle ->
+    [true] Room cycle mode enabled
+   *[false] Room cycle mode disabled
+}
 
 log-room-lock = "{ $user }" { $lock ->
     [true] locked
@@ -277,6 +329,10 @@ cli-contest-disabled = Disabled contest mode for room { $room }
 cli-contest-no-user-id = Please provide at least one user ID
 cli-contest-not-enabled = Room not found or contest mode not enabled
 cli-contest-whitelist-updated = Updated whitelist for room { $room }
+contest-room-not-found = Contest room not found
+room-not-waiting = Room is not waiting for ready
+no-chart-selected = No chart selected
+not-all-ready = Not all players are ready
 cli-contest-cannot-start = Cannot start contest: { $reason }
 cli-contest-started = Started contest for room { $room }
 cli-contest-unknown-subcommand = Unknown subcommand. Available: enable, disable, whitelist, start

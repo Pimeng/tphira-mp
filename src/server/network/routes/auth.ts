@@ -19,7 +19,7 @@ export function checkAdminAuth(ctx: RequestContext): boolean {
   state.logger.debug(`requireAdmin called: ${JSON.stringify(debugInfo)}`);
 
   if (services.adminBannedIps.has(clientIp)) {
-    write(401, { ok: false, error: "unauthorized" });
+    write(401, { ok: false, error: "unauthorized", message: ctx.t("auth-unauthorized") });
     return false;
   }
 
@@ -31,13 +31,13 @@ export function checkAdminAuth(ctx: RequestContext): boolean {
       state.logger.debug("Found temp token, checking validity");
       if (tempTokenData.banned) {
         state.logger.debug("Temp token is banned");
-        write(401, { ok: false, error: "token-expired" });
+        write(401, { ok: false, error: "token-expired", message: ctx.t("token-expired") });
         return false;
       }
       if (Date.now() > tempTokenData.expiresAt) {
         state.logger.debug("Temp token expired");
         state.tempAdminTokens.delete(reqAdminToken);
-        write(401, { ok: false, error: "token-expired" });
+        write(401, { ok: false, error: "token-expired", message: ctx.t("token-expired") });
         return false;
       }
       // 验证 IP 是否匹配
@@ -45,7 +45,7 @@ export function checkAdminAuth(ctx: RequestContext): boolean {
         state.logger.debug(`IP mismatch: token IP=${tempTokenData.ip}, request IP=${clientIp}`);
         // IP 不匹配，封禁该 TOKEN 但不显式告知
         tempTokenData.banned = true;
-        write(401, { ok: false, error: "token-expired" });
+        write(401, { ok: false, error: "token-expired", message: ctx.t("token-expired") });
         return false;
       }
       // 临时 TOKEN 验证通过
@@ -59,7 +59,7 @@ export function checkAdminAuth(ctx: RequestContext): boolean {
   state.logger.debug("Checking permanent admin token");
   if (!adminToken) {
     state.logger.debug("No permanent admin token configured, returning admin-disabled");
-    write(403, { ok: false, error: "admin-disabled" });
+    write(403, { ok: false, error: "admin-disabled", message: ctx.t("admin-disabled") });
     return false;
   }
   if (!reqAdminToken || reqAdminToken !== adminToken) {
@@ -68,7 +68,7 @@ export function checkAdminAuth(ctx: RequestContext): boolean {
     if (next >= services.ADMIN_MAX_FAILED_ATTEMPTS_PER_IP) {
       services.adminBannedIps.add(clientIp);
     }
-    write(401, { ok: false, error: "unauthorized" });
+    write(401, { ok: false, error: "unauthorized", message: ctx.t("auth-unauthorized") });
     return false;
   }
   services.adminFailedAttemptsByIp.delete(clientIp);

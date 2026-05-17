@@ -95,7 +95,7 @@ export async function tryHandleAdminContestRoutes(ctx: RequestContext): Promise<
     const monitorsText = monitors.join(sep);
     const monitorsSuffix = monitors.length > 0 ? tl(state.serverLang, "log-room-game-start-monitors", { monitors: monitorsText }) : "";
     logRoomInfo(state.logger, state.serverLang, room.id, "log-room-game-start", { users: usersText, monitorsSuffix });
-    await room.send((c) => broadcastRoomAll(state, room.id, c), { type: "StartPlaying" }, (id) => state.users.get(id));
+    await room.send((c) => broadcastRoomAll(state, room.id, c), { type: "StartPlaying" }, (id) => state.users.get(id), state.serverLang);
     room.resetGameTime((id) => state.users.get(id));
     if (state.replayEnabled && room.replayEligible) {
       const replayUsers = room.userIds().map((id) => ({ id, name: state.users.get(id)?.name ?? String(id) }));

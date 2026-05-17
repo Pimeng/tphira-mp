@@ -1,5 +1,6 @@
 import type http from "node:http";
 import type { ServerState } from "../../core/state.js";
+import type { FluentVariable } from "@fluent/bundle";
 import type { Language } from "../../utils/l10n.js";
 
 /** Per-server 状态：HTTP 服务级别的会话/封禁映射 */
@@ -38,6 +39,8 @@ export type RequestContext = {
   cleanupExpired: () => void;
   /** 验证用户 token，返回 userId 或 null */
   verifyUserToken: (token: string) => Promise<number | null>;
+  /** 本地化快捷方法 */
+  t: (key: string, args?: Record<string, FluentVariable>) => string;
   /** 验证管理员权限，未通过会自动写出错误响应 */
   requireAdmin: () => boolean;
 };

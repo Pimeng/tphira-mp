@@ -89,7 +89,8 @@ export async function startHttpService(opts: { state: ServerState; host: string;
         read: () => readJson(req),
         cleanupExpired: () => cleanupExpiringMaps(state.tempAdminTokens, services.otpSessions, state.cliApprovalSessions),
         verifyUserToken: (token) => verifyUserTokenViaApi(state, token),
-        requireAdmin: () => checkAdminAuth(ctx)
+        requireAdmin: () => checkAdminAuth(ctx),
+        t: (key, args) => tl(lang, key, args)
       };
 
       // 公开路由
@@ -103,7 +104,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
         if (await tryHandleAdminRoutes(ctx)) return;
 
         // /admin/* 路径但未匹配任何子路由
-        ctx.write(404, { ok: false, error: "not-found" });
+        ctx.write(404, { ok: false, error: "not-found", message: ctx.t("http-not-found") });
         return;
       }
 
@@ -116,7 +117,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
         return;
       }
       state.logger.error(`HTTP request error: ${err instanceof Error ? err.message : String(err)}`);
-      writeJson(res, 500, { ok: false, error: "internal-error" });
+      writeJson(res, 500, { ok: false, error: "internal-error", message: tl(state.serverLang, "http-internal-error") });
     });
   });
 

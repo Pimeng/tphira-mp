@@ -70,6 +70,6 @@ export function getAvailableRoomsText(state: ServerState, lang: Language): strin
 /**
  * 清空房间列表缓存(测试辅助)
  */
-export function clearRoomListCache(): void {
+function clearRoomListCache(): void {
   cache = { text: new Map(), timestamp: 0 };
 }

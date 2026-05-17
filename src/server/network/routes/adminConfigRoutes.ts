@@ -23,7 +23,7 @@ export async function tryHandleAdminConfigRoutes(ctx: RequestContext): Promise<b
     const body = await read();
     const raw = (body ?? {}) as { enabled?: unknown };
     if (raw.enabled === undefined) {
-      write(400, { ok: false, error: "bad-enabled" });
+      write(400, { ok: false, error: "bad-enabled", message: ctx.t("bad-enabled") });
       return true;
     }
     const enabled = Boolean(raw.enabled);
@@ -39,7 +39,7 @@ export async function tryHandleAdminConfigRoutes(ctx: RequestContext): Promise<b
     const body = await read();
     const raw = (body ?? {}) as { enabled?: unknown };
     if (raw.enabled === undefined) {
-      write(400, { ok: false, error: "bad-enabled" });
+      write(400, { ok: false, error: "bad-enabled", message: ctx.t("bad-enabled") });
       return true;
     }
     const enabled = Boolean(raw.enabled);

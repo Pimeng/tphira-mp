@@ -423,10 +423,6 @@ export class Cache<K extends string | number, V> {
    * 返回当前缓存中有效条目数量
    */
   async size(): Promise<number> {
-    if (this.useRedis) {
-      const keys = await this.keys();
-      return keys.length;
-    }
     const keys = await this.keys();
     return keys.length;
   }

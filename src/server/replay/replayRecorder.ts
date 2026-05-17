@@ -3,6 +3,7 @@ import { BinaryWriter } from "../../common/binary.js";
 import { encodeTouchFrame, type JudgeEvent, type TouchFrame, type UserInfo } from "../../common/commands.js";
 import { parseRoomId, roomIdToString, type RoomId } from "../../common/roomId.js";
 import type { Chart } from "../core/types.js";
+import type { Language } from "../utils/l10n.js";
 import { ensureReplayDir, replayFilePath } from "../replay/replayStorage.js";
 import {
   COMPRESSION_ZSTD,
@@ -181,8 +182,8 @@ export class ReplayRecorder {
     this.completedFilesByRoom.delete(roomKey);
   }
 
-  fakeMonitorInfo(): UserInfo {
-    return { id: 2_000_000_000, name: "回放录制器", monitor: true };
+  fakeMonitorInfo(lang: Language): UserInfo {
+    return { id: 2_000_000_000, name: lang.format("replay-recorder-name"), monitor: true };
   }
 
   private get(roomId: RoomId, userId: number): InFlight | null {

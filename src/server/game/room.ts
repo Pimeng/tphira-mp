@@ -168,61 +168,61 @@ export class Room {
   async send(
     broadcast: (cmd: ServerCommand) => Promise<void>,
     msg: Message,
-    usersById?: (id: number) => { name: string } | undefined
+    usersById?: (id: number) => { name: string } | undefined,
+    lang?: Language
   ): Promise<void> {
     if (msg.type === "Chat") {
       this.addLog(msg.content, Date.now());
-    } else {
-      const logText = this.formatMessageForLog(msg, usersById);
+    } else if (lang) {
+      const logText = this.formatMessageForLog(msg, lang, usersById);
       if (logText) this.addLog(logText, Date.now());
     }
     await broadcast({ type: "Message", message: msg });
   }
 
-  private formatMessageForLog(msg: Message, usersById?: (id: number) => { name: string } | undefined): string | null {
+  private formatMessageForLog(msg: Message, lang: Language, usersById?: (id: number) => { name: string } | undefined): string | null {
     const name = (id: number) => usersById?.(id)?.name ?? String(id);
 
     switch (msg.type) {
       case "CreateRoom":
-        return `${name(msg.user)} 创建了房间`;
+        return tl(lang, "log-msg-create-room", { user: name(msg.user) });
       case "JoinRoom":
-        return `${msg.name} 加入了房间`;
+        return tl(lang, "log-msg-join-room", { name: msg.name });
       case "LeaveRoom":
-        return `${msg.name} 离开了房间`;
+        return tl(lang, "log-msg-leave-room", { name: msg.name });
       case "NewHost":
-        return `${name(msg.user)} 成为了新的房主`;
+        return tl(lang, "log-msg-new-host", { user: name(msg.user) });
       case "SelectChart":
-        return `房主 ${name(msg.user)} 选择了谱面 ${msg.name} (#${msg.id})`;
+        return tl(lang, "log-msg-select-chart", { user: name(msg.user), name: msg.name, id: String(msg.id) });
       case "GameStart":
-        return `房主 ${name(msg.user)} 开始了游戏，请其他玩家准备`;
+        return tl(lang, "log-msg-game-start", { user: name(msg.user) });
       case "Ready":
-        return `${name(msg.user)} 已就绪`;
+        return tl(lang, "log-msg-ready", { user: name(msg.user) });
       case "CancelReady":
-        return `${name(msg.user)} 取消了准备`;
+        return tl(lang, "log-msg-cancel-ready", { user: name(msg.user) });
       case "CancelGame":
-        return `${name(msg.user)} 取消了对局`;
+        return tl(lang, "log-msg-cancel-game", { user: name(msg.user) });
       case "StartPlaying":
-        return `游戏开始`;
+        return tl(lang, "log-msg-start-playing");
       case "Played": {
         const acc = (msg.accuracy * 100).toFixed(2);
-        const fc = msg.full_combo ? "，全连" : "";
-        return `${name(msg.user)} 结束了游玩：${msg.score} (${acc}%)${fc}`;
+        return tl(lang, "log-msg-played", { user: name(msg.user), score: String(msg.score), acc, fc: msg.full_combo ? "true" : "false" });
       }
       case "GameEnd":
-        return `游戏结束`;
+        return tl(lang, "log-msg-game-end");
       case "Abort":
-        return `${name(msg.user)} 放弃了游戏`;
+        return tl(lang, "log-msg-abort", { user: name(msg.user) });
       case "LockRoom":
-        return msg.lock ? "房间已锁定" : "房间已解锁";
+        return tl(lang, "log-msg-lock-room", { lock: msg.lock ? "true" : "false" });
       case "CycleRoom":
-        return msg.cycle ? "房间已切换为循环模式" : "房间已切换为普通模式";
+        return tl(lang, "log-msg-cycle-room", { cycle: msg.cycle ? "true" : "false" });
       default:
         return null;
     }
   }
 
-  async sendAs(broadcast: (cmd: ServerCommand) => Promise<void>, user: User, content: string): Promise<void> {
-    await this.send(broadcast, { type: "Chat", user: user.id, content });
+  async sendAs(broadcast: (cmd: ServerCommand) => Promise<void>, user: User, content: string, lang?: Language): Promise<void> {
+    await this.send(broadcast, { type: "Chat", user: user.id, content }, undefined, lang);
   }
 
   async onUserLeave(opts: {
@@ -239,7 +239,7 @@ export class Room {
       wsService?: { broadcastRoomUpdate: (roomId: RoomId) => Promise<void>; broadcastAdminUpdate: () => Promise<void> } | null;
     }): Promise<boolean> {
       const { user } = opts;
-      await this.send(opts.broadcast, { type: "LeaveRoom", user: user.id, name: user.name }, opts.usersById);
+      await this.send(opts.broadcast, { type: "LeaveRoom", user: user.id, name: user.name }, opts.usersById, opts.lang);
       user.room = null;
 
       if (user.monitor) this.monitors = this.monitors.filter((it) => it !== user.id);
@@ -252,7 +252,7 @@ export class Room {
         if (newHost === null) return true;
         this.hostId = newHost;
         if (opts.logger) logRoomInfo(opts.logger, opts.lang, this.id, "log-room-host-changed-offline", { old: String(user.id), next: String(newHost) });
-        await this.send(opts.broadcast, { type: "NewHost", user: newHost }, opts.usersById);
+        await this.send(opts.broadcast, { type: "NewHost", user: newHost }, opts.usersById, opts.lang);
         const newHostUser = opts.usersById(newHost);
         if (newHostUser) await newHostUser.trySend({ type: "ChangeHost", is_host: true });
       }
@@ -305,7 +305,7 @@ export class Room {
         const monitorsText = monitors.join(sep);
         const monitorsSuffix = monitors.length > 0 ? tl(opts.lang, "log-room-game-start-monitors", { monitors: monitorsText }) : "";
         if (opts.logger) logRoomInfo(opts.logger, opts.lang, this.id, "log-room-game-start", { users: usersText, monitorsSuffix });
-        await this.send(opts.broadcast, { type: "StartPlaying" }, opts.usersById);
+        await this.send(opts.broadcast, { type: "StartPlaying" }, opts.usersById, opts.lang);
         this.resetGameTime(opts.usersById);
         this.state = { type: "Playing", results: new Map(), aborted: new Set() };
         await this.onStateChange(opts.broadcast);
@@ -353,14 +353,14 @@ export class Room {
           });
           const summary = tl(opts.lang, "chat-game-summary", { scoreText, accText, stdText });
 
-          await this.send(opts.broadcast, { type: "Chat", user: 0, content: summary });
+          await this.send(opts.broadcast, { type: "Chat", user: 0, content: summary }, undefined, opts.lang);
         }
 
         if (opts.logger) logRoomInfo(opts.logger, opts.lang, this.id, "log-room-game-end", {
           uploaded: String(results.size),
           aborted: String(aborted.size)
         });
-        await this.send(opts.broadcast, { type: "GameEnd" }, opts.usersById);
+        await this.send(opts.broadcast, { type: "GameEnd" }, opts.usersById, opts.lang);
         if (opts.onGameEnd) await opts.onGameEnd(this);
         this.state = { type: "SelectChart" };
 
@@ -389,7 +389,7 @@ export class Room {
             const oldHost = this.hostId;
             this.hostId = newHost;
             if (opts.logger) logRoomInfo(opts.logger, opts.lang, this.id, "log-room-host-changed-cycle", { old: String(oldHost), next: String(newHost) });
-            await this.send(opts.broadcast, { type: "NewHost", user: newHost }, opts.usersById);
+            await this.send(opts.broadcast, { type: "NewHost", user: newHost }, opts.usersById, opts.lang);
             const oldHostUser = opts.usersById(oldHost);
             if (oldHostUser) await oldHostUser.trySend({ type: "ChangeHost", is_host: false });
             const newHostUser = opts.usersById(newHost);

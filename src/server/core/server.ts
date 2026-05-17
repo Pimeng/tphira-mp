@@ -29,6 +29,7 @@ import { startReplayCleanup } from "../replay/replayCleanup.js";
 import { parseProxyProtocol } from "../network/proxyProtocol.js";
 import { startCli } from "../cli/cli.js";
 import { parseRoomId, type RoomId } from "../../common/roomId.js";
+import { broadcastRoomAll as broadcastRoomAllImpl, pickRandomUserId } from "../network/httpHelpers.js";
 import { initRedisCache, getRedisClient } from "../utils/cache.js";
 import {
   buildConfigFromRecord,
@@ -360,23 +361,8 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
   }
   logger.mark(tl(state.serverLang, "log-server-name", { name: serverName }));
 
-  // CLI 辅助函数：向房间所有成员广播命令
-  const broadcastRoomAll = async (roomId: RoomId, cmd: ServerCommand): Promise<void> => {
-    const room = state.rooms.get(roomId);
-    if (!room) return;
-    const ids = [...room.userIds(), ...room.monitorIds()];
-    const tasks: Promise<void>[] = [];
-    for (const id of ids) {
-      const u = state.users.get(id);
-      if (u) tasks.push(u.trySend(cmd));
-    }
-    await Promise.allSettled(tasks);
-  };
-
-  // CLI 辅助函数：从用户列表中选择一个用户（目前选择第一个）
-  const pickRandomUserId = (ids: number[]): number | null => ids[0] ?? null;
-
   // 启动 CLI 控制台（用于服务器管理命令）
+  const broadcastRoomAll = (roomId: RoomId, cmd: ServerCommand): Promise<void> => broadcastRoomAllImpl(state, roomId, cmd);
   const stopCli = startCli({ state, logger, broadcastRoomAll, pickRandomUserId });
 
   // 返回运行中的服务器实例

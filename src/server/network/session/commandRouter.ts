@@ -87,7 +87,7 @@ export async function processClientCommand(
           const room = ctx.requireRoom(user);
           logRoomInfo(state.logger, state.serverLang, room.id, "log-user-chat", { user: user.name }, { userId: user.id });
           const content = state.config.chat_enabled === false ? tl(state.serverLang, "chat-disabled-by-server") : cmd.message;
-          await room.sendAs((c) => ctx.broadcastRoom(room, c), user, content);
+          await room.sendAs((c) => ctx.broadcastRoom(room, c), user, content, state.serverLang);
           return {};
         })
       };
@@ -271,12 +271,11 @@ export async function processClientCommand(
               await ctx.broadcastRoomMessage(room, { type: "CancelGame", user: user.id });
               room.state = { type: "SelectChart" };
               await room.onStateChange((c) => ctx.broadcastRoom(room, c));
-              await room.notifyWebSocket(state);
             } else {
               logRoomInfo(state.logger, state.serverLang, room.id, "log-room-cancel-ready", { user: user.name }, { userId: user.id });
               await ctx.broadcastRoomMessage(room, { type: "CancelReady", user: user.id });
-              await room.notifyWebSocket(state);
             }
+            await room.notifyWebSocket(state);
           }
           return {};
         })

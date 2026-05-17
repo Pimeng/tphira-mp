@@ -89,6 +89,11 @@ function readPhiraRecordV2Header(buf: Buffer): ReplayHeader | null {
   return { chartId, userId, recordId, timestamp, chartName, userName, version, compression };
 }
 
+async function removeIfEmpty(dir: string): Promise<void> {
+  const remain = await readdir(dir).catch(() => []);
+  if (remain.length === 0) await rm(dir, { recursive: true, force: true }).catch(() => {});
+}
+
 function parseTimestampFromName(name: string): number | null {
   const m = /^(\d+)\.phirarec$/i.exec(name);
   if (!m) return null;
@@ -141,12 +146,10 @@ export async function deleteReplayForUser(baseDir: string, userId: number, chart
   }
 
   const chartDir = join(baseDir, String(userId), String(chartId));
-  const remainChart = await readdir(chartDir).catch(() => []);
-  if (remainChart.length === 0) await rm(chartDir, { recursive: true, force: true }).catch(() => {});
+  await removeIfEmpty(chartDir);
 
   const userDir = join(baseDir, String(userId));
-  const remainUser = await readdir(userDir).catch(() => []);
-  if (remainUser.length === 0) await rm(userDir, { recursive: true, force: true }).catch(() => {});
+  await removeIfEmpty(userDir);
 
   return true;
 }
@@ -189,12 +192,10 @@ export async function cleanupExpiredReplays(baseDir: string, nowMs: number, ttlD
         await rm(join(chartDir, file), { force: true }).catch(() => {});
       }
 
-      const remain = await readdir(chartDir).catch(() => []);
-      if (remain.length === 0) await rm(chartDir, { recursive: true, force: true }).catch(() => {});
+      await removeIfEmpty(chartDir);
     }
 
-    const remainUser = await readdir(userDir).catch(() => []);
-    if (remainUser.length === 0) await rm(userDir, { recursive: true, force: true }).catch(() => {});
+    await removeIfEmpty(userDir);
   }
 }
 

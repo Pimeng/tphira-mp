@@ -2,7 +2,7 @@
 
 import type http from "node:http";
 import { writeJson, fetchWithRetry } from "../../common/http.js";
-import { parseRoomId, roomIdToString, type RoomId } from "../../common/roomId.js";
+import { parseRoomId, type RoomId } from "../../common/roomId.js";
 import type { ServerState } from "../core/state.js";
 import type { ServerCommand } from "../../common/commands.js";
 import type { Room } from "../game/room.js";
@@ -70,11 +70,12 @@ export async function broadcastRoomAll(state: ServerState, roomId: RoomId, cmd: 
 }
 
 /**
- * 从 ID 数组中挑选一个用户 ID（简单取第一个）
+ * 从 ID 数组中挑选第一个用户 ID
  */
-export function pickRandomUserId(ids: number[]): number | null {
+function pickFirstUserId(ids: number[]): number | null {
   return ids[0] ?? null;
 }
+export { pickFirstUserId as pickRandomUserId };
 
 /**
  * 把所有未完成成绩的玩家标记为 abort，触发 checkAllReady。
@@ -93,7 +94,7 @@ export async function abortPlayingUserAndCheckReady(opts: {
     usersById: (id) => state.users.get(id),
     broadcast: (cmd) => broadcastRoomAll(state, room.id, cmd),
     broadcastToMonitors: (cmd) => broadcastRoomAll(state, room.id, cmd),
-    pickRandomUserId,
+    pickRandomUserId: pickFirstUserId,
     lang: state.serverLang,
     logger: state.logger,
     wsService: state.wsService

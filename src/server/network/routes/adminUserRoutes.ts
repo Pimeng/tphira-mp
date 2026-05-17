@@ -20,7 +20,7 @@ export async function tryHandleAdminUserRoutes(ctx: RequestContext): Promise<boo
     const userId = Number(mUser[1]);
     const out = await state.mutex.runExclusive(async () => {
       const u = state.users.get(userId);
-      if (!u) return { ok: false, error: "user-not-found" };
+      if (!u) return { ok: false, error: "user-not-found", message: ctx.t("cli-user-not-found", { id: String(userId) }) };
       return {
         ok: true,
         user: {
@@ -44,7 +44,7 @@ export async function tryHandleAdminUserRoutes(ctx: RequestContext): Promise<boo
     const banned = Boolean(raw.banned);
     const disconnect = Boolean(raw.disconnect);
     if (!Number.isInteger(userId)) {
-      write(400, { ok: false, error: "bad-user-id" });
+      write(400, { ok: false, error: "bad-user-id", message: ctx.t("cli-bad-user-id") });
       return true;
     }
 
@@ -81,7 +81,7 @@ export async function tryHandleAdminUserRoutes(ctx: RequestContext): Promise<boo
     if (!rid) return true;
     const banned = Boolean(raw.banned);
     if (!Number.isInteger(userId)) {
-      write(400, { ok: false, error: "bad-user-id" });
+      write(400, { ok: false, error: "bad-user-id", message: ctx.t("cli-bad-user-id") });
       return true;
     }
     await state.mutex.runExclusive(async () => {
@@ -102,7 +102,7 @@ export async function tryHandleAdminUserRoutes(ctx: RequestContext): Promise<boo
     await read();
     const target = await state.mutex.runExclusive(async () => state.users.get(userId)?.session ?? null);
     if (!target) {
-      write(404, { ok: false, error: "user-not-connected" });
+      write(404, { ok: false, error: "user-not-connected", message: ctx.t("cli-user-not-connected", { id: String(userId) }) });
       return true;
     }
     const u = target.user;
@@ -126,29 +126,29 @@ export async function tryHandleAdminUserRoutes(ctx: RequestContext): Promise<boo
 
     const u = await state.mutex.runExclusive(async () => state.users.get(userId) ?? null);
     if (!u) {
-      write(404, { ok: false, error: "user-not-found" });
+      write(404, { ok: false, error: "user-not-found", message: ctx.t("cli-user-not-found", { id: String(userId) }) });
       return true;
     }
     if (u.session) {
-      write(400, { ok: false, error: "user-must-be-disconnected" });
+      write(400, { ok: false, error: "user-must-be-disconnected", message: ctx.t("user-must-be-disconnected") });
       return true;
     }
     const from = u.room;
     if (!from) {
-      write(400, { ok: false, error: "user-not-in-room" });
+      write(400, { ok: false, error: "user-not-in-room", message: ctx.t("user-not-in-room") });
       return true;
     }
     if (from.state.type !== "SelectChart") {
-      write(400, { ok: false, error: "cannot-move-while-playing" });
+      write(400, { ok: false, error: "cannot-move-while-playing", message: ctx.t("cannot-move-while-playing") });
       return true;
     }
     const to = await state.mutex.runExclusive(async () => state.rooms.get(rid) ?? null);
     if (!to) {
-      write(404, { ok: false, error: "room-not-found" });
+      write(404, { ok: false, error: "room-not-found", message: ctx.t("room-not-found") });
       return true;
     }
     if (to.state.type !== "SelectChart") {
-      write(400, { ok: false, error: "target-room-not-idle" });
+      write(400, { ok: false, error: "target-room-not-idle", message: ctx.t("target-room-not-idle") });
       return true;
     }
     try {
@@ -158,7 +158,7 @@ export async function tryHandleAdminUserRoutes(ctx: RequestContext): Promise<boo
       return true;
     }
     if (!to.addUser(u, monitor)) {
-      write(400, { ok: false, error: "room-full" });
+      write(400, { ok: false, error: "room-full", message: ctx.t("join-room-full") });
       return true;
     }
 
