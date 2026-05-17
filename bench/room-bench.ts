@@ -21,38 +21,27 @@ async function run(): Promise<void> {
     process.exit(0);
   }
 
-  // 根据可用 token 数量调整并发规模（同一 token 不能多 session 同时在线）
-  const maxConcurrentUsers = args.tokens.length;
-  let effectivePlayersPerRoom = Math.min(args.playersPerRoom, Math.max(1, maxConcurrentUsers));
-  let effectiveRooms = Math.min(args.rooms, Math.max(1, Math.floor(maxConcurrentUsers / effectivePlayersPerRoom)));
-  if (maxConcurrentUsers === 0) {
-    effectiveRooms = 0;
-    effectivePlayersPerRoom = 0;
-  }
-
-  const totalClients = effectiveRooms * (effectivePlayersPerRoom + args.monitorsPerRoom);
+  const totalClients = args.rooms * (args.playersPerRoom + args.monitorsPerRoom);
 
   printBenchHeader("Room Benchmark", {
     host: args.host,
     port: args.port,
-    rooms: effectiveRooms,
-    playersPerRoom: effectivePlayersPerRoom,
+    rooms: args.rooms,
+    playersPerRoom: args.playersPerRoom,
     monitorsPerRoom: args.monitorsPerRoom,
-    effectiveRooms,
-    effectivePlayersPerRoom,
     totalClients,
     rate: `${args.rate}/s`,
     duration: `${args.duration}s`,
     tokens: args.tokens.length,
   });
 
-  if (args.tokens.length === 0) {
-    console.warn("Warning: No auth token provided. Clients will connect but not authenticate.");
-  } else if (maxConcurrentUsers < args.rooms * args.playersPerRoom) {
-    console.warn(
-      `Warning: Only ${maxConcurrentUsers} token(s) available. ` +
-      `Adjusted to ${effectiveRooms} room(s) with ${effectivePlayersPerRoom} player(s) each.`
-    );
+  const requiredTokens = totalClients;
+  if (args.tokens.length < requiredTokens) {
+    const autoCount = requiredTokens - args.tokens.length;
+    for (let i = 0; i < autoCount; i++) {
+      args.tokens.push(`bench-auto-${i + 1}`);
+    }
+    console.warn(`Warning: Auto-generated ${autoCount} token(s) to reach ${requiredTokens} required clients.`);
   }
 
   const metrics = createMetricsCollector(1000);
@@ -139,13 +128,13 @@ async function run(): Promise<void> {
 
   const rooms: RoomAssignment[] = [];
   let clientIdx = 0;
-  for (let r = 0; r < effectiveRooms; r++) {
+  for (let r = 0; r < args.rooms; r++) {
     if (clientIdx >= clients.length) break;
     const host = clients[clientIdx++]!;
     const players: Client[] = [];
     const monitors: Client[] = [];
 
-    for (let p = 1; p < effectivePlayersPerRoom && clientIdx < clients.length; p++) {
+    for (let p = 1; p < args.playersPerRoom && clientIdx < clients.length; p++) {
       players.push(clients[clientIdx++]!);
     }
     for (let m = 0; m < args.monitorsPerRoom && clientIdx < clients.length; m++) {
@@ -179,16 +168,19 @@ async function run(): Promise<void> {
 
   // 加入房间
   let joinTotal = 0;
+  let joinedMonitors = 0;
+  const expectedJoins = roomsCreated * (args.playersPerRoom - 1 + args.monitorsPerRoom);
   for (const room of rooms) {
-    if (!room.host.roomId()) continue; // 创建失败的房间跳过
+    const actualRoomId = room.host.roomId();
+    if (!actualRoomId) continue; // 创建失败的房间跳过
 
     for (const player of room.players) {
       joinTotal++;
-      printProgress("Joining players", joinTotal, roomsCreated * (effectivePlayersPerRoom - 1 + args.monitorsPerRoom));
+      printProgress("Joining players", joinTotal, expectedJoins);
 
       const joinStart = Date.now();
       try {
-        await player.joinRoom(room.roomId, false);
+        await player.joinRoom(actualRoomId, false);
         joinRoomLatencies.push(Date.now() - joinStart);
         joinedPlayers++;
       } catch (e) {
@@ -201,13 +193,13 @@ async function run(): Promise<void> {
 
     for (const monitor of room.monitors) {
       joinTotal++;
-      printProgress("Joining monitors", joinTotal, roomsCreated * (effectivePlayersPerRoom - 1 + args.monitorsPerRoom));
+      printProgress("Joining monitors", joinTotal, expectedJoins);
 
       const joinStart = Date.now();
       try {
-        await monitor.joinRoom(room.roomId, true);
+        await monitor.joinRoom(actualRoomId, true);
         joinRoomLatencies.push(Date.now() - joinStart);
-        joinedPlayers++;
+        joinedMonitors++;
       } catch (e) {
         joinRoomLatencies.push(Date.now() - joinStart);
         joinFailed++;
@@ -265,8 +257,14 @@ async function run(): Promise<void> {
     clearProgress();
   }
 
-  console.log("Closing connections...");
-  await Promise.all(clients.map((c) => c.close().catch(() => {})));
+  console.log("Leaving rooms and closing connections...");
+  await Promise.all(
+    clients.map((c) =>
+      c.leaveRoom()
+        .catch(() => {})
+        .then(() => c.close().catch(() => {}))
+    )
+  );
 
   const endedAt = Date.now();
   const metricsSamples = metrics.stop();

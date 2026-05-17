@@ -38,16 +38,7 @@ async function run(): Promise<void> {
     process.exit(0);
   }
 
-  // 根据可用 token 调整规模（同 room-bench 逻辑）
-  const maxConcurrentUsers = args.tokens.length;
-  let effectivePlayersPerRoom = Math.min(args.playersPerRoom, Math.max(1, maxConcurrentUsers));
-  let effectiveRooms = Math.min(args.rooms, Math.max(1, Math.floor(maxConcurrentUsers / effectivePlayersPerRoom)));
-  if (maxConcurrentUsers === 0) {
-    effectiveRooms = 0;
-    effectivePlayersPerRoom = 0;
-  }
-
-  const totalClients = effectiveRooms * (effectivePlayersPerRoom + args.monitorsPerRoom);
+  const totalClients = args.rooms * (args.playersPerRoom + args.monitorsPerRoom);
 
   printBenchHeader("Gameplay Benchmark", {
     host: args.host,
@@ -55,23 +46,19 @@ async function run(): Promise<void> {
     rooms: args.rooms,
     playersPerRoom: args.playersPerRoom,
     monitorsPerRoom: args.monitorsPerRoom,
-    effectiveRooms,
-    effectivePlayersPerRoom,
     hz: args.hz ?? 20,
     totalClients,
     duration: `${args.duration}s`,
     tokens: args.tokens.length,
   });
 
-  if (args.tokens.length === 0) {
-    console.warn("Warning: No auth token provided. Cannot proceed.");
-    process.exit(1);
-  }
-  if (maxConcurrentUsers < args.rooms * args.playersPerRoom) {
-    console.warn(
-      `Warning: Only ${maxConcurrentUsers} token(s) available. ` +
-      `Adjusted to ${effectiveRooms} room(s) with ${effectivePlayersPerRoom} player(s) each.`
-    );
+  const requiredTokens = totalClients;
+  if (args.tokens.length < requiredTokens) {
+    const autoCount = requiredTokens - args.tokens.length;
+    for (let i = 0; i < autoCount; i++) {
+      args.tokens.push(`bench-auto-${i + 1}`);
+    }
+    console.warn(`Warning: Auto-generated ${autoCount} token(s) to reach ${requiredTokens} required clients.`);
   }
 
   const metrics = createMetricsCollector(1000);
@@ -130,13 +117,13 @@ async function run(): Promise<void> {
 
   const rooms: RoomAssignment[] = [];
   let clientIdx = 0;
-  for (let r = 0; r < effectiveRooms; r++) {
+  for (let r = 0; r < args.rooms; r++) {
     if (clientIdx >= clients.length) break;
     const host = clients[clientIdx++]!;
     const players: Client[] = [];
     const monitors: Client[] = [];
 
-    for (let p = 1; p < effectivePlayersPerRoom && clientIdx < clients.length; p++) {
+    for (let p = 1; p < args.playersPerRoom && clientIdx < clients.length; p++) {
       players.push(clients[clientIdx++]!);
     }
     for (let m = 0; m < args.monitorsPerRoom && clientIdx < clients.length; m++) {
@@ -159,21 +146,22 @@ async function run(): Promise<void> {
 
   // 加入房间
   for (const room of rooms) {
-    if (!room.host.roomId()) continue;
+    const actualRoomId = room.host.roomId();
+    if (!actualRoomId) continue;
     for (const p of room.players) {
       try {
-        await p.joinRoom(room.roomId, false);
+        await p.joinRoom(actualRoomId, false);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        console.warn(`Join room failed (${room.roomId}): ${msg}`);
+        console.warn(`Join room failed (${String(actualRoomId)}): ${msg}`);
       }
     }
     for (const m of room.monitors) {
       try {
-        await m.joinRoom(room.roomId, true);
+        await m.joinRoom(actualRoomId, true);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        console.warn(`Monitor join failed (${room.roomId}): ${msg}`);
+        console.warn(`Monitor join failed (${String(actualRoomId)}): ${msg}`);
       }
     }
   }
@@ -274,8 +262,14 @@ async function run(): Promise<void> {
   // 清理定时器
   for (const t of senders) clearInterval(t);
 
-  console.log("Closing connections...");
-  await Promise.all(clients.map((c) => c.close().catch(() => {})));
+  console.log("Leaving rooms and closing connections...");
+  await Promise.all(
+    clients.map((c) =>
+      c.leaveRoom()
+        .catch(() => {})
+        .then(() => c.close().catch(() => {}))
+    )
+  );
 
   const endedAt = Date.now();
   const metricsSamples = metrics.stop();
@@ -298,8 +292,8 @@ async function run(): Promise<void> {
   const summary = {
     mode,
     clients: clients.length,
-    rooms: effectiveRooms,
-    playersPerRoom: effectivePlayersPerRoom,
+    rooms: args.rooms,
+    playersPerRoom: args.playersPerRoom,
     messagesAttempted,
     messagesSent,
     messagesFailed,
@@ -315,8 +309,8 @@ async function run(): Promise<void> {
     params: {
       host: args.host,
       port: args.port,
-      rooms: effectiveRooms,
-      playersPerRoom: effectivePlayersPerRoom,
+      rooms: args.rooms,
+      playersPerRoom: args.playersPerRoom,
       monitorsPerRoom: args.monitorsPerRoom,
       hz,
       duration: args.duration,
