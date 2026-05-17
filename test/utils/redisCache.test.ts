@@ -56,7 +56,7 @@ vi.mock("ioredis", () => {
         if (args[i] === "MATCH") pattern = args[i + 1] as string;
         if (args[i] === "COUNT") count = args[i + 1] as number;
       }
-      const prefix = pattern?.replace("*", "") ?? "";
+      const prefix = pattern?.replaceAll("*", "") ?? "";
       const keys = [...mockStore.keys()].filter((k) => k.startsWith(prefix));
       const start = Number(cursor);
       const page = keys.slice(start, start + count);

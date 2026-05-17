@@ -71,8 +71,12 @@ export function handleOptionsRequest(res: http.ServerResponse): void {
  * 从 Authorization 头中提取 Bearer token
  */
 export function extractBearerToken(value: string): string {
-  const match = /^Bearer\s+(.+)$/i.exec(value.trim());
-  return match ? match[1]!.trim() : value.trim();
+  const trimmed = value.trim();
+  const prefix = "Bearer ";
+  if (trimmed.length > prefix.length && trimmed.slice(0, prefix.length).toLowerCase() === prefix.toLowerCase()) {
+    return trimmed.slice(prefix.length).trim();
+  }
+  return trimmed;
 }
 
 /**
