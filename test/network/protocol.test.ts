@@ -123,7 +123,7 @@ describe("协议和连接", () => {
     }
   });
 
-  test("阻止同一玩家重复在线连接", async () => {
+  test("同一玩家重复在线时新连接顶掉旧连接", async () => {
     const running = await startServer({ port: 0, config: { monitors: [200] } });
     const port = running.address().port;
 
@@ -132,7 +132,8 @@ describe("协议和连接", () => {
 
     try {
       await c1.authenticate("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-      await expect(c2.authenticate("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")).rejects.toThrow(/连接过快|该账号已在线/);
+      await expect(c2.authenticate("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")).resolves.toBeUndefined();
+      await expect(c2.ping()).resolves.toBeGreaterThanOrEqual(0);
     } finally {
       await c1.close();
       await c2.close();
