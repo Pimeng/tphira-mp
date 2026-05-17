@@ -36,6 +36,27 @@ import { processClientCommand, type RoomCallbacks } from "./session/commandRoute
 /** 观战数据聚合间隔（毫秒） */
 const MONITOR_FLUSH_INTERVAL_MS = 50;
 
+/** 心跳响应常量，避免每次新建对象 */
+const PONG = { type: "Pong" } as const;
+
+/** 空操作函数，用于复用避免重复创建箭头函数 */
+const NOOP = () => {};
+
+/** 活跃会话集合，供全局心跳定时器统一扫描 */
+const activeSessions = new Set<Session>();
+/** 全局心跳定时器句柄 */
+let globalHeartbeatTimer: NodeJS.Timeout | null = null;
+
+function startGlobalHeartbeat(): void {
+  if (globalHeartbeatTimer) return;
+  globalHeartbeatTimer = setInterval(() => {
+    const now = Date.now();
+    for (const session of activeSessions) {
+      session.checkHeartbeat(now);
+    }
+  }, 500);
+}
+
 /**
  * 从数组中随机选择一个元素
  * @param arr - 输入数组
@@ -87,8 +108,6 @@ export class Session {
 
   /** 最后接收数据的时间戳 */
   private lastRecv = Date.now();
-  /** 心跳检测定时器（每 500ms 检查一次） */
-  private heartbeatTimer: NodeJS.Timeout;
 
   // ========== 观战数据缓冲 ==========
 
@@ -102,6 +121,10 @@ export class Session {
 
   /** 关联的用户实例（认证成功后设置） */
   user: User | null = null;
+  /** RoomCallbacks 缓存（按 Room 实例复用，避免高频游戏中重复创建对象） */
+  private readonly roomCallbacksCache = new WeakMap<Room, RoomCallbacks>();
+  /** 命令路由上下文缓存（避免每条命令都创建新对象） */
+  private readonly commandCtx: Parameters<typeof processClientCommand>[0];
 
 /**
    * 创建新会话实例
@@ -126,15 +149,38 @@ export class Session {
       this.lastRecv = Date.now();
     });
 
-    // 启动心跳检测定时器
-    this.heartbeatTimer = setInterval(() => {
-      if (this.lost) return;
-      // 如果超过心跳超时时间未收到数据，判定为连接丢失
-      if (Date.now() - this.lastRecv > HEARTBEAT_DISCONNECT_TIMEOUT_MS) {
-        this.state.logger.log("WARN", tl(this.state.serverLang, "log-heartbeat-timeout-disconnect", { id: this.id }), { session: this.id }, { userId: this.user?.id });
-        void this.markLost();
-      }
-    }, 500);
+    activeSessions.add(this);
+    startGlobalHeartbeat();
+
+    const self = this;
+    this.commandCtx = {
+      get state() { return self.state; },
+      get user() { return self.user!; },
+      errToStr: (fn) => this.errToStr(fn),
+      requireRoom: (u) => this.requireRoom(u),
+      broadcastRoom: (room, c) => this.broadcastRoom(room, c),
+      broadcastRoomMessage: (room, msg) => this.broadcastRoomMessage(room, msg),
+      monitorBuffer: this.monitorBuffer,
+      processCreateRoom: (u, id) => this.processCreateRoom(u, id),
+      processJoinRoom: (u, id, m) => this.processJoinRoom(u, id, m),
+      disbandRoom: (room) => this.disbandRoom(room),
+      checkRoomAllReady: (room) => this.checkRoomAllReady(room),
+      fetchChart: (u, id) => this.fetchChart(u, id),
+      fetchRecord: (u, id) => this.fetchRecord(u, id),
+      makeRoomCallbacks: (room) => this.makeRoomCallbacks(room)
+    };
+  }
+
+  /**
+   * 检查心跳超时
+   * @param now - 当前时间戳
+   */
+  checkHeartbeat(now: number): void {
+    if (this.lost) return;
+    if (now - this.lastRecv > HEARTBEAT_DISCONNECT_TIMEOUT_MS) {
+      this.state.logger.log("WARN", tl(this.state.serverLang, "log-heartbeat-timeout-disconnect", { id: this.id }), { session: this.id }, { userId: this.user?.id });
+      void this.markLost();
+    }
   }
 
   private localizeMessage(lang: Language, msg: string): string {
@@ -172,7 +218,7 @@ export class Session {
     if (this.panicked || this.lost) return;
 
     if (cmd.type === "Ping") {
-      await this.trySend({ type: "Pong" });
+      void this.trySend(PONG);
       return;
     }
 
@@ -253,7 +299,7 @@ export class Session {
         user,
         state: this.state,
         sendSystemChat: (content) => this.sendSystemChat(content)
-      }).catch(() => {});
+      }).catch(NOOP);
     } catch (e) {
       const localized = this.localizeError(this.state.serverLang, e instanceof Error ? e : new Error("auth-failed"));
       this.state.logger.log("WARN", tl(this.state.serverLang, "log-auth-failed", { id: this.id, reason: localized }), undefined, { ip: this.remoteIp, isConnectionLog: true });
@@ -319,7 +365,7 @@ export class Session {
   private async markLost(): Promise<void> {
     if (this.lost) return;
     this.lost = true;
-    clearInterval(this.heartbeatTimer);
+    activeSessions.delete(this);
     this.monitorBuffer.destroy();
 
     const stream = this.stream;
@@ -466,7 +512,7 @@ export class Session {
     await this.broadcastRoom(room, { type: "OnJoinRoom", info: user.toInfo() });
     await this.broadcastRoomMessage(room, { type: "JoinRoom", user: user.id, name: user.name });
 
-    const users = [...room.userIds(), ...room.monitorIds()]
+    const users = room.allParticipantIds()
       .map((id) => this.state.users.get(id))
       .filter((it): it is User => Boolean(it))
       .map((it) => it.toInfo());
@@ -513,27 +559,8 @@ export class Session {
   }
 
   private async process(cmd: ClientCommand): Promise<ServerCommand | null> {
-    const user = this.user;
-    if (!user) return null;
-    return processClientCommand(
-      {
-        state: this.state,
-        user,
-        errToStr: (fn) => this.errToStr(fn),
-        requireRoom: (u) => this.requireRoom(u),
-        broadcastRoom: (room, c) => this.broadcastRoom(room, c),
-        broadcastRoomMessage: (room, msg) => this.broadcastRoomMessage(room, msg),
-        monitorBuffer: this.monitorBuffer,
-        processCreateRoom: (u, id) => this.processCreateRoom(u, id),
-        processJoinRoom: (u, id, m) => this.processJoinRoom(u, id, m),
-        disbandRoom: (room) => this.disbandRoom(room),
-        checkRoomAllReady: (room) => this.checkRoomAllReady(room),
-        fetchChart: (u, id) => this.fetchChart(u, id),
-        fetchRecord: (u, id) => this.fetchRecord(u, id),
-        makeRoomCallbacks: (room) => this.makeRoomCallbacks(room)
-      },
-      cmd
-    );
+    if (!this.user) return null;
+    return processClientCommand(this.commandCtx, cmd);
   }
 
   private requireRoom(user: User): Room {
@@ -558,12 +585,12 @@ export class Session {
   private broadcastToIdsFast(ids: number[], cmd: ServerCommand): void {
     for (const id of ids) {
       const u = this.state.users.get(id);
-      if (u) void u.trySend(cmd).catch(() => {});
+      if (u) void u.trySend(cmd).catch(NOOP);
     }
   }
 
   private broadcastRoom(room: Room, cmd: ServerCommand): Promise<void> {
-    return this.broadcastToIds([...room.userIds(), ...room.monitorIds()], cmd);
+    return this.broadcastToIds(room.allParticipantIds(), cmd);
   }
 
   /**
@@ -586,22 +613,27 @@ export class Session {
   }
 
   private makeRoomCallbacks(room: Room): RoomCallbacks {
-    return {
-      usersById: (id: number) => this.state.users.get(id),
-      broadcast: (c: ServerCommand) => this.broadcastRoom(room, c),
-      broadcastToMonitors: (c: ServerCommand) => this.broadcastRoomMonitors(room, c),
-      pickRandomUserId: (ids: number[]) => pickRandom(ids),
-      lang: this.state.serverLang,
-      logger: this.state.logger,
-      wsService: this.state.wsService,
-      onEnterPlaying: async (r: Room) => {
-        if (!r.chart) return;
-        await this.startReplayRecording(r);
-      },
-      onGameEnd: async (r: Room) => {
-        await this.handleGameEnd(r);
-      }
-    };
+    let callbacks = this.roomCallbacksCache.get(room);
+    if (!callbacks) {
+      callbacks = {
+        usersById: (id: number) => this.state.users.get(id),
+        broadcast: (c: ServerCommand) => this.broadcastRoom(room, c),
+        broadcastToMonitors: (c: ServerCommand) => this.broadcastRoomMonitors(room, c),
+        pickRandomUserId: (ids: number[]) => pickRandom(ids),
+        lang: this.state.serverLang,
+        logger: this.state.logger,
+        wsService: this.state.wsService,
+        onEnterPlaying: async (r: Room) => {
+          if (!r.chart) return;
+          await this.startReplayRecording(r);
+        },
+        onGameEnd: async (r: Room) => {
+          await this.handleGameEnd(r);
+        }
+      };
+      this.roomCallbacksCache.set(room, callbacks);
+    }
+    return callbacks;
   }
 
   /**
@@ -612,13 +644,15 @@ export class Session {
   }
 
   private async disbandRoom(room: Room): Promise<void> {
-    const ids = [...room.userIds(), ...room.monitorIds()];
+    const ids = room.allParticipantIds();
+    const leavePromises: Promise<boolean>[] = [];
     for (const id of ids) {
       const u = this.state.users.get(id);
       if (!u) continue;
       if (!u.room || u.room.id !== room.id) continue;
-      await room.onUserLeave({ user: u, ...this.makeRoomCallbacks(room) });
+      leavePromises.push(room.onUserLeave({ user: u, ...this.makeRoomCallbacks(room) }));
     }
+    await Promise.allSettled(leavePromises);
     await this.state.mutex.runExclusive(async () => {
       this.state.rooms.delete(room.id);
     });

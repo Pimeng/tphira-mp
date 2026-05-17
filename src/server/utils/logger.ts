@@ -14,7 +14,7 @@ const LEVEL_WEIGHT: Record<LogLevel, number> = {
 
 
 
-export type LoggerOptions = {
+type LoggerOptions = {
   logsDir?: string;
   minLevel?: LogLevel;
   consoleMinLevel?: LogLevel;

@@ -50,14 +50,6 @@ export async function readJson(req: http.IncomingMessage): Promise<unknown> {
   return JSON.parse(raw) as unknown;
 }
 
-/**
- * 写入文本响应
- */
-export function writeText(res: http.ServerResponse, status: number, text: string): void {
-  res.statusCode = status;
-  res.setHeader("content-type", "text/plain; charset=utf-8");
-  res.end(text);
-}
 
 /**
  * 处理 OPTIONS 预检请求
@@ -70,7 +62,7 @@ export function handleOptionsRequest(res: http.ServerResponse): void {
 /**
  * 从 Authorization 头中提取 Bearer token
  */
-export function extractBearerToken(value: string): string {
+function extractBearerToken(value: string): string {
   const trimmed = value.trim();
   const prefix = "Bearer ";
   if (trimmed.length > prefix.length && trimmed.slice(0, prefix.length).toLowerCase() === prefix.toLowerCase()) {
@@ -90,24 +82,3 @@ export function extractAdminToken(req: http.IncomingMessage, url: URL): string {
   );
 }
 
-/**
- * 提取请求体中的字符串字段
- */
-export function extractStringField(body: unknown, field: string): string {
-  const value = (body as any)?.[field];
-  return typeof value === "string" ? value.trim() : "";
-}
-
-/**
- * 提取请求体中的数字字段
- */
-export function extractNumberField(body: unknown, field: string): number {
-  return Number((body as any)?.[field] ?? "");
-}
-
-/**
- * 提取请求体中的布尔字段
- */
-export function extractBooleanField(body: unknown, field: string): boolean {
-  return Boolean((body as any)?.[field]);
-}

@@ -8,7 +8,7 @@ import type { JudgeEvent, ServerCommand, TouchFrame } from "../../../common/comm
 import type { Room } from "../../game/room.js";
 
 /** 观战数据缓冲选项 */
-export type MonitorBufferOptions = {
+type MonitorBufferOptions = {
   /** 聚合间隔(毫秒) */
   flushIntervalMs: number;
   /** 广播命令到指定 ID 列表的回调(fire-and-forget) */
@@ -37,7 +37,7 @@ export class MonitorBuffer {
   }
 
   /** 推入一批 touches 帧 */
-  bufferTouches(room: Room, monitorIds: number[], player: number, frames: TouchFrame[]): void {
+  bufferTouches(room: Room, monitorIds: Iterable<number>, player: number, frames: TouchFrame[]): void {
     const ids = this.normalizeMonitorIds(monitorIds);
     if (ids.length === 0) return;
     this.touchBuffer.push({ targets: { room, ids }, player, frames });
@@ -45,7 +45,7 @@ export class MonitorBuffer {
   }
 
   /** 推入一批 judges 事件 */
-  bufferJudges(room: Room, monitorIds: number[], player: number, judges: JudgeEvent[]): void {
+  bufferJudges(room: Room, monitorIds: Iterable<number>, player: number, judges: JudgeEvent[]): void {
     const ids = this.normalizeMonitorIds(monitorIds);
     if (ids.length === 0) return;
     this.judgeBuffer.push({ targets: { room, ids }, player, judges });
@@ -105,13 +105,12 @@ export class MonitorBuffer {
     }
   }
 
-  private normalizeMonitorIds(ids: number[]): number[] {
+  private normalizeMonitorIds(ids: Iterable<number>): number[] {
     return [...new Set(ids)].sort((a, b) => a - b);
   }
 
   private liveMonitorIds(targets: MonitorTargets): number[] {
-    const current = new Set(targets.room.monitorIds());
-    return targets.ids.filter((id) => current.has(id));
+    return targets.ids.filter((id) => targets.room.monitors.has(id));
   }
 
   private mergeKey(ids: number[], player: number): string {

@@ -2,7 +2,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { Client } from "../../src/client/client.js";
 import { startServer } from "../../src/server/core/server.js";
-import { sleep, waitFor, setupMockFetch, createTempDir, cleanupTempDir } from "../helpers.js";
+import { waitFor, setupMockFetch, createTempDir, cleanupTempDir } from "../helpers.js";
 import type { TouchFrame } from "../../src/common/commands.js";
 
 describe("核心功能", () => {

@@ -4,8 +4,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { getAppPaths } from "../utils/appPaths.js";
 
-export const SUPPORTED_LANGS = ["en-US", "zh-CN"] as const;
-export type SupportedLang = (typeof SUPPORTED_LANGS)[number];
+const SUPPORTED_LANGS = ["en-US", "zh-CN"] as const;
+type SupportedLang = (typeof SUPPORTED_LANGS)[number];
 
 function loadBundle(lang: SupportedLang): FluentBundle {
   const bundle = new FluentBundle(lang, { useIsolating: false });

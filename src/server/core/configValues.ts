@@ -71,7 +71,7 @@ export function parseShareStationValue(value: unknown): ServerConfig["share_stat
   return url && token ? { url, token } : undefined;
 }
 
-export function parseRedisValue(value: unknown): ServerConfig["redis"] {
+function parseRedisValue(value: unknown): ServerConfig["redis"] {
   if (!isRecord(value)) return undefined;
   const enabled = parseBoolValue(value.ENABLED);
   if (enabled === undefined) return undefined;
@@ -92,7 +92,7 @@ export function parseRedisValue(value: unknown): ServerConfig["redis"] {
  * 配置字段的元数据。每条记录定义一个配置项的所有信息，
  * 让加载/合并/对比/分类等操作都能从这一张表派生。
  */
-export type ConfigField<K extends keyof ServerConfig = keyof ServerConfig> = {
+type ConfigField<K extends keyof ServerConfig = keyof ServerConfig> = {
   key: K;
   /** ENV 变量名，同时也是 yaml 文件中（全大写）的键名 */
   envName: string;
@@ -108,7 +108,7 @@ function field<K extends keyof ServerConfig>(f: ConfigField<K>): ConfigField {
   return f as ConfigField;
 }
 
-export const CONFIG_FIELDS: ReadonlyArray<ConfigField> = [
+const CONFIG_FIELDS: ReadonlyArray<ConfigField> = [
   field({ key: "monitors", envName: "MONITORS", parse: parseIntegerListValue }),
   field({ key: "test_account_ids", envName: "TEST_ACCOUNT_IDS", parse: parseIntegerListValue }),
   field({ key: "server_name", envName: "SERVER_NAME", parse: parseStringValue }),

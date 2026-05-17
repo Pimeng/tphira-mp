@@ -8,7 +8,7 @@ describe("Phira API 端点配置", () => {
   const originalFetch = globalThis.fetch;
   let fetchCalls: Array<{ url: string; init?: RequestInit }> = [];
 
-  const createMockFetch = (customEndpoint: string) => {
+  const createMockFetch = (_customEndpoint: string) =>{
     return (async (input: string | URL | Request, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
       fetchCalls.push({ url, init });

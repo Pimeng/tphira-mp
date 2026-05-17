@@ -1,4 +1,4 @@
-import { type FSWatcher, watch } from "node:fs";
+import { watch, type FSWatcher } from "node:fs";
 import { basename, dirname } from "node:path";
 import type { Logger } from "../utils/logger.js";
 

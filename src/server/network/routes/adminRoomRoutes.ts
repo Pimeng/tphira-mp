@@ -55,7 +55,7 @@ export async function tryHandleAdminRoomRoutes(ctx: RequestContext): Promise<boo
     }
 
     // 断开所有用户连接
-    const allIds = [...room.userIds(), ...room.monitorIds()];
+    const allIds = room.allParticipantIds();
     const disconnectTasks: Promise<void>[] = [];
     for (const id of allIds) {
       const u = state.users.get(id);

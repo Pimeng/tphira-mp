@@ -1,5 +1,5 @@
 // fetchWithRetry 指数退避和重试策略测试
-import { describe, expect, test, beforeAll, afterAll } from "vitest";
+import { describe, expect, test, afterAll } from "vitest";
 import { fetchWithRetry } from "../../src/common/http.js";
 
 describe("fetchWithRetry 重试策略", () => {

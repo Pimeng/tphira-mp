@@ -38,7 +38,7 @@ export function parseProxy(proxy: string): ParsedProxy {
   }
 }
 
-export async function connectSocket(host: string, port: number, signal: AbortSignal, secure: boolean): Promise<net.Socket> {
+async function connectSocket(host: string, port: number, signal: AbortSignal, secure: boolean): Promise<net.Socket> {
   if (signal.aborted) throw createAbortError();
   return await new Promise<net.Socket>((resolve, reject) => {
     const socket = secure

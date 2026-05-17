@@ -1,7 +1,7 @@
 import type { Logger } from "../utils/logger.js";
 import { cleanupExpiredReplays, defaultReplayBaseDir } from "../replay/replayStorage.js";
 
-export type ReplayCleanupHandle = {
+type ReplayCleanupHandle = {
   stop: () => void;
 };
 

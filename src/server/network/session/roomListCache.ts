@@ -67,9 +67,3 @@ export function getAvailableRoomsText(state: ServerState, lang: Language): strin
   return text;
 }
 
-/**
- * 清空房间列表缓存(测试辅助)
- */
-function clearRoomListCache(): void {
-  cache = { text: new Map(), timestamp: 0 };
-}

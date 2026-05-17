@@ -60,7 +60,7 @@ export async function verifyUserTokenViaApi(state: ServerState, token: string, t
 export async function broadcastRoomAll(state: ServerState, roomId: RoomId, cmd: ServerCommand): Promise<void> {
   const room = state.rooms.get(roomId);
   if (!room) return;
-  const ids = [...room.userIds(), ...room.monitorIds()];
+  const ids = room.allParticipantIds();
   const tasks: Promise<void>[] = [];
   for (const id of ids) {
     const u = state.users.get(id);

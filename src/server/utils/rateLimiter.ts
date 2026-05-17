@@ -3,7 +3,7 @@
  * 按 IP 统计日志频率，超过阈值时将该 IP 加入临时黑名单
  */
 
-export type RateLimiterOptions = {
+type RateLimiterOptions = {
   /** 日志频率阈值（条/秒），超过此值触发限流 */
   logsPerSecondThreshold?: number;
   /** 黑名单持续时间（毫秒） */

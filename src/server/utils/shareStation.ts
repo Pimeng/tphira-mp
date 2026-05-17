@@ -1,7 +1,7 @@
 import { fetchWithTimeout } from "../../common/http.js";
 import { encodeMultipartFormData } from "../network/httpHelpers.js";
 
-export type ShareStationConfig = {
+type ShareStationConfig = {
   url: string;
   token: string;
 };

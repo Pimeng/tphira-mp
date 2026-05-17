@@ -19,7 +19,7 @@ export async function handleContest(ctx: CommandCtx, args: string[]): Promise<vo
     const ok = await state.mutex.runExclusive(async () => {
       const room = state.rooms.get(rid);
       if (!room) return false;
-      const currentIds = [...room.userIds(), ...room.monitorIds()];
+      const currentIds = room.allParticipantIds();
       const set = new Set<number>(userIds.length > 0 ? userIds : currentIds);
       for (const id of currentIds) set.add(id);
       room.contest = { whitelist: set, manualStart: true, autoDisband: true };
@@ -61,7 +61,7 @@ export async function handleContest(ctx: CommandCtx, args: string[]): Promise<vo
       const room = state.rooms.get(rid);
       if (!room || !room.contest) return false;
       room.contest.whitelist = new Set<number>(userIds);
-      const currentIds = [...room.userIds(), ...room.monitorIds()];
+      const currentIds = room.allParticipantIds();
       for (const id of currentIds) room.contest.whitelist.add(id);
       return true;
     });
@@ -83,7 +83,7 @@ export async function handleContest(ctx: CommandCtx, args: string[]): Promise<vo
       if (room.state.type !== "WaitForReady") return { ok: false as const, error: "room-not-waiting" };
       if (!room.chart) return { ok: false as const, error: "no-chart-selected" };
       const started = room.state.started;
-      const allIds = [...room.userIds(), ...room.monitorIds()];
+      const allIds = room.allParticipantIds();
       const allReady = allIds.every((id) => started.has(id));
       if (!allReady && !force) return { ok: false as const, error: "not-all-ready" };
       return { ok: true as const, room };

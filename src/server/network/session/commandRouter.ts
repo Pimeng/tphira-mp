@@ -41,7 +41,7 @@ export type RoomCallbacks = {
  * 由 Session 在 process() 中构造,把它依赖的能力以最小化接口形式注入,
  * 让 commandRouter 不直接持有 Session 实例,从而避免循环引用。
  */
-export type CommandContext = {
+type CommandContext = {
   state: ServerState;
   user: User;
   errToStr: <T>(fn: () => Promise<T>) => Promise<StringResult<T>>;
@@ -106,9 +106,8 @@ export async function processClientCommand(
         { userId: user.id }
       );
       // monitor 数据转发: 聚合缓冲,避免高频实时数据冲击网络
-      const monitorIds = room.monitorIds();
-      if (monitorIds.length > 0) {
-        ctx.monitorBuffer.bufferTouches(room, monitorIds, user.id, cmd.frames);
+      if (room.monitors.size > 0) {
+        ctx.monitorBuffer.bufferTouches(room, room.monitors, user.id, cmd.frames);
       }
       // 录制回放: 独立判断、独立执行
       if (state.replayEnabled && room.replayEligible) {
@@ -128,9 +127,8 @@ export async function processClientCommand(
         { judges: cmd.judges },
         { userId: user.id }
       );
-      const monitorIds = room.monitorIds();
-      if (monitorIds.length > 0) {
-        ctx.monitorBuffer.bufferJudges(room, monitorIds, user.id, cmd.judges);
+      if (room.monitors.size > 0) {
+        ctx.monitorBuffer.bufferJudges(room, room.monitors, user.id, cmd.judges);
       }
       if (state.replayEnabled && room.replayEligible) {
         state.replayRecorder.appendJudges(room.id, user.id, cmd.judges);

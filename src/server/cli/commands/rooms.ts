@@ -92,7 +92,7 @@ export async function handleDisband(ctx: CommandCtx, args: string[]): Promise<vo
     return;
   }
 
-  const allIds = [...room.userIds(), ...room.monitorIds()];
+  const allIds = room.allParticipantIds();
   const tasks: Promise<void>[] = [];
   for (const id of allIds) {
     const u = state.users.get(id);

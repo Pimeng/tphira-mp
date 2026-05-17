@@ -1,15 +1,10 @@
 export {
   applyCors,
   extractAdminToken,
-  extractBearerToken,
-  extractBooleanField,
-  extractNumberField,
-  extractStringField,
   getClientIp,
   handleOptionsRequest,
   readJson,
-  writeJson,
-  writeText
+  writeJson
 } from "./httpServerUtils.js";
 
 export {

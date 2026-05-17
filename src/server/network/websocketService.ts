@@ -12,9 +12,7 @@ import {
   type RoomUpdateData
 } from "../game/adminViews.js";
 
-export type { AdminRoomData, RoomUpdateData };
-
-export type WebSocketClient = {
+type WebSocketClient = {
   ws: WebSocket;
   roomId: RoomId | null;
   userId: number | null;
@@ -34,14 +32,14 @@ export type WebSocketService = {
   close: () => Promise<void>;
 };
 
-export type WebSocketMessage =
+type WebSocketMessage =
   | { type: "subscribe"; roomId: string; userId?: number }
   | { type: "unsubscribe" }
   | { type: "ping" }
   | { type: "admin_subscribe"; token: string }
   | { type: "admin_unsubscribe" };
 
-export type WebSocketResponse =
+type WebSocketResponse =
   | { type: "error"; message: string }
   | { type: "subscribed"; roomId: string }
   | { type: "unsubscribed" }
@@ -52,7 +50,7 @@ export type WebSocketResponse =
   | { type: "admin_unsubscribed" }
   | { type: "admin_update"; data: AdminUpdateData };
 
-export type AdminUpdateData = {
+type AdminUpdateData = {
   timestamp: number;
   changes: {
     rooms?: AdminRoomData[];
@@ -183,7 +181,8 @@ export function startWebSocketService(opts: { httpServer: http.Server; state: Se
           sendResponse(ws, { type: "admin_subscribed" });
 
           // 立即发送当前完整状态
-          await sendAdminUpdate(ws, client, true);
+          const adminData = buildAdminRoomsData(state);
+          await sendAdminUpdate(ws, client, adminData, JSON.stringify(adminData), true);
           return;
         }
 
@@ -245,26 +244,23 @@ export function startWebSocketService(opts: { httpServer: http.Server; state: Se
   };
 
   // 发送管理员更新（支持增量更新）
-  const sendAdminUpdate = async (ws: WebSocket, client: WebSocketClient, forceFullUpdate = false): Promise<void> => {
+  const sendAdminUpdate = (
+    ws: WebSocket,
+    client: WebSocketClient,
+    roomsData: AdminRoomData[],
+    roomsSnapshot: string,
+    forceFullUpdate = false
+  ): void => {
     if (!client.isAdmin) return;
 
-    const roomsData = buildAdminRoomsData(state);
-    const currentSnapshot = JSON.stringify(roomsData);
-
     // 没有变化且不是首次推送：跳过
-    if (!forceFullUpdate && client.lastAdminSnapshot && currentSnapshot === client.lastAdminSnapshot) return;
+    if (!forceFullUpdate && client.lastAdminSnapshot === roomsSnapshot) return;
 
-    const response: WebSocketResponse = {
-      type: "admin_update",
-      data: {
-        timestamp: Date.now(),
-        changes: { rooms: roomsData, total_rooms: roomsData.length }
-      }
-    };
+    const responseStr = `{"type":"admin_update","data":{"timestamp":${Date.now()},"changes":{"rooms":${roomsSnapshot},"total_rooms":${roomsData.length}}}}`;
 
     if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(response));
-      client.lastAdminSnapshot = currentSnapshot;
+      ws.send(responseStr);
+      client.lastAdminSnapshot = roomsSnapshot;
     }
   };
 
@@ -325,11 +321,13 @@ export function startWebSocketService(opts: { httpServer: http.Server; state: Se
   };
 
   const broadcastAdminUpdate = async (): Promise<void> => {
-    const tasks: Promise<void>[] = [];
+    const roomsData = buildAdminRoomsData(state);
+    const roomsSnapshot = JSON.stringify(roomsData);
     for (const [ws, client] of clients) {
-      if (client.isAdmin) tasks.push(sendAdminUpdate(ws, client, false));
+      if (client.isAdmin) {
+        sendAdminUpdate(ws, client, roomsData, roomsSnapshot, false);
+      }
     }
-    if (tasks.length > 0) void Promise.allSettled(tasks);
   };
 
   return {

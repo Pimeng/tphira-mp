@@ -50,10 +50,15 @@ export class Room {
   /** 比赛模式配置（null 表示普通房间） */
   contest: { whitelist: Set<number>; manualStart: boolean; autoDisband: boolean } | null = null;
 
-  /** 房间内普通用户 ID 列表 */
-  private users: number[] = [];
-  /** 房间内观战者 ID 列表 */
-  private monitors: number[] = [];
+  /** 房间内普通用户 ID 集合 */
+  private _users = new Set<number>();
+  /** 房间内观战者 ID 集合 */
+  private _monitors = new Set<number>();
+
+  /** 只读用户 ID 集合 */
+  get users(): ReadonlySet<number> { return this._users; }
+  /** 只读观战者 ID 集合 */
+  get monitors(): ReadonlySet<number> { return this._monitors; }
   /** 当前选中的谱面 */
   chart: Chart | null = null;
 
@@ -71,7 +76,7 @@ export class Room {
     this.maxUsers = opts.maxUsers;
     this.replayEligible = opts.replayEligible;
     this.hostId = opts.hostId;
-    this.users = [opts.hostId];
+    this._users.add(opts.hostId);
   }
 
   addLog(message: string, timestamp: number): void {
@@ -111,7 +116,7 @@ export class Room {
 
   clientState(user: User, usersById: (id: number) => User | undefined): ClientRoomState {
     const users = new Map<number, User>();
-    for (const id of [...this.users, ...this.monitors]) {
+    for (const id of [...this._users, ...this._monitors]) {
       const u = usersById(id);
       if (u) users.set(id, u);
     }
@@ -149,20 +154,25 @@ export class Room {
 
   addUser(user: User, monitor: boolean): boolean {
     if (monitor) {
-      if (!this.monitors.includes(user.id)) this.monitors.push(user.id);
+      this._monitors.add(user.id);
       return true;
     }
-    if (this.users.length >= this.maxUsers) return false;
-    if (!this.users.includes(user.id)) this.users.push(user.id);
+    if (this._users.size >= this.maxUsers) return false;
+    this._users.add(user.id);
     return true;
   }
 
   userIds(): number[] {
-    return [...this.users];
+    return [...this._users];
   }
 
   monitorIds(): number[] {
-    return [...this.monitors];
+    return [...this._monitors];
+  }
+
+  /** 返回所有参与者 ID（用户 + 观战者），避免多处重复 spread 分配 */
+  allParticipantIds(): number[] {
+    return [...this._users, ...this._monitors];
   }
 
   async send(
@@ -242,8 +252,8 @@ export class Room {
       await this.send(opts.broadcast, { type: "LeaveRoom", user: user.id, name: user.name }, opts.usersById, opts.lang);
       user.room = null;
 
-      if (user.monitor) this.monitors = this.monitors.filter((it) => it !== user.id);
-      else this.users = this.users.filter((it) => it !== user.id);
+      if (user.monitor) this._monitors.delete(user.id);
+      else this._users.delete(user.id);
 
       if (this.hostId === user.id) {
         const users = this.userIds();
@@ -264,7 +274,7 @@ export class Room {
         ]);
       }
       await this.checkAllReady(opts);
-      return this.users.length === 0 && this.monitors.length === 0;
+      return this._users.size === 0 && this._monitors.size === 0;
     }
 
 
@@ -321,18 +331,41 @@ export class Room {
         if (!finished) return;
 
         if (results.size > 0) {
-          const entries = [...results.entries()];
+          let bestScore = Number.NEGATIVE_INFINITY;
+          let bestAcc = Number.NEGATIVE_INFINITY;
+          let bestStd = Number.POSITIVE_INFINITY;
+          const bestScoreIds: number[] = [];
+          const bestAccIds: number[] = [];
+          const bestStdIds: number[] = [];
 
-          const bestScore = Math.max(...entries.map(([, r]) => r.score));
-          const bestScoreIds = entries.filter(([, r]) => r.score === bestScore).map(([id]) => id);
+          for (const [id, r] of results) {
+            if (r.score > bestScore) {
+              bestScore = r.score;
+              bestScoreIds.length = 0;
+              bestScoreIds.push(id);
+            } else if (r.score === bestScore) {
+              bestScoreIds.push(id);
+            }
+
+            if (r.accuracy > bestAcc) {
+              bestAcc = r.accuracy;
+              bestAccIds.length = 0;
+              bestAccIds.push(id);
+            } else if (r.accuracy === bestAcc) {
+              bestAccIds.push(id);
+            }
+
+            if (r.std < bestStd) {
+              bestStd = r.std;
+              bestStdIds.length = 0;
+              bestStdIds.push(id);
+            } else if (r.std === bestStd) {
+              bestStdIds.push(id);
+            }
+          }
+
           const bestScoreName = opts.usersById(bestScoreIds[0]!)?.name ?? String(bestScoreIds[0]!);
-
-          const bestAcc = Math.max(...entries.map(([, r]) => r.accuracy));
-          const bestAccIds = entries.filter(([, r]) => r.accuracy === bestAcc).map(([id]) => id);
           const bestAccName = opts.usersById(bestAccIds[0]!)?.name ?? String(bestAccIds[0]!);
-
-          const bestStd = Math.min(...entries.map(([, r]) => r.std));
-          const bestStdIds = entries.filter(([, r]) => r.std === bestStd).map(([id]) => id);
           const bestStdName = opts.usersById(bestStdIds[0]!)?.name ?? String(bestStdIds[0]!);
           const bestStdMs = Math.round(bestStd * 1000);
 

@@ -8,7 +8,7 @@ import {
   isPhiraRecordV2
 } from "./replayFormat.js";
 
-export type ReplayHeader = {
+type ReplayHeader = {
   chartId: number;
   userId: number;
   recordId: number;
@@ -19,7 +19,7 @@ export type ReplayHeader = {
   compression?: number;
 };
 
-export type ReplayEntry = {
+type ReplayEntry = {
   chartId: number;
   timestamp: number;
   recordId: number;

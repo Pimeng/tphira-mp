@@ -5,7 +5,7 @@ const HITOKOTO_FETCH_TIMEOUT_MS = 3000;
 const HITOKOTO_CACHE_TTL_MS = 60_000;
 const HITOKOTO_MIN_INTERVAL_MS = 600;
 
-export type HitokotoValue = { quote: string; from: string };
+type HitokotoValue = { quote: string; from: string };
 
 const hitokotoCache = new Cache<"current", HitokotoValue>({
   fileName: "hitokoto_cache.json",

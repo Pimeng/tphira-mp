@@ -54,7 +54,7 @@ export function parseBoundedIntArg(arg: string | undefined, min: number, max: nu
 }
 
 /** 解析 on/off/status 三态命令；其他值视为非法。 */
-export type Toggle = "on" | "off" | "status";
+type Toggle = "on" | "off" | "status";
 
 export function parseToggleArg(arg: string | undefined): Toggle | null {
   if (arg === undefined || arg === "status") return "status";

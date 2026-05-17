@@ -1,9 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
 import net from "node:net";
 import { parseProxyProtocol } from "../../src/server/network/proxyProtocol.js";
-import type { ProxyInfo } from "../../src/server/network/proxyProtocol.js";
 
-function createMockSocket(data: Buffer): net.Socket {
+function createMockSocket(_data: Buffer): net.Socket {
   const socket = new net.Socket();
   return socket;
 }

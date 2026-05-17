@@ -3,7 +3,7 @@ import type { ServerState } from "../core/state.js";
 import { readReplayHeader, replayFilePath } from "./replayStorage.js";
 import { uploadToShareStation, setReplayVisibility } from "../utils/shareStation.js";
 
-export type AutoUploadHandler = (userId: number, chartId: number, timestamp: number, recordId: number) => void;
+type AutoUploadHandler = (userId: number, chartId: number, timestamp: number, recordId: number) => void;
 
 /**
  * 创建游戏结束时的自动上传处理器

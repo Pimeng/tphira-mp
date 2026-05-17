@@ -7,7 +7,6 @@ import {
   parseRoomMaxUsersValue,
   parseIntegerListValue,
   parseShareStationValue,
-  loadEnvConfig,
   mergeConfig,
   buildConfigFromRecord,
   sameConfigValue,

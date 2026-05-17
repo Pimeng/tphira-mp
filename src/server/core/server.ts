@@ -38,7 +38,10 @@ import {
   loadEnvConfig,
   mergeConfig
 } from "./configValues.js";
-import { type ConfigWatcher, startConfigFileWatcher } from "./configWatcher.js";
+import { startConfigFileWatcher, type ConfigWatcher } from "./configWatcher.js";
+
+/** 空操作函数，用于复用避免重复创建箭头函数 */
+const NOOP = () => {};
 
 /** 启动服务器选项 */
 export type StartServerOptions = { host?: string; port?: number; config?: Partial<ServerConfig>; configPath?: string; watchConfig?: boolean };
@@ -87,14 +90,13 @@ function loadConfig(configPath: string): ServerConfig {
  * 定义了服务器命令的编码/解码方式，以及高优先级消息的判断逻辑。
  * 高优先级消息会跳过批量发送延迟，立即发送，确保关键交互的实时性。
  */
+/** 高优先级消息类型：心跳响应、认证响应、状态变更、房主变更、用户加入 */
+const HIGH_PRIORITY_TYPES = new Set(["Pong", "Authenticate", "ChangeState", "ChangeHost", "OnJoinRoom"]);
+
 const codec: StreamCodec<ServerCommand, ClientCommand> = {
   encodeSend: (payload) => encodePacket(payload, encodeServerCommand),
   decodeRecv: (payload) => decodePacket(payload, decodeClientCommand),
-  isHighPriority: (cmd) => {
-    // 高优先级消息类型：心跳响应、认证响应、状态变更、房主变更、用户加入
-    const highTypes = new Set(["Pong", "Authenticate", "ChangeState", "ChangeHost", "OnJoinRoom"]);
-    return highTypes.has(cmd.type);
-  }
+  isHighPriority: (cmd) => HIGH_PRIORITY_TYPES.has(cmd.type)
 };
 
 function formatListenHostPort(host: string, port: number): string {
@@ -199,7 +201,11 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
    * 4. 进行协议握手（版本协商）
    * 5. 绑定 Stream 并注册到状态管理
    */
+  const activeSockets = new Set<net.Socket>();
+
   const server = net.createServer(async (socket) => {
+    activeSockets.add(socket);
+    socket.once("close", () => activeSockets.delete(socket));
     const id = newUuid();
     let remoteIp = socket.remoteAddress ?? "unknown";
     let remotePort = socket.remotePort ?? 0;
@@ -325,7 +331,7 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
       state.autoUploadCallback = httpService.handleGameEndAutoUpload;
       // 注册房间日志广播回调，将房间日志实时推送到 WebSocket 客户端
       broadcastRoomLog = (roomId, message, timestamp) => {
-        void httpService?.ws.broadcastRoomLog(roomId, message, timestamp).catch(() => {});
+        void httpService?.ws.broadcastRoomLog(roomId, message, timestamp).catch(NOOP);
       };
     }
 
@@ -408,7 +414,7 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
         ]).catch((err) => {
           logger.warn(`Server close timed out or failed: ${err instanceof Error ? err.message : String(err)}`);
           // 强制销毁所有活跃连接
-          for (const socket of (server as any).connections || []) {
+          for (const socket of activeSockets) {
             try { socket.destroy(); } catch { /* ignore */ }
           }
         });

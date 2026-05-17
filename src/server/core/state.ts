@@ -34,12 +34,12 @@ export const TEMP_TOKEN_TTL_MS = 4 * 60 * 60 * 1000;
 export const OTP_TTL_MS = 1 * 60 * 1000;
 
 /** 用户自动上传配置（仅控制 UI 是否显示上传按钮，仅内存存储） */
-export type AutoUploadConfig = {
+type AutoUploadConfig = {
   show: boolean;
 };
 
 /** 已上传回放的元数据（用于去重和状态跟踪） */
-export type UploadedReplayMeta = {
+type UploadedReplayMeta = {
   scoreId: number;
   chartId: number;
   timestamp: number;

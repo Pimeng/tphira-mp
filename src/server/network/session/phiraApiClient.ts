@@ -14,10 +14,10 @@ import type { Chart, RecordData } from "../../core/types.js";
 /** Phira API 默认端点 */
 export const DEFAULT_PHIRA_API_ENDPOINT = "https://phira.5wyxi.com";
 /** API 请求超时时间(毫秒) */
-export const FETCH_TIMEOUT_MS = 60000;
+const FETCH_TIMEOUT_MS = 60000;
 
 /** Phira API 调用通用选项 */
-export type PhiraApiOptions = {
+type PhiraApiOptions = {
   /** API 端点(不带尾部斜杠) */
   endpoint: string;
   /** 出站代理配置 */
@@ -27,7 +27,7 @@ export type PhiraApiOptions = {
 };
 
 /** /me 接口返回的用户信息 */
-export type PhiraUserInfo = {
+type PhiraUserInfo = {
   id: number;
   name: string;
   language: string;

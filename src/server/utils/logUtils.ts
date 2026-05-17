@@ -13,7 +13,7 @@ function roomLogContext(roomId: RoomId | string, context?: RoomLogContext): LogC
   return { ...context, roomId: String(roomId) };
 }
 
-export function logLocalized(
+function logLocalized(
   logger: Logger,
   level: LogLevel,
   lang: Language,
@@ -24,7 +24,7 @@ export function logLocalized(
   logger.log(level, tl(lang, key, params ?? {}), undefined, context);
 }
 
-export function logRoom(
+function logRoom(
   logger: Logger,
   level: LogLevel,
   lang: Language,

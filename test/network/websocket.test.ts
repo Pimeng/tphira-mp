@@ -526,7 +526,6 @@ describe("WebSocket 测试", () => {
         await sleep(100);
 
         // 检查服务端房间索引
-        // @ts-expect-error 访问私有属性
         const wsService = server.state.wsService;
         if (wsService) {
           // @ts-expect-error 访问私有属性

@@ -4,7 +4,7 @@ import type { ServerState } from "../core/state.js";
 import type { Room } from "./room.js";
 import { roomIdToString, type RoomId } from "../../common/roomId.js";
 
-export type AdminRoomState = {
+type AdminRoomState = {
   type: "select_chart" | "waiting_for_ready" | "playing";
   ready_users?: number[];
   ready_count?: number;
@@ -66,7 +66,7 @@ function toStateString(room: Room): "select_chart" | "waiting_for_ready" | "play
   return "select_chart";
 }
 
-export function buildAdminRoomData(state: ServerState, rid: RoomId, room: Room): AdminRoomData {
+function buildAdminRoomData(state: ServerState, rid: RoomId, room: Room): AdminRoomData {
   const roomid = roomIdToString(rid);
   const hostUser = state.users.get(room.hostId);
   const hostName = hostUser?.name ?? String(room.hostId);

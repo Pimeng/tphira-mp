@@ -27,7 +27,7 @@ export async function tryHandleAdminContestRoutes(ctx: RequestContext): Promise<
         room.contest = null;
         return true;
       }
-      const currentIds = [...room.userIds(), ...room.monitorIds()];
+      const currentIds = room.allParticipantIds();
       const set = new Set<number>(whitelistArr && whitelistArr.length > 0 ? whitelistArr : currentIds);
       for (const id of currentIds) set.add(id);
       room.contest = { whitelist: set, manualStart: true, autoDisband: true };
@@ -54,7 +54,7 @@ export async function tryHandleAdminContestRoutes(ctx: RequestContext): Promise<
       const room = state.rooms.get(rid);
       if (!room || !room.contest) return false;
       room.contest.whitelist = new Set<number>(userIds);
-      const currentIds = [...room.userIds(), ...room.monitorIds()];
+      const currentIds = room.allParticipantIds();
       for (const id of currentIds) room.contest.whitelist.add(id);
       return true;
     });
@@ -77,7 +77,7 @@ export async function tryHandleAdminContestRoutes(ctx: RequestContext): Promise<
       if (room.state.type !== "WaitForReady") return { ok: false as const, status: 400, error: "room-not-waiting" };
       if (!room.chart) return { ok: false as const, status: 400, error: "no-chart-selected" };
       const started = room.state.started;
-      const allIds = [...room.userIds(), ...room.monitorIds()];
+      const allIds = room.allParticipantIds();
       const allReady = allIds.every((id) => started.has(id));
       if (!allReady && !force) return { ok: false as const, status: 400, error: "not-all-ready" };
       return { ok: true as const, room };

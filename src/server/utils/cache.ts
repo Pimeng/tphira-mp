@@ -10,7 +10,7 @@ type CacheEntry<V> = {
   lastAccessedAt: number;
 };
 
-export type CacheOptions<K extends string | number = string | number> = {
+type CacheOptions<K extends string | number = string | number> = {
   fileName: string;
   maxMemorySize?: number;
   ttl?: number; // 缓存过期时间（毫秒），undefined 表示永不过期
@@ -18,7 +18,7 @@ export type CacheOptions<K extends string | number = string | number> = {
   keyType?: K extends string ? "string" : K extends number ? "number" : "string" | "number";
 };
 
-export type CacheStats = {
+type CacheStats = {
   hits: number;
   misses: number;
   total: number;

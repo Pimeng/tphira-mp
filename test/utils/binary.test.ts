@@ -120,10 +120,10 @@ describe("BinaryReader", () => {
     const r = new BinaryReader(w.toBuffer());
     const okRes = r.readResult((rr) => rr.readU32(), (rr) => rr.readString());
     expect(okRes.ok).toBe(true);
-    expect(okRes.value).toBe(42);
+    if (okRes.ok) expect(okRes.value).toBe(42);
     const errRes = r.readResult((rr) => rr.readU32(), (rr) => rr.readString());
     expect(errRes.ok).toBe(false);
-    expect(errRes.error).toBe("error");
+    if (!errRes.ok) expect(errRes.error).toBe("error");
   });
 
   it("readArray", () => {
@@ -263,7 +263,7 @@ describe("BinaryWriter", () => {
   it("writeOption", () => {
     const w = new BinaryWriter();
     w.writeOption(42, (ww, v) => ww.writeU32(v));
-    w.writeOption(null, (ww, v) => ww.writeU32(v));
+    w.writeOption<number>(null, (ww, v) => ww.writeU32(v));
     const buf = w.toBuffer();
     expect(buf).toEqual(Buffer.from([1, 42, 0, 0, 0, 0]));
   });
@@ -341,9 +341,9 @@ describe("StringResult", () => {
     const r = new BinaryReader(w.toBuffer());
     const res1 = decodeStringResult(r, (rr) => rr.readU32());
     expect(res1.ok).toBe(true);
-    expect(res1.value).toBe(42);
+    if (res1.ok) expect(res1.value).toBe(42);
     const res2 = decodeStringResult(r, (rr) => rr.readU32());
     expect(res2.ok).toBe(false);
-    expect(res2.error).toBe("bad");
+    if (!res2.ok) expect(res2.error).toBe("bad");
   });
 });

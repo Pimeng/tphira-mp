@@ -21,7 +21,7 @@ export async function createPlayingGame(
     config: {
       monitors: opts.extraMonitors ?? [],
       replay_enabled: opts.replay ?? false,
-      max_users: opts.maxUsers,
+      room_max_users: opts.maxUsers,
       ...(tempDir ? { replay_base_dir: tempDir } : {}),
     },
   });

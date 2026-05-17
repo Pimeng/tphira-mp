@@ -2,11 +2,12 @@ import * as readline from "node:readline";
 import type { FluentVariable } from "@fluent/bundle";
 import type { ServerState } from "../core/state.js";
 import type { Logger } from "../utils/logger.js";
-import { type RoomId } from "../../common/roomId.js";
+
 import type { ServerCommand } from "../../common/commands.js";
 import { tl } from "../utils/l10n.js";
 import { makePrinter } from "./cliHelpers.js";
 import type { CommandCtx } from "./commands/types.js";
+import type { RoomId } from "../../common/roomId.js";
 import {
   handleDisband,
   handleListRooms,
@@ -27,7 +28,7 @@ import { handleContest } from "./commands/contest.js";
 import { handleIpBlacklist } from "./commands/ipBlacklist.js";
 import { handleApprove, handleDeny, handlePending } from "./commands/approval.js";
 
-export type CliContext = {
+type CliContext = {
   state: ServerState;
   logger: Logger;
   broadcastRoomAll: (roomId: RoomId, cmd: ServerCommand) => Promise<void>;
