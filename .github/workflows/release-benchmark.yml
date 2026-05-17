@@ -1,0 +1,62 @@
+name: Release Benchmark
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 10
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build project
+        run: pnpm run build
+
+      - name: Run benchmark suite
+        run: |
+          pnpm bench -- \
+            --clients 300 --rate 50 \
+            --rooms 50 --players-per-room 4 \
+            --hz 20 --duration 60
+        continue-on-error: true
+
+      - name: Upload benchmark results artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: |
+            bench-results/
+
+      - name: Package results for release
+        if: always()
+        run: |
+          tar -czf benchmark-results.tar.gz bench-results/
+
+      - name: Upload to release assets
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: benchmark-results.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

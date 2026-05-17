@@ -31,3 +31,14 @@ data/tmp/*
 # 录制文件（运行时或测试残留）
 record/
 record-*/
+
+# 压测结果（运行时生成）
+bench-results/
+
+# 压测临时文档
+docs/bench-dev/
+# 服务端运行时日志
+server.log
+
+# 本地配置文件（示例见 server_config.example.yml）
+server_config.yml

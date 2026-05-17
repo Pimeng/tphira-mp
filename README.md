@@ -86,6 +86,34 @@ pnpm start --port 12346
 pnpm test
 ```
 
+## 📈 性能测试
+
+项目内置了压测工具，支持连接、房间、gameplay 三种场景，且自带 mock 认证服务器，无需真实 Phira API token 即可运行。
+
+一键运行全部压测：
+
+```bash
+pnpm bench -- --duration 60
+```
+
+多用户并发场景（mock 认证自动为每个 token 分配独立用户）：
+
+```bash
+pnpm bench -- --tokens "a,b,c,d" --rooms 10 --players-per-room 4 --duration 60
+```
+
+单独运行某个压测：
+
+```bash
+pnpm run bench:connect -- --clients 300 --rate 50 --duration 60 --token test
+pnpm run bench:room -- --rooms 50 --players-per-room 4 --duration 60 --tokens "a,b,c,d"
+pnpm run bench:gameplay -- --rooms 10 --players-per-room 4 --hz 20 --duration 60 --tokens "a,b,c,d"
+```
+
+压测结束后，报告自动保存到 `bench-results/` 目录。
+
+详细文档请参考 [性能测试指南](docs/performance-testing.md)。
+
 ## 🔧 编译为可执行文件（本地）
 
 本项目使用 Node 的 SEA（Single Executable Applications）方式打包为单个可执行文件，并将运行所需的资源（`locales/`、配置文件）一并放进 `release/` 目录。

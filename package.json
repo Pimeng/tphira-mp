@@ -14,7 +14,11 @@
     "bundle:server": "node tools/bundle-server.mjs",
     "package:sea": "node tools/package-sea.mjs",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "bench": "tsx bench/run-all.ts",
+    "bench:connect": "tsx bench/connect-bench.ts",
+    "bench:room": "tsx bench/room-bench.ts",
+    "bench:gameplay": "tsx bench/gameplay-bench.ts"
   },
   "packageManager": "pnpm@10.29.3",
   "dependencies": {
