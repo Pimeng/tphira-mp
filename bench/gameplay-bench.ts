@@ -75,6 +75,30 @@ async function run(): Promise<void> {
 
   const startTime = Date.now();
 
+  // Setup 阶段统计
+  let clientsConnected = 0;
+  let clientsConnectFailed = 0;
+  let authsSucceeded = 0;
+  let authsFailed = 0;
+  let roomsCreated = 0;
+  let roomCreateFailed = 0;
+  let joinsSucceeded = 0;
+  let joinsFailed = 0;
+  let monitorJoinsSucceeded = 0;
+  let monitorJoinsFailed = 0;
+  let selectChartsSucceeded = 0;
+  let selectChartsFailed = 0;
+  let requestStartsSucceeded = 0;
+  let requestStartsFailed = 0;
+  let readiesSucceeded = 0;
+  let readiesFailed = 0;
+  const setupErrors = new Map<string, number>();
+
+  function recordSetupError(stage: string, msg: string) {
+    const key = `${stage}: ${msg}`;
+    setupErrors.set(key, (setupErrors.get(key) ?? 0) + 1);
+  }
+
   // 连接与认证
   const clients: Client[] = [];
   const intervalMs = 1000 / args.rate;
@@ -89,27 +113,34 @@ async function run(): Promise<void> {
 
     try {
       const client = await Client.connect(args.host, args.port, {
-        timeoutMs: 7000,
+        timeoutMs: 15000,
         autoReconnect: false,
       });
+      clientsConnected++;
+
       const token = args.tokens[clients.length % args.tokens.length];
       if (token) {
         try {
           await client.authenticate(token);
+          authsSucceeded++;
         } catch (e) {
+          authsFailed++;
           const msg = e instanceof Error ? e.message : String(e);
           console.warn(`Auth failed for client ${i + 1}: ${msg}`);
+          recordSetupError("auth", msg);
         }
       }
       clients.push(client);
     } catch (e) {
+      clientsConnectFailed++;
       const msg = e instanceof Error ? e.message : String(e);
       console.warn(`Connect failed for client ${i + 1}: ${msg}`);
+      recordSetupError("connect", msg);
     }
   }
 
   clearProgress();
-  console.log(`Connected ${clients.length}/${totalClients} clients.`);
+  console.log(`Connected ${clients.length}/${totalClients} clients (auth OK: ${authsSucceeded}).`);
 
   if (clients.length === 0) {
     console.error("No clients connected. Aborting.");
@@ -147,11 +178,15 @@ async function run(): Promise<void> {
   for (const room of rooms) {
     try {
       await room.host.createRoom(room.roomId);
+      roomsCreated++;
     } catch (e) {
+      roomCreateFailed++;
       const msg = e instanceof Error ? e.message : String(e);
       console.warn(`Create room failed (${room.roomId}): ${msg}`);
+      recordSetupError("createRoom", msg);
     }
   }
+  console.log(`Created ${roomsCreated}/${rooms.length} rooms.`);
 
   // 加入房间
   for (const room of rooms) {
@@ -160,48 +195,71 @@ async function run(): Promise<void> {
     for (const p of room.players) {
       try {
         await p.joinRoom(actualRoomId, false);
+        joinsSucceeded++;
       } catch (e) {
+        joinsFailed++;
         const msg = e instanceof Error ? e.message : String(e);
         console.warn(`Join room failed (${String(actualRoomId)}): ${msg}`);
+        recordSetupError("joinRoom", msg);
       }
     }
     for (const m of room.monitors) {
       try {
         await m.joinRoom(actualRoomId, true);
+        monitorJoinsSucceeded++;
       } catch (e) {
+        monitorJoinsFailed++;
         const msg = e instanceof Error ? e.message : String(e);
         console.warn(`Monitor join failed (${String(actualRoomId)}): ${msg}`);
+        recordSetupError("monitorJoin", msg);
       }
     }
   }
+  console.log(`Joined ${joinsSucceeded}/${joinsSucceeded + joinsFailed} players, ${monitorJoinsSucceeded}/${monitorJoinsSucceeded + monitorJoinsFailed} monitors.`);
 
-  // 进入 gameplay：选谱 -> requestStart -> ready
-  for (const room of rooms) {
-    if (!room.host.roomId()) continue;
+  // 进入 gameplay：选谱 -> requestStart -> ready（并行执行各房间以加速 setup）
+  const gameplaySetupPromises = rooms.map(async (room) => {
+    if (!room.host.roomId()) return;
+
     try {
-      await room.host.selectChart(1); // 使用谱面 ID 1
+      await room.host.selectChart(1);
+      selectChartsSucceeded++;
     } catch (e) {
+      selectChartsFailed++;
       const msg = e instanceof Error ? e.message : String(e);
-      console.warn(`Select chart failed: ${msg}`);
+      console.warn(`Select chart failed (${room.roomId}): ${msg}`);
+      recordSetupError("selectChart", msg);
+      return;
     }
+
     try {
       await room.host.requestStart();
+      requestStartsSucceeded++;
     } catch (e) {
+      requestStartsFailed++;
       const msg = e instanceof Error ? e.message : String(e);
-      console.warn(`Request start failed: ${msg}`);
+      console.warn(`Request start failed (${room.roomId}): ${msg}`);
+      recordSetupError("requestStart", msg);
+      return;
     }
 
-    // 所有玩家（包括 host）ready
-    const allPlayers = [room.host, ...room.players];
-    for (const p of allPlayers) {
+    // requestStart 已将 host 标记为 ready，只需对 players 调用 ready
+    for (const p of room.players) {
       try {
         await p.ready();
+        readiesSucceeded++;
       } catch (e) {
+        readiesFailed++;
         const msg = e instanceof Error ? e.message : String(e);
-        console.warn(`Ready failed: ${msg}`);
+        console.warn(`Ready failed (${room.roomId}, player): ${msg}`);
+        recordSetupError("ready", msg);
       }
     }
-  }
+    // 观战者不需要 ready
+  });
+
+  await Promise.all(gameplaySetupPromises);
+  console.log(`Gameplay setup: selectChart=${selectChartsSucceeded}/${selectChartsSucceeded + selectChartsFailed}, requestStart=${requestStartsSucceeded}/${requestStartsSucceeded + requestStartsFailed}, ready=${readiesSucceeded}/${readiesSucceeded + readiesFailed}`);
 
   // 等待一小段时间让状态变为 Playing
   await sleep(500);
@@ -221,6 +279,23 @@ async function run(): Promise<void> {
   const allSenders = rooms
     .filter((r) => r.host.roomId() !== null)
     .flatMap((r) => [r.host, ...r.players]);
+
+  if (allSenders.length === 0) {
+    console.error("\n[CRITICAL] No senders available for gameplay load test.");
+    console.error("Setup diagnostics:");
+    console.error(`  clients connected: ${clientsConnected}/${totalClients} (auth OK: ${authsSucceeded})`);
+    console.error(`  rooms created:     ${roomsCreated}/${rooms.length}`);
+    console.error(`  joins:             ${joinsSucceeded}/${joinsSucceeded + joinsFailed}`);
+    console.error(`  selectCharts:      ${selectChartsSucceeded}/${selectChartsSucceeded + selectChartsFailed}`);
+    console.error(`  requestStarts:     ${requestStartsSucceeded}/${requestStartsSucceeded + requestStartsFailed}`);
+    console.error(`  readies:           ${readiesSucceeded}/${readiesSucceeded + readiesFailed}`);
+    if (setupErrors.size > 0) {
+      console.error("  setup errors:");
+      for (const [key, count] of setupErrors) {
+        console.error(`    ${key}: ${count}`);
+      }
+    }
+  }
 
   console.log(`Starting gameplay load: ${allSenders.length} clients × ${hz} msg/s for ${args.duration}s`);
 
@@ -302,9 +377,31 @@ async function run(): Promise<void> {
 
   const mode = "real-gameplay"; // 使用真实的 Touches / Judges 命令
 
+  // 合并 setup 错误和发送错误
+  const allErrors = new Map<string, number>(setupErrors);
+  for (const [msg, count] of errorSummary) {
+    allErrors.set(msg, (allErrors.get(msg) ?? 0) + count);
+  }
+
   const summary = {
     mode,
     clients: clients.length,
+    clientsConnected,
+    clientsConnectFailed,
+    authsSucceeded,
+    authsFailed,
+    roomsCreated,
+    roomCreateFailed,
+    joinsSucceeded,
+    joinsFailed,
+    monitorJoinsSucceeded,
+    monitorJoinsFailed,
+    selectChartsSucceeded,
+    selectChartsFailed,
+    requestStartsSucceeded,
+    requestStartsFailed,
+    readiesSucceeded,
+    readiesFailed,
     rooms: args.rooms,
     playersPerRoom: args.playersPerRoom,
     messagesAttempted,
@@ -332,7 +429,7 @@ async function run(): Promise<void> {
     endedAt: new Date(endedAt).toISOString(),
     duration: Math.round(actualDurationSec),
     summary,
-    errors: [...errorSummary.entries()].map(([message, count]) => ({ message, count })),
+    errors: [...allErrors.entries()].map(([message, count]) => ({ message, count })),
     metricsSamples,
     metricsSummary,
     serverMetricsSamples: serverMetricsSamples.length > 0 ? serverMetricsSamples : undefined,
