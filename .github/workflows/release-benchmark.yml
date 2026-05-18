@@ -4,6 +4,12 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      network_scenarios:
+        description: 'Comma-separated network scenarios to run (normal,weak,mobile,bad). Release always runs normal only.'
+        required: false
+        default: 'normal'
+        type: string
 
 jobs:
   benchmark:
@@ -52,8 +58,49 @@ jobs:
         run: |
           set -euo pipefail
 
+          # ── Scenario configuration ──────────────────────────────────────
+          if [ "${{ github.event_name }}" = "release" ]; then
+            SCENARIOS="normal"
+          else
+            SCENARIOS="${{ inputs.network_scenarios }}"
+            [ -z "$SCENARIOS" ] && SCENARIOS="normal"
+          fi
+
+          get_netem_args() {
+            case "$1" in
+              normal) echo "" ;;
+              weak)   echo "delay 80ms 30ms loss 0.5%" ;;
+              mobile) echo "delay 150ms 80ms loss 1%" ;;
+              bad)    echo "delay 300ms 150ms loss 3%" ;;
+              *)      echo "" ;;
+            esac
+          }
+
+          setup_netem() {
+            local scenario="$1"
+            local args
+            args=$(get_netem_args "$scenario")
+            if [ -n "$args" ]; then
+              echo ">>> Applying tc netem on lo: $args"
+              # NOTE: Applying netem to the loopback interface affects ALL local traffic,
+              # including communication between the mock auth server and the production server.
+              # For full isolation in the future, consider network namespaces or Docker network emulation.
+              sudo tc qdisc add dev lo root netem $args || true
+            else
+              echo ">>> No netem for scenario: $scenario"
+            fi
+          }
+
+          cleanup_netem() {
+            echo ">>> Cleaning up tc netem on lo..."
+            sudo tc qdisc del dev lo root || true
+          }
+
           # ── Service helpers ───────────────────────────────────────────────
           start_services() {
+            local result_dir="$1"
+            mkdir -p "$result_dir"
+
             echo ">>> Starting mock auth server..."
             ./node_modules/.bin/tsx bench/start-mock-auth.ts > mock-auth.url &
             MOCK_AUTH_PID=$!
@@ -65,7 +112,7 @@ jobs:
 
             echo ""
             echo ">>> Starting production server..."
-            node dist/server/main.js --port "$SERVER_PORT" > server.log 2>&1 &
+            node dist/server/main.js --port "$SERVER_PORT" > "$result_dir/server.log" 2>&1 &
             SERVER_PID=$!
             echo "Server started, PID=$SERVER_PID"
             sleep 3
@@ -74,19 +121,20 @@ jobs:
             echo ">>> Starting metrics recorder..."
             ./node_modules/.bin/tsx bench/server-metrics-recorder.ts \
               --pid "$SERVER_PID" \
-              --output bench-results/server-process-metrics.json \
-              --stop-file bench-results/.stop-metrics &
+              --output "$result_dir/server-process-metrics.json" \
+              --stop-file "$result_dir/.stop-metrics" &
             METRICS_PID=$!
             echo "Metrics recorder started, PID=$METRICS_PID"
           }
 
           stop_services() {
+            local stop_file="${1:-bench-results/.stop-metrics}"
             echo ""
             echo ">>> Stopping background processes..."
 
             if [ -n "${METRICS_PID:-}" ] && kill -0 "$METRICS_PID" 2>/dev/null; then
               echo "Stopping metrics recorder (PID=$METRICS_PID)..."
-              touch bench-results/.stop-metrics 2>/dev/null || true
+              touch "$stop_file" 2>/dev/null || true
               sleep 1
               kill "$METRICS_PID" 2>/dev/null || true
               for i in $(seq 1 10); do
@@ -97,7 +145,7 @@ jobs:
                 sleep 0.5
               done
               kill -9 "$METRICS_PID" 2>/dev/null || true
-              rm -f bench-results/.stop-metrics
+              rm -f "$stop_file"
             fi
 
             if [ -n "${SERVER_PID:-}" ] && kill -0 "$SERVER_PID" 2>/dev/null; then
@@ -128,9 +176,8 @@ jobs:
           }
 
           copy_logs() {
-            if [ -f server.log ]; then
-              cp server.log bench-results/server.log || true
-            fi
+            # server.log is already saved per-scenario under bench-results/<scenario>/server.log
+            :
           }
 
           generate_report() {
@@ -144,6 +191,7 @@ jobs:
             stop_services
             copy_logs
             generate_report
+            cleanup_netem
             echo ""
             echo "Benchmark suite finished with exit code $exit_code."
             exit $exit_code
@@ -152,34 +200,70 @@ jobs:
 
           # ── Benchmark helpers ─────────────────────────────────────────────
           run_benchmarks() {
+            local result_dir="$1"
+            local bench_exit=0
+            export BENCH_RESULTS_DIR="$result_dir"
+
             echo ""
             echo ">>> Running connect-bench <<<"
             pnpm run bench:connect -- \
               --host "$BENCH_HOST" --port "$SERVER_PORT" \
               --clients "$BENCH_CONNECT_CLIENTS" --rate "$BENCH_CONNECT_RATE" --duration "$BENCH_DURATION" \
-              --token "$BENCH_TOKEN"
+              --token "$BENCH_TOKEN" || bench_exit=$?
 
             echo ""
             echo ">>> Running room-bench <<<"
             pnpm run bench:room -- \
               --host "$BENCH_HOST" --port "$SERVER_PORT" \
               --rooms "$BENCH_ROOMS" --players-per-room "$BENCH_PLAYERS_PER_ROOM" --duration "$BENCH_DURATION" \
-              --token "$BENCH_TOKEN"
+              --token "$BENCH_TOKEN" || bench_exit=$?
 
             echo ""
             echo ">>> Running gameplay-bench <<<"
             pnpm run bench:gameplay -- \
               --host "$BENCH_HOST" --port "$SERVER_PORT" \
               --rooms "$BENCH_ROOMS" --players-per-room "$BENCH_PLAYERS_PER_ROOM" --hz "$BENCH_GAMEPLAY_HZ" --duration "$BENCH_DURATION" \
-              --token "$BENCH_TOKEN"
+              --token "$BENCH_TOKEN" || bench_exit=$?
+
+            return $bench_exit
           }
 
           # ── Main ──────────────────────────────────────────────────────────
           main() {
-            start_services
-            run_benchmarks
+            local overall_exit=0
+            IFS=',' read -ra SCENARIO_ARRAY <<< "$SCENARIOS"
+            for scenario in "${SCENARIO_ARRAY[@]}"; do
+              scenario=$(echo "$scenario" | xargs)
+              [ -z "$scenario" ] && continue
+
+              echo ""
+              echo "========================================"
+              echo "  Scenario: $scenario"
+              echo "========================================"
+
+              local result_dir="bench-results/$scenario"
+
+              setup_netem "$scenario"
+
+              start_services "$result_dir"
+
+              local scenario_exit=0
+              run_benchmarks "$result_dir" || scenario_exit=$?
+
+              if [ "$scenario_exit" -ne 0 ]; then
+                echo "Warning: Scenario $scenario failed with exit code $scenario_exit"
+                overall_exit=1
+              fi
+
+              stop_services "$result_dir/.stop-metrics"
+              cleanup_netem
+
+              echo "  Scenario $scenario finished."
+            done
+
             echo ""
-            echo "All benchmarks completed successfully."
+            echo "All scenarios completed."
+            return $overall_exit
           }
 
           main
@@ -187,7 +271,7 @@ jobs:
       - name: Package results
         if: always()
         run: |
-          tar -czf benchmark-results.tar.gz bench-results/ server.log performance-report.md || true
+          tar -czf benchmark-results.tar.gz bench-results/ performance-report.md || true
 
       - name: Upload benchmark results artifact
         if: always()
@@ -196,7 +280,6 @@ jobs:
           name: benchmark-results
           path: |
             bench-results/
-            server.log
             performance-report.md
             benchmark-results.tar.gz
           if-no-files-found: ignore
@@ -205,16 +288,16 @@ jobs:
         if: always()
         run: |
           {
-            echo "## 📊 Benchmark Summary"
+            echo "## 📊 基准测试摘要 / Benchmark Summary"
             echo ""
             if [ -f performance-report.md ]; then
               cat performance-report.md
             else
-              echo "> ⚠️ performance-report.md not found."
+              echo "> ⚠️ 未找到 performance-report.md / performance-report.md not found."
             fi
             echo ""
             echo "---"
-            echo "*Triggered by: ${{ github.event_name }}* · *Run: ${{ github.run_id }}*"
+            echo "*触发方式 / Triggered by: ${{ github.event_name }}* · *运行编号 / Run: ${{ github.run_id }}*"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Generate AI Summary
@@ -243,7 +326,7 @@ jobs:
             '{
               model: $model,
               messages: [
-                {role: "system", content: "You are a DevOps performance analyst. Summarize the following benchmark report concisely. Highlight any regressions, anomalies, or notable metrics. Provide the summary in both English and Chinese."},
+                {role: "system", content: "你是一名 DevOps 性能分析师。以下 benchmark 报告可能包含多个网络场景：normal（无限制）、weak（delay 80ms ±30ms，丢包 0.5%）、mobile（delay 150ms ±80ms，丢包 1%）、bad（delay 300ms ±150ms，丢包 3%）。请对比分析各场景结果，重点关注：1）关键指标（连接延迟、房间创建成功率、消息吞吐）在弱网条件下的退化幅度。2）异常、回归或离群点。3）若出现严重退化，给出可操作的改进建议。请用中文为主、英文为辅输出，使用 bullet points 或短段落，保持简洁。"},
                 {role: "user", content: $content}
               ],
               temperature: 0.7,

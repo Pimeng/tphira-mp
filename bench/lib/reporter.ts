@@ -28,7 +28,7 @@ export function clearProgress(): void {
 }
 
 export function saveReport(report: BenchReport): string {
-  const dir = "bench-results";
+  const dir = process.env.BENCH_RESULTS_DIR ?? "bench-results";
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
