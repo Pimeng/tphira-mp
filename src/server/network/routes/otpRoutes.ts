@@ -163,12 +163,12 @@ export async function tryHandleOtpRoutes(ctx: RequestContext): Promise<boolean> 
 
       // 检查是否超过最大尝试次数
       if (ipAttempts >= OTP_MAX_ATTEMPTS) {
-        otpBannedIps.add(clientIp);
+        otpBannedIps.set(clientIp, Date.now());
         const message = `[OTP] IP ${clientIp} 因OTP验证失败次数过多（${ipAttempts}次）已被封禁`;
         process.stdout.write(`\x1b[31m[${new Date().toISOString()}] [WARN] ${message}\x1b[0m\n`);
       }
       if (ssidAttempts >= OTP_MAX_ATTEMPTS) {
-        otpBannedSsids.add(ssid);
+        otpBannedSsids.set(ssid, Date.now());
         otpSessions.delete(ssid); // 删除被封禁的会话
         const message = `[OTP] 会话 ${ssid} 因OTP验证失败次数过多（${ssidAttempts}次）已被封禁`;
         process.stdout.write(`\x1b[31m[${new Date().toISOString()}] [WARN] ${message}\x1b[0m\n`);

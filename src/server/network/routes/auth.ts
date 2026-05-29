@@ -62,7 +62,7 @@ export function checkAdminAuth(ctx: RequestContext): boolean {
     const next = (prev?.count ?? 0) + 1;
     services.adminFailedAttemptsByIp.set(clientIp, { count: next, lastAttempt: Date.now() });
     if (next >= services.ADMIN_MAX_FAILED_ATTEMPTS_PER_IP) {
-      services.adminBannedIps.add(clientIp);
+      services.adminBannedIps.set(clientIp, Date.now());
     }
     write(401, { ok: false, error: "unauthorized", message: ctx.t("auth-unauthorized") });
     return false;

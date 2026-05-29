@@ -55,13 +55,13 @@ export async function startHttpService(opts: { state: ServerState; host: string;
     REPLAY_SESSION_TTL_MS: 30 * 60 * 1000,
     OTP_MAX_ATTEMPTS: 3,
     adminFailedAttemptsByIp: new Map(),
-    adminBannedIps: new Set(),
+    adminBannedIps: new Map(),
     replaySessions: new Map(),
     otpSessions: new Map(),
     otpAttemptsByIp: new Map(),
     otpAttemptsBySsid: new Map(),
-    otpBannedIps: new Set(),
-    otpBannedSsids: new Set()
+    otpBannedIps: new Map(),
+    otpBannedSsids: new Map()
   };
 
   const server = http.createServer((req, res) => {
@@ -154,10 +154,22 @@ export async function startHttpService(opts: { state: ServerState; host: string;
         services.otpAttemptsBySsid.delete(ssid);
       }
     }
-    // 清理 admin 封禁 IP（防止无限增长）
-    // 注意：adminBannedIps 目前没有时间戳，无法精确清理
-    // 这里只能清理 otpBannedIps（因为它们是 Set，没有时间戳信息）
-    // 为了安全，保留 otpBannedIps 但不主动清理，因为它们有明确的解除机制
+    // 清理过期的封禁 IP 和 SSID（24 小时后自动解封）
+    for (const [ip, bannedAt] of services.adminBannedIps) {
+      if (now - bannedAt > BAN_TTL_MS) {
+        services.adminBannedIps.delete(ip);
+      }
+    }
+    for (const [ip, bannedAt] of services.otpBannedIps) {
+      if (now - bannedAt > BAN_TTL_MS) {
+        services.otpBannedIps.delete(ip);
+      }
+    }
+    for (const [ssid, bannedAt] of services.otpBannedSsids) {
+      if (now - bannedAt > BAN_TTL_MS) {
+        services.otpBannedSsids.delete(ssid);
+      }
+    }
   };
   const cleanupAttemptsTimer = setInterval(cleanupAttempts, 60 * 60 * 1000);
 

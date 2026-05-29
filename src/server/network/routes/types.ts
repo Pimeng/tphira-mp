@@ -10,15 +10,15 @@ export type ServerServices = {
   readonly OTP_MAX_ATTEMPTS: number;
 
   adminFailedAttemptsByIp: Map<string, { count: number; lastAttempt: number }>;
-  adminBannedIps: Set<string>;
+  adminBannedIps: Map<string, number>; // IP -> bannedAt timestamp
 
   replaySessions: Map<string, { userId: number; expiresAt: number }>;
 
   otpSessions: Map<string, { otp: string; expiresAt: number }>;
   otpAttemptsByIp: Map<string, { count: number; lastAttempt: number }>;
   otpAttemptsBySsid: Map<string, { count: number; lastAttempt: number }>;
-  otpBannedIps: Set<string>;
-  otpBannedSsids: Set<string>;
+  otpBannedIps: Map<string, number>; // IP -> bannedAt timestamp
+  otpBannedSsids: Map<string, number>; // SSID -> bannedAt timestamp
 };
 
 /** Per-request 上下文 */

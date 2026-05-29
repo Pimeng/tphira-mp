@@ -67,6 +67,9 @@ async function connectSocket(host: string, port: number, signal: AbortSignal, se
   });
 }
 
+/** HTTP 代理响应头最大大小：64KB（正常 CONNECT 响应远小于此值） */
+const MAX_PROXY_RESPONSE_HEAD_SIZE = 64 * 1024;
+
 async function readUntilDoubleCrlf(socket: net.Socket, signal: AbortSignal): Promise<Buffer> {
   if (signal.aborted) throw createAbortError();
   return await new Promise<Buffer>((resolve, reject) => {
@@ -75,8 +78,15 @@ async function readUntilDoubleCrlf(socket: net.Socket, signal: AbortSignal): Pro
 
     const onAbort = () => socket.destroy(createAbortError());
     const onData = (chunk: Buffer) => {
-      chunks.push(Buffer.from(chunk));
       totalLength += chunk.length;
+      // 限制代理响应头大小，防止恶意代理发送无限数据导致内存耗尽
+      if (totalLength > MAX_PROXY_RESPONSE_HEAD_SIZE) {
+        cleanup();
+        socket.destroy();
+        reject(new Error("proxy response header too large"));
+        return;
+      }
+      chunks.push(Buffer.from(chunk));
       const joined = Buffer.concat(chunks, totalLength);
       const endIndex = joined.indexOf("\r\n\r\n");
       if (endIndex >= 0) {
