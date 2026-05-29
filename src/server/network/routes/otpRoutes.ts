@@ -153,11 +153,13 @@ export async function tryHandleOtpRoutes(ctx: RequestContext): Promise<boolean> 
 
     if (otpData.otp !== otp) {
       // 记录失败尝试
-      const ipAttempts = (otpAttemptsByIp.get(clientIp) || 0) + 1;
-      const ssidAttempts = (otpAttemptsBySsid.get(ssid) || 0) + 1;
+      const prevIp = otpAttemptsByIp.get(clientIp);
+      const prevSsid = otpAttemptsBySsid.get(ssid);
+      const ipAttempts = (prevIp?.count ?? 0) + 1;
+      const ssidAttempts = (prevSsid?.count ?? 0) + 1;
 
-      otpAttemptsByIp.set(clientIp, ipAttempts);
-      otpAttemptsBySsid.set(ssid, ssidAttempts);
+      otpAttemptsByIp.set(clientIp, { count: ipAttempts, lastAttempt: Date.now() });
+      otpAttemptsBySsid.set(ssid, { count: ssidAttempts, lastAttempt: Date.now() });
 
       // 检查是否超过最大尝试次数
       if (ipAttempts >= OTP_MAX_ATTEMPTS) {

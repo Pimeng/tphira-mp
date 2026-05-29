@@ -32,3 +32,29 @@ jobs:
 
     - name: 运行测试
       run: pnpm test
+
+  memory-leak:
+    runs-on: ubuntu-latest
+    # 单独 job，失败不影响 test job；也可改为 needs: test 让它在 test 通过后再跑
+
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+
+    - name: 设置 Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '24'
+
+    - name: 设置 pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        version: 10.29.3
+
+    - name: 安装依赖
+      run: pnpm install
+
+    - name: 运行内存泄漏测试
+      run: pnpm test:memory
+      env:
+        NODE_OPTIONS: --expose-gc

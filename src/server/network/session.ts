@@ -109,6 +109,20 @@ export class Session {
   /** 最后接收数据的时间戳 */
   private lastRecv = Date.now();
 
+  // ========== Socket 事件监听器（用于断线时移除，防止内存泄漏） ==========
+
+  private readonly onSocketClose = (): void => {
+    void this.markLost();
+  };
+
+  private readonly onSocketError = (): void => {
+    void this.markLost();
+  };
+
+  private readonly onSocketData = (): void => {
+    this.lastRecv = Date.now();
+  };
+
   // ========== 观战数据缓冲 ==========
 
   /**
@@ -141,13 +155,10 @@ export class Session {
       broadcastFast: (ids, cmd) => this.broadcastToIdsFast(ids, cmd)
     });
 
-    // 监听 socket 事件
-    this.socket.on("close", () => void this.markLost());
-    this.socket.on("error", () => void this.markLost());
-    this.socket.on("data", () => {
-      // 每次收到数据时更新最后接收时间，用于心跳检测
-      this.lastRecv = Date.now();
-    });
+    // 监听 socket 事件（使用具名回调以便在断线时正确移除，防止内存泄漏）
+    this.socket.on("close", this.onSocketClose);
+    this.socket.on("error", this.onSocketError);
+    this.socket.on("data", this.onSocketData);
 
     activeSessions.add(this);
     startGlobalHeartbeat();
@@ -367,6 +378,11 @@ export class Session {
     this.lost = true;
     activeSessions.delete(this);
     this.monitorBuffer.destroy();
+
+    // 移除 socket 事件监听器，防止 socket 通过闭包长期引用 Session 导致内存泄漏
+    this.socket.off("close", this.onSocketClose);
+    this.socket.off("error", this.onSocketError);
+    this.socket.off("data", this.onSocketData);
 
     const stream = this.stream;
     if (stream) stream.close();

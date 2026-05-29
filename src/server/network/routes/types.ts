@@ -9,14 +9,14 @@ export type ServerServices = {
   readonly REPLAY_SESSION_TTL_MS: number;
   readonly OTP_MAX_ATTEMPTS: number;
 
-  adminFailedAttemptsByIp: Map<string, number>;
+  adminFailedAttemptsByIp: Map<string, { count: number; lastAttempt: number }>;
   adminBannedIps: Set<string>;
 
   replaySessions: Map<string, { userId: number; expiresAt: number }>;
 
   otpSessions: Map<string, { otp: string; expiresAt: number }>;
-  otpAttemptsByIp: Map<string, number>;
-  otpAttemptsBySsid: Map<string, number>;
+  otpAttemptsByIp: Map<string, { count: number; lastAttempt: number }>;
+  otpAttemptsBySsid: Map<string, { count: number; lastAttempt: number }>;
   otpBannedIps: Set<string>;
   otpBannedSsids: Set<string>;
 };

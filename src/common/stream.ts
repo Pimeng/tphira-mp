@@ -18,6 +18,8 @@ const SEND_TIMEOUT_MS = 5000;
 const BATCH_SEND_DELAY_MS = 5;
 /** 批量发送最大帧数（达到此数量立即发送） */
 const MAX_BATCH_SIZE = 20;
+/** 接收缓冲区最大大小（超过此值将关闭连接，防止恶意客户端发送不完整帧导致内存泄漏） */
+const RECV_BUFFER_MAX_SIZE = 4 * 1024 * 1024;
 
 /** 流消息处理器类型 */
 export type StreamHandler<R> = (packet: R) => void | Promise<void>;
@@ -167,19 +169,9 @@ export class Stream<S, R> {
     const stream = new Stream<S, R>(opts.socket, version, opts.codec, opts.handler, opts.fastPath, opts.onError);
     stream.recvBuffer = initialBuffer as Buffer<ArrayBufferLike>;
 
-    stream.socket.on("data", (data) => {
-      if (stream.closed) return;
-      stream.recvBuffer = stream.recvBuffer.length === 0 ? data : Buffer.concat([stream.recvBuffer, data]);
-      stream.scheduleDecode();
-    });
-
-    stream.socket.on("close", () => {
-      stream.closed = true;
-    });
-
-    stream.socket.on("error", () => {
-      stream.closed = true;
-    });
+    stream.socket.on("data", stream.onSocketData);
+    stream.socket.on("close", stream.onSocketClose);
+    stream.socket.on("error", stream.onSocketError);
 
     if (stream.recvBuffer.length > 0) setImmediate(() => stream.scheduleDecode());
 
@@ -282,8 +274,36 @@ export class Stream<S, R> {
       clearTimeout(this.sendBatchTimer);
       this.sendBatchTimer = null;
     }
+    // 移除 socket 事件监听器，防止 socket 通过闭包长期引用 Stream 导致内存泄漏
+    this.socket.off("data", this.onSocketData);
+    this.socket.off("close", this.onSocketClose);
+    this.socket.off("error", this.onSocketError);
     this.socket.destroy();
   }
+
+  /** socket data 事件处理（提取为具名方法以便正确移除） */
+  private readonly onSocketData = (data: Buffer): void => {
+    if (this.closed) return;
+    // 防止 recvBuffer 无限增长（恶意客户端发送不完整帧）
+    const newSize = this.recvBuffer.length + data.length;
+    if (newSize > RECV_BUFFER_MAX_SIZE) {
+      this.onError?.("decode", new Error("recv-buffer-overflow"));
+      this.close();
+      return;
+    }
+    this.recvBuffer = this.recvBuffer.length === 0 ? data : Buffer.concat([this.recvBuffer, data]);
+    this.scheduleDecode();
+  };
+
+  /** socket close 事件处理（提取为具名方法以便正确移除） */
+  private readonly onSocketClose = (): void => {
+    this.closed = true;
+  };
+
+  /** socket error 事件处理（提取为具名方法以便正确移除） */
+  private readonly onSocketError = (): void => {
+    this.closed = true;
+  };
 
   private scheduleDecode(): void {
     if (this.closed) return;

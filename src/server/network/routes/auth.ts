@@ -63,8 +63,9 @@ export function checkAdminAuth(ctx: RequestContext): boolean {
     return false;
   }
   if (!reqAdminToken || reqAdminToken !== adminToken) {
-    const next = (services.adminFailedAttemptsByIp.get(clientIp) ?? 0) + 1;
-    services.adminFailedAttemptsByIp.set(clientIp, next);
+    const prev = services.adminFailedAttemptsByIp.get(clientIp);
+    const next = (prev?.count ?? 0) + 1;
+    services.adminFailedAttemptsByIp.set(clientIp, { count: next, lastAttempt: Date.now() });
     if (next >= services.ADMIN_MAX_FAILED_ATTEMPTS_PER_IP) {
       services.adminBannedIps.add(clientIp);
     }

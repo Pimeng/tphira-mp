@@ -131,11 +131,34 @@ export async function startHttpService(opts: { state: ServerState; host: string;
 
   const handleGameEndAutoUpload = createAutoUploadHandler(state);
 
+  /** 定期清理 HTTP 尝试计数映射，防止内存泄漏（24 小时未更新则删除） */
+  const ATTEMPT_TTL_MS = 24 * 60 * 60 * 1000;
+  const cleanupAttempts = (): void => {
+    const now = Date.now();
+    for (const [ip, entry] of services.adminFailedAttemptsByIp) {
+      if (now - entry.lastAttempt > ATTEMPT_TTL_MS) {
+        services.adminFailedAttemptsByIp.delete(ip);
+      }
+    }
+    for (const [ip, entry] of services.otpAttemptsByIp) {
+      if (now - entry.lastAttempt > ATTEMPT_TTL_MS) {
+        services.otpAttemptsByIp.delete(ip);
+      }
+    }
+    for (const [ssid, entry] of services.otpAttemptsBySsid) {
+      if (now - entry.lastAttempt > ATTEMPT_TTL_MS) {
+        services.otpAttemptsBySsid.delete(ssid);
+      }
+    }
+  };
+  const cleanupAttemptsTimer = setInterval(cleanupAttempts, 60 * 60 * 1000);
+
   return {
     server,
     ws,
     address: () => server.address() as net.AddressInfo,
     close: async () => {
+      clearInterval(cleanupAttemptsTimer);
       await ws.close();
       await new Promise<void>((resolve, reject) => {
         server.close((err) => {
