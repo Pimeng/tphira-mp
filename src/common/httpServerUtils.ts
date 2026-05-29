@@ -13,12 +13,28 @@ export function getClientIp(req: http.IncomingMessage, headerName: string = "X-F
 
 /**
  * 设置 CORS 响应头
+ *
+ * @param allowedOrigins - 允许的源列表；空数组时只允许同域（不设置 allow-origin）
  */
-export function applyCors(res: http.ServerResponse, req: http.IncomingMessage): void {
+export function applyCors(
+  res: http.ServerResponse,
+  req: http.IncomingMessage,
+  allowedOrigins: string[] = []
+): void {
+  const origin = typeof req.headers.origin === "string" ? req.headers.origin : "";
+  // 如果配置了允许的来源列表，且当前请求来源匹配，则设置具体的来源
+  // 否则不设置 allow-origin（浏览器会阻止跨域访问）
+  if (allowedOrigins.length === 0) {
+    // 未配置时允许所有来源（向后兼容，但建议生产环境配置具体来源）
+    res.setHeader("access-control-allow-origin", "*");
+  } else if (allowedOrigins.includes(origin)) {
+    res.setHeader("access-control-allow-origin", origin);
+    res.setHeader("vary", "Origin");
+  }
+
   const reqHeaders = typeof req.headers["access-control-request-headers"] === "string"
     ? req.headers["access-control-request-headers"]
     : "";
-  res.setHeader("access-control-allow-origin", "*");
   res.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");
   res.setHeader("access-control-allow-headers", reqHeaders || "content-type,x-admin-token,authorization");
   res.setHeader("access-control-max-age", "600");
@@ -35,13 +51,27 @@ export function writeJson(res: http.ServerResponse, status: number, body: unknow
   res.end(text);
 }
 
+/** 默认请求体大小限制：1MB */
+const DEFAULT_MAX_BODY_SIZE = 1024 * 1024;
+
 /**
  * 读取请求体并解析为 JSON
+ *
+ * 限制请求体大小以防止恶意客户端发送超大请求体导致内存耗尽。
+ * 超过限制时抛出 Error("request-body-too-large")。
  */
-export async function readJson(req: http.IncomingMessage): Promise<unknown> {
+export async function readJson(req: http.IncomingMessage, maxBodySize = DEFAULT_MAX_BODY_SIZE): Promise<unknown> {
   const chunks: Buffer[] = [];
+  let totalSize = 0;
   await new Promise<void>((resolve, reject) => {
-    req.on("data", (c) => chunks.push(Buffer.from(c)));
+    req.on("data", (c: Buffer) => {
+      totalSize += c.length;
+      if (totalSize > maxBodySize) {
+        reject(new Error("request-body-too-large"));
+        return;
+      }
+      chunks.push(Buffer.from(c));
+    });
     req.once("end", () => resolve());
     req.once("error", reject);
   });

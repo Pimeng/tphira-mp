@@ -106,6 +106,9 @@ export class Stream<S, R> {
    * @returns 协商完成的 Stream 实例
    * @throws 当连接关闭或版本不匹配时抛出异常
    */
+  /** 协议版本协商超时时间（毫秒） */
+  static readonly HANDSHAKE_TIMEOUT_MS = 10000;
+
   static async create<S, R>(opts: {
     socket: net.Socket;
     versionToSend?: number;
@@ -118,47 +121,63 @@ export class Stream<S, R> {
     // 禁用 Nagle 算法，减少延迟
     opts.socket.setNoDelay(true);
 
-    // 协议版本协商
+    // 协议版本协商（带超时保护，防止恶意连接挂起）
     const { version, initialBuffer } = await new Promise<{ version: number; initialBuffer: Buffer }>((resolve, reject) => {
-      if (opts.versionToSend !== undefined) {
-        const v = opts.versionToSend & 0xff;
-        opts.socket.write(Buffer.from([v]), (err) => {
-          if (err) reject(err);
-          else resolve({ version: v, initialBuffer: Buffer.alloc(0) });
-        });
-        return;
-      }
-
-      const onData = (buf: Buffer) => {
+      let timeoutTimer: NodeJS.Timeout | null = null;
+      const cleanup = (): void => {
+        if (timeoutTimer) {
+          clearTimeout(timeoutTimer);
+          timeoutTimer = null;
+        }
+        opts.socket.off("data", onData);
         opts.socket.off("error", onError);
         opts.socket.off("close", onClose);
-        opts.socket.off("data", onData);
+      };
 
+      const onData = (buf: Buffer) => {
+        cleanup();
         if (buf.length === 0) {
           reject(new Error("net-connection-closed"));
           return;
         }
-
         const v = buf[0];
         const rest = buf.subarray(1);
         resolve({ version: v, initialBuffer: rest });
       };
 
       const onError = (err: Error) => {
-        opts.socket.off("data", onData);
-        opts.socket.off("close", onClose);
+        cleanup();
         reject(err);
       };
 
       const onClose = () => {
-        opts.socket.off("data", onData);
-        opts.socket.off("error", onError);
+        cleanup();
         reject(new Error("net-connection-closed"));
       };
+
+      if (opts.versionToSend !== undefined) {
+        const v = opts.versionToSend & 0xff;
+        opts.socket.write(Buffer.from([v]), (err) => {
+          if (err) {
+            cleanup();
+            reject(err);
+          } else {
+            resolve({ version: v, initialBuffer: Buffer.alloc(0) });
+          }
+        });
+        return;
+      }
 
       opts.socket.on("data", onData);
       opts.socket.once("error", onError);
       opts.socket.once("close", onClose);
+
+      // 设置协商超时
+      timeoutTimer = setTimeout(() => {
+        cleanup();
+        opts.socket.destroy();
+        reject(new Error("net-handshake-timeout"));
+      }, Stream.HANDSHAKE_TIMEOUT_MS);
     });
 
     if (opts.versionToSend === undefined && opts.expectedVersion !== undefined && version !== (opts.expectedVersion & 0xff)) {

@@ -48,6 +48,8 @@ export type ServerConfig = {
   phira_api_endpoint?: string;
   /** 服务端出站代理配置：false 表示强制直连，字符串表示使用指定代理 */
   outbound_proxy?: string | false;
+  /** 允许的 CORS 来源列表；空数组或未设置时允许所有来源（向后兼容，但建议生产环境配置具体来源） */
+  cors_origins?: string[];
   /** Phira Replay 分享站配置 */
   share_station?: ShareStationConfig;
   /** 是否启用游戏结束后自动上传回放到分享站，默认 false。需要同时配置 share_station 才能实际生效 */

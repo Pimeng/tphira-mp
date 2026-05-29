@@ -79,8 +79,14 @@ export class Room {
     this._users.add(opts.hostId);
   }
 
+  /** 单条日志最大长度，防止恶意客户端通过超长消息导致内存泄漏 */
+  private static readonly MAX_LOG_MESSAGE_LENGTH = 1000;
+
   addLog(message: string, timestamp: number): void {
-    this.recentLogs.push({ message, timestamp });
+    const truncated = message.length > Room.MAX_LOG_MESSAGE_LENGTH
+      ? message.slice(0, Room.MAX_LOG_MESSAGE_LENGTH) + "..."
+      : message;
+    this.recentLogs.push({ message: truncated, timestamp });
     if (this.recentLogs.length > Room.MAX_RECENT_LOGS) {
       this.recentLogs.shift();
     }

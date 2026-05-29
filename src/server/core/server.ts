@@ -222,6 +222,10 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
         }
       } catch (e) {
         logger.log("WARN", `[${id}] HAProxy PROXY Protocol 解析失败: ${e instanceof Error ? e.message : String(e)}`);
+        // PROXY Protocol 解析失败时直接断开，防止恶意连接
+        socket.destroy();
+        activeSockets.delete(socket);
+        return;
       }
     }
 
@@ -266,6 +270,7 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
       })();
       logger.log("WARN", tl(state.serverLang, "log-handshake-failed", { id, reason }), undefined, { ip: remoteIp, isConnectionLog: true });
       socket.destroy();
+      activeSockets.delete(socket);
     }
   });
 

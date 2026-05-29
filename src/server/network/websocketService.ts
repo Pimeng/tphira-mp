@@ -100,6 +100,9 @@ export function startWebSocketService(opts: { httpServer: http.Server; state: Se
     });
   });
 
+  /** WebSocket 单条消息最大大小：64KB */
+  const MAX_WS_MESSAGE_SIZE = 64 * 1024;
+
   const sendResponse = (ws: WebSocket, response: WebSocketResponse): void => {
     if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(response));
   };
@@ -124,6 +127,12 @@ export function startWebSocketService(opts: { httpServer: http.Server; state: Se
 
     ws.on("message", async (data: Buffer) => {
       try {
+        // 限制消息大小，防止恶意客户端发送超大消息导致内存问题
+        if (data.length > MAX_WS_MESSAGE_SIZE) {
+          sendResponse(ws, { type: "error", message: "message-too-large" });
+          ws.close(1009, "message-too-large");
+          return;
+        }
         const text = data.toString("utf8");
         const msg = JSON.parse(text) as WebSocketMessage;
 
@@ -204,6 +213,9 @@ export function startWebSocketService(opts: { httpServer: http.Server; state: Se
 
     ws.on("close", () => {
       removeRoomSubscriber(client.roomId, ws);
+      // 清理 admin snapshot 释放内存
+      client.lastAdminSnapshot = null;
+      client.adminToken = null;
       clients.delete(ws);
       state.logger.log("DEBUG", tl(state.serverLang, "log-websocket-disconnected", { total: String(clients.size) }));
     });
@@ -222,22 +234,23 @@ export function startWebSocketService(opts: { httpServer: http.Server; state: Se
       return true;
     }
 
-    // 清理过期的临时 token
+    // 清理过期的临时 token（同时清理已被封禁的 token 防止内存泄漏）
     const now = Date.now();
     for (const [t, data] of state.tempAdminTokens) {
-      if (now > data.expiresAt) state.tempAdminTokens.delete(t);
+      if (data.banned || now > data.expiresAt) {
+        state.tempAdminTokens.delete(t);
+      }
     }
 
     const tempTokenData = state.tempAdminTokens.get(token);
     if (!tempTokenData) return false;
-    if (tempTokenData.banned) return false;
     if (now > tempTokenData.expiresAt) {
       state.tempAdminTokens.delete(token);
       return false;
     }
     if (tempTokenData.ip !== clientIp) {
-      // IP 不匹配,封禁该 token
-      tempTokenData.banned = true;
+      // IP 不匹配，封禁并删除该 token
+      state.tempAdminTokens.delete(token);
       return false;
     }
     return true;
@@ -273,12 +286,22 @@ export function startWebSocketService(opts: { httpServer: http.Server; state: Se
         continue;
       }
       client.isAlive = false;
-      ws.ping();
+      try {
+        ws.ping();
+      } catch {
+        // ping 失败，标记为待移除
+        toRemove.push(ws);
+      }
     }
     // 批量清理断开的连接，避免遍历时修改 Map
     for (const ws of toRemove) {
-      ws.terminate();
-      removeRoomSubscriber(clients.get(ws)?.roomId ?? null, ws);
+      try { ws.terminate(); } catch { /* ignore */ }
+      const c = clients.get(ws);
+      if (c) {
+        removeRoomSubscriber(c.roomId, ws);
+        c.lastAdminSnapshot = null;
+        c.adminToken = null;
+      }
       clients.delete(ws);
     }
   }, 30000); // 30秒心跳

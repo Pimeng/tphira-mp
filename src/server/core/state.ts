@@ -246,6 +246,15 @@ export class ServerState {
   }
 
   /**
+   * 清理指定用户的自动上传配置和元数据
+   * 在用户完全退出（不再 dangling）时调用，防止内存泄漏
+   */
+  cleanupUserData(userId: number): void {
+    this.autoUploadConfigs.delete(userId);
+    this.uploadedReplayMeta.delete(userId);
+  }
+
+  /**
    * 保存管理员数据到文件
    *
    * 使用写时复制（write-to-temp-then-rename）策略确保原子性写入，

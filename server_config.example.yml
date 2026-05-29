@@ -8,6 +8,14 @@ HTTP_SERVICE: false
 # HTTP 服务监听端口
 HTTP_PORT: 12347
 
+# HTTP CORS 允许的来源列表
+# 配置后，只有列表中的来源才能通过浏览器访问 HTTP API
+# 不配置或为空数组时，向后兼容允许所有来源（*）
+# 生产环境强烈建议配置此项，限制为管理面板等可信来源
+# CORS_ORIGINS:
+#   - "https://admin.your-domain.com"
+#   - "http://localhost:5173"
+
 # 日志等级：DEBUG、INFO、MARK、WARN、ERROR，默认 INFO
 LOG_LEVEL: INFO
 

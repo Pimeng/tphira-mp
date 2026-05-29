@@ -5,12 +5,19 @@ import { uploadToShareStation, setReplayVisibility } from "../utils/shareStation
 
 type AutoUploadHandler = (userId: number, chartId: number, timestamp: number, recordId: number) => void;
 
+export type AutoUploadHandlerWithCleanup = {
+  handler: AutoUploadHandler;
+  close: () => void;
+};
+
 /**
  * 创建游戏结束时的自动上传处理器
  * 延迟30秒后执行上传
  */
-export function createAutoUploadHandler(state: ServerState): AutoUploadHandler {
-  return (userId: number, chartId: number, timestamp: number, _recordId: number): void => {
+export function createAutoUploadHandler(state: ServerState): AutoUploadHandlerWithCleanup {
+  const pendingTimers = new Set<NodeJS.Timeout>();
+
+  const handler: AutoUploadHandler = (userId: number, chartId: number, timestamp: number, _recordId: number): void => {
     // 检查服务端是否启用自动上传功能
     if (!state.config.replay_auto_upload) {
       state.logger.debug(`Auto upload skipped for user ${userId}: REPLAY_AUTO_UPLOAD disabled`);
@@ -25,7 +32,8 @@ export function createAutoUploadHandler(state: ServerState): AutoUploadHandler {
     const shareStation = state.shareStation;
 
     // 延迟30秒后执行上传
-    setTimeout(async () => {
+    const timer = setTimeout(async () => {
+      pendingTimers.delete(timer);
       try {
         // 再次检查全局开关（可能在此期间被禁用）
         if (!state.config.replay_auto_upload) {
@@ -108,5 +116,16 @@ export function createAutoUploadHandler(state: ServerState): AutoUploadHandler {
         state.logger.error(`Auto upload unexpected error for user ${userId}: ${msg}`);
       }
     }, 30000); // 30秒延迟
+    pendingTimers.add(timer);
+  };
+
+  return {
+    handler,
+    close: () => {
+      for (const timer of pendingTimers) {
+        clearTimeout(timer);
+      }
+      pendingTimers.clear();
+    }
   };
 }

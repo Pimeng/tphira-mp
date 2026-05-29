@@ -86,7 +86,10 @@ export async function processClientCommand(
         result: await ctx.errToStr(async () => {
           const room = ctx.requireRoom(user);
           logRoomInfo(state.logger, state.serverLang, room.id, "log-user-chat", { user: user.name }, { userId: user.id });
-          const content = state.config.chat_enabled === false ? tl(state.serverLang, "chat-disabled-by-server") : cmd.message;
+          // 限制聊天消息长度，防止恶意客户端发送超大消息
+          const MAX_CHAT_LENGTH = 500;
+          const rawContent = state.config.chat_enabled === false ? tl(state.serverLang, "chat-disabled-by-server") : cmd.message;
+          const content = rawContent.length > MAX_CHAT_LENGTH ? rawContent.slice(0, MAX_CHAT_LENGTH) : rawContent;
           await room.sendAs((c) => ctx.broadcastRoom(room, c), user, content, state.serverLang);
           return {};
         })

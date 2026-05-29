@@ -416,6 +416,8 @@ export class Session {
       await this.state.mutex.runExclusive(async () => {
         this.state.users.delete(user.id);
       });
+      // 清理用户相关内存数据，防止泄漏
+      this.state.cleanupUserData(user.id);
       await this.handleUserLeaveRoom(user, room);
       return;
     }
@@ -429,6 +431,8 @@ export class Session {
       await this.state.mutex.runExclusive(async () => {
         this.state.users.delete(user.id);
       });
+      // 清理用户相关内存数据，防止泄漏
+      this.state.cleanupUserData(user.id);
       if (room2) {
         await this.handleUserLeaveRoom(user, room2);
       }
@@ -446,12 +450,16 @@ export class Session {
           await this.state.mutex.runExclusive(async () => {
             this.state.users.delete(user.id);
           });
+          // 清理用户相关内存数据，防止泄漏
+          this.state.cleanupUserData(user.id);
           return;
         }
         logRoomWarn(this.state.logger, this.state.serverLang, room2.id, "log-user-dangle-timeout-remove", { user: user.name }, { userId: user.id });
         await this.state.mutex.runExclusive(async () => {
           this.state.users.delete(user.id);
         });
+        // 清理用户相关内存数据，防止泄漏
+        this.state.cleanupUserData(user.id);
         await this.handleUserLeaveRoom(user, room2);
       })();
     }, 10_000);

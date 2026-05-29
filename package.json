@@ -2,10 +2,10 @@
   "name": "tphira-mp",
   "author": "Pimeng",
   "license": "AGPL-3.0",
-  "version": "1.9",
+  "version": "1.9.1",
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=24"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

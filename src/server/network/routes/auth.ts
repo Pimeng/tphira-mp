@@ -8,15 +8,10 @@ export function checkAdminAuth(ctx: RequestContext): boolean {
   const { state, services, clientIp, reqAdminToken, write } = ctx;
   const adminToken = state.config.admin_token?.trim() || "";
 
-  // 调试输出
-  const debugInfo = {
-    ip: clientIp,
-    reqAdminToken: reqAdminToken ? `${reqAdminToken.slice(0, 8)}...` : '(empty)',
-    adminToken: adminToken ? `${adminToken.slice(0, 8)}...` : '(empty)',
-    tempTokensCount: state.tempAdminTokens.size,
-    hasTempToken: reqAdminToken ? state.tempAdminTokens.has(reqAdminToken) : false
-  };
-  state.logger.debug(`requireAdmin called: ${JSON.stringify(debugInfo)}`);
+  // 调试输出（注意：不输出任何 token 内容，仅输出元信息防止泄露）
+  state.logger.debug(
+    `requireAdmin: ip=${clientIp}, hasReqToken=${Boolean(reqAdminToken)}, hasAdminConfig=${Boolean(adminToken)}, tempTokens=${state.tempAdminTokens.size}`
+  );
 
   if (services.adminBannedIps.has(clientIp)) {
     write(401, { ok: false, error: "unauthorized", message: ctx.t("auth-unauthorized") });
