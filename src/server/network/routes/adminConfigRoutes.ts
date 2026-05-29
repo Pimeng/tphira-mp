@@ -1,4 +1,6 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile, rename, unlink } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
+import { dirname } from "node:path";
 import yaml from "js-yaml";
 import { refreshRoomLive } from "../../game/roomUtils.js";
 import type { RequestContext } from "./types.js";
@@ -55,7 +57,8 @@ export async function tryHandleAdminConfigRoutes(ctx: RequestContext): Promise<b
       await Promise.allSettled(tasks);
     }
 
-    // 持久化配置到文件
+    // 持久化配置到文件（原子写入：先写临时文件再重命名，防止写入过程中崩溃导致配置文件损坏）
+    // 注意：yaml.load + yaml.dump 会丢失 YAML 注释，如需保留注释请手动编辑配置文件
     try {
       const configPath = state.configPath;
       const configText = await readFile(configPath, "utf8").catch(() => "");
@@ -68,7 +71,16 @@ export async function tryHandleAdminConfigRoutes(ctx: RequestContext): Promise<b
       delete configObj.replayEnabled;
       configObj.REPLAY_ENABLED = enabled;
       const newText = yaml.dump(configObj, { lineWidth: -1 });
-      await writeFile(configPath, newText, "utf8");
+      // 原子写入
+      await mkdir(dirname(configPath), { recursive: true });
+      const tmpPath = `${configPath}.tmp`;
+      await writeFile(tmpPath, newText, "utf8");
+      try {
+        await rename(tmpPath, configPath);
+      } catch {
+        try { await unlink(configPath); } catch { /* 文件可能不存在 */ }
+        await rename(tmpPath, configPath);
+      }
       state.logger.log("INFO", `Replay config persisted: REPLAY_ENABLED=${enabled}`);
     } catch (e) {
       state.logger.log("WARN", `Failed to persist replay config: ${e}`);

@@ -48,6 +48,7 @@ export function writeJson(res: http.ServerResponse, status: number, body: unknow
   res.statusCode = status;
   res.setHeader("content-type", "application/json; charset=utf-8");
   res.setHeader("cache-control", "no-store");
+  res.setHeader("x-content-type-options", "nosniff");
   res.end(text);
 }
 
@@ -103,12 +104,19 @@ function extractBearerToken(value: string): string {
 
 /**
  * 从多个来源提取管理员 token
+ *
+ * 优先级：X-Admin-Token 头 > Authorization Bearer > URL 查询参数（仅当 allowTokenInQuery 为 true）
+ * 注意：从 URL 查询参数提取 token 会暴露 token 到服务器日志和代理日志中，默认禁用。
+ * 仅当配置项 ALLOW_TOKEN_IN_QUERY 为 true 时才启用，适用于无 Header 能力的简单脚本场景。
  */
-export function extractAdminToken(req: http.IncomingMessage, url: URL): string {
-  return (
-    (typeof req.headers["x-admin-token"] === "string" ? req.headers["x-admin-token"] : "") ||
-    (typeof req.headers.authorization === "string" ? extractBearerToken(req.headers.authorization) : "") ||
-    (url.searchParams.get("token") ?? "")
-  );
+export function extractAdminToken(req: http.IncomingMessage, url: URL, allowTokenInQuery = false): string {
+  const headerToken = typeof req.headers["x-admin-token"] === "string" ? req.headers["x-admin-token"] : "";
+  if (headerToken) return headerToken;
+  const authToken = typeof req.headers.authorization === "string" ? extractBearerToken(req.headers.authorization) : "";
+  if (authToken) return authToken;
+  if (allowTokenInQuery) {
+    return url.searchParams.get("token") ?? "";
+  }
+  return "";
 }
 

@@ -47,6 +47,19 @@ export function parseRoomMaxUsersValue(value: unknown): number | undefined {
   return Math.min(v, 64);
 }
 
+export function parseStringListValue(value: unknown): string[] | undefined {
+  if (Array.isArray(value)) {
+    const out = value.filter((it): it is string => typeof it === "string" && it.trim().length > 0);
+    return out.length > 0 ? out : undefined;
+  }
+  if (typeof value === "string") {
+    if (!value.trim()) return undefined;
+    const items = value.split(/[,\s;]+/g).map((it) => it.trim()).filter((it) => it.length > 0);
+    return items.length > 0 ? items : undefined;
+  }
+  return undefined;
+}
+
 export function parseIntegerListValue(value: unknown): number[] | undefined {
   if (Array.isArray(value)) {
     const out = value.map((it) => Number(it)).filter((it) => Number.isInteger(it));
@@ -126,6 +139,7 @@ const CONFIG_FIELDS: ReadonlyArray<ConfigField> = [
   field({ key: "room_list_tip", envName: "ROOM_LIST_TIP", parse: parseStringValue }),
   field({ key: "log_level", envName: "LOG_LEVEL", parse: parseStringValue }),
   field({ key: "real_ip_header", envName: "REAL_IP_HEADER", parse: parseStringValue }),
+  field({ key: "cors_origins", envName: "CORS_ORIGINS", parse: parseStringListValue }),
   field({ key: "haproxy_protocol", envName: "HAPROXY_PROTOCOL", parse: parseBoolValue }),
   field({
     key: "lang",
@@ -156,7 +170,8 @@ const CONFIG_FIELDS: ReadonlyArray<ConfigField> = [
       DB: process.env.REDIS_DB
     })
   }),
-  field({ key: "hitokoto_api_url", envName: "HITOKOTO_API_URL", parse: parseStringValue })
+  field({ key: "hitokoto_api_url", envName: "HITOKOTO_API_URL", parse: parseStringValue }),
+  field({ key: "allow_token_in_query", envName: "ALLOW_TOKEN_IN_QUERY", parse: parseBoolValue })
 ];
 
 /**

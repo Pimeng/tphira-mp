@@ -63,7 +63,13 @@ TEST_ACCOUNT_IDS:
 SERVER_NAME: Phira MP
 
 # 管理接口鉴权 token（HTTP /admin/*）
+# 建议通过 X-Admin-Token 或 Authorization: Bearer 头传递
 # ADMIN_TOKEN: "replace_me"
+
+# 是否允许从 URL 查询参数（?token=）中提取管理 token，默认 false
+# 安全警告：启用会使得 token 出现在服务器日志、代理日志、浏览器历史中
+# 仅当你的管理脚本不支持自定义请求头时才启用此项
+# ALLOW_TOKEN_IN_QUERY: false
 
 # 管理数据持久化路径（JSON）
 # ADMIN_DATA_PATH: "./admin_data.json"

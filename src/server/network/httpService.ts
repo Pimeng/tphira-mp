@@ -77,7 +77,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
         return;
       }
 
-      const reqAdminToken = extractAdminToken(req, url);
+      const reqAdminToken = extractAdminToken(req, url, state.config.allow_token_in_query);
 
       const ctx: RequestContext = {
         req,

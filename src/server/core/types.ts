@@ -50,6 +50,8 @@ export type ServerConfig = {
   outbound_proxy?: string | false;
   /** 允许的 CORS 来源列表；空数组或未设置时允许所有来源（向后兼容，但建议生产环境配置具体来源） */
   cors_origins?: string[];
+  /** 是否允许从 URL 查询参数（?token=）中提取管理 token；默认 false。启用会导致 token 出现在服务器日志中 */
+  allow_token_in_query?: boolean;
   /** Phira Replay 分享站配置 */
   share_station?: ShareStationConfig;
   /** 是否启用游戏结束后自动上传回放到分享站，默认 false。需要同时配置 share_station 才能实际生效 */
