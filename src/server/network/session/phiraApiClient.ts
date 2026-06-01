@@ -14,7 +14,7 @@ import type { Chart, RecordData } from "../../core/types.js";
 /** Phira API 默认端点 */
 export const DEFAULT_PHIRA_API_ENDPOINT = "https://phira.5wyxi.com";
 /** API 请求超时时间(毫秒) */
-const FETCH_TIMEOUT_MS = 60000;
+const FETCH_TIMEOUT_MS = 10000;
 
 /** Phira API 调用通用选项 */
 type PhiraApiOptions = {

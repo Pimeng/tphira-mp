@@ -214,7 +214,7 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
     // HAProxy PROXY Protocol 用于在反向代理后获取真实客户端地址
     if (state.config.haproxy_protocol) {
       try {
-        const proxyInfo = await parseProxyProtocol(socket, 5000);
+        const proxyInfo = await parseProxyProtocol(socket, 1000);
         if (proxyInfo) {
           remoteIp = proxyInfo.sourceAddress;
           remotePort = proxyInfo.sourcePort;

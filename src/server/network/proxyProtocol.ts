@@ -34,7 +34,7 @@ const PROXY_V2_SIGNATURE = Buffer.from([0x0d, 0x0a, 0x0d, 0x0a, 0x00, 0x0d, 0x0a
  * @param timeoutMs 超时时间（毫秒）
  * @returns ProxyInfo 或 null（如果不是 PROXY Protocol 或解析失败）
  */
-export async function parseProxyProtocol(socket: net.Socket, timeoutMs = 5000): Promise<ProxyInfo | null> {
+export async function parseProxyProtocol(socket: net.Socket, timeoutMs = 1000): Promise<ProxyInfo | null> {
   return new Promise((resolve) => {
     let timer: NodeJS.Timeout | null = null;
     let buffer = Buffer.alloc(0);

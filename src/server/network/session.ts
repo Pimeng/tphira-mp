@@ -250,17 +250,18 @@ export class Session {
 
   private async handleAuthenticate(token: string): Promise<void> {
     try {
-      const me = await fetchPhiraUserInfo({
-        endpoint: this.getPhiraApiEndpoint(),
-        token,
-        proxy: this.state.config.outbound_proxy
-      });
+      // 并行发起 Phira API 认证和一言预热，减少总延迟
+      const [me] = await Promise.all([
+        fetchPhiraUserInfo({
+          endpoint: this.getPhiraApiEndpoint(),
+          token,
+          proxy: this.state.config.outbound_proxy
+        }),
+        getHitokotoCached(this.state.config.outbound_proxy, this.state.config.hitokoto_api_url).catch(() => null)
+      ]);
 
       // Don't reject banned users at auth time - allow them to connect
       // They will be blocked from operations later
-
-      // 预热一言缓存：在认证响应发送的同时并行获取，减少欢迎消息延迟
-      void getHitokotoCached(this.state.config.outbound_proxy, this.state.config.hitokoto_api_url);
 
       const { user, staleSession } = await this.state.mutex.runExclusive(async () => {
         const existing = this.state.users.get(me.id);
@@ -291,9 +292,6 @@ export class Session {
       const roomState: ClientRoomState | null = user.room ? user.room.clientState(user, (id) => this.state.users.get(id)) : null;
       await this.trySend({ type: "Authenticate", result: ok([user.toInfo(), roomState]) });
       
-      // 立即刷新发送批量，确保认证响应快速发送
-      await this.stream?.flushSendBatch();
-      
       this.waitingForAuthenticate = false;
 
       const monitorSuffix = user.monitor ? tl(this.state.serverLang, "label-monitor-suffix") : "";
@@ -319,9 +317,6 @@ export class Session {
       const localized = this.localizeError(this.state.serverLang, e instanceof Error ? e : new Error("auth-failed"));
       this.state.logger.log("WARN", tl(this.state.serverLang, "log-auth-failed", { id: this.id, reason: localized }), undefined, { ip: this.remoteIp, isConnectionLog: true });
       await this.trySend({ type: "Authenticate", result: err(localized) });
-      
-      // 立即刷新发送批量
-      await this.stream?.flushSendBatch();
       
       this.panicked = true;
       await this.markLost();

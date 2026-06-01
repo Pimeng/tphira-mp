@@ -15,6 +15,10 @@ export type FetchWithProxyInit = RequestInit & { proxy?: OutboundProxyValue };
 type RequestHeadersInit = NonNullable<RequestInit["headers"]>;
 type RequestBodyValue = RequestInit["body"];
 
+const keepAliveAgent = new http.Agent({ keepAlive: true, maxSockets: 20 });
+const keepAliveSecureAgent = new https.Agent({ keepAlive: true, maxSockets: 20 });
+const agentCache = new WeakMap<typeof globalThis.fetch, { http: http.Agent; https: https.Agent }>();
+
 function combineSignals(signal: AbortSignal | null | undefined, timeoutSignal: AbortSignal): AbortSignal {
   if (!signal) return timeoutSignal;
   if (typeof AbortSignal.any === "function") return AbortSignal.any([signal, timeoutSignal]);
@@ -45,6 +49,11 @@ async function normalizeBody(body: RequestBodyValue | null | undefined): Promise
   throw new Error("unsupported request body");
 }
 
+function selectAgent(url: URL): http.Agent | false {
+  if (isHttpsUrl(url)) return keepAliveSecureAgent;
+  return keepAliveAgent;
+}
+
 function toNodeRequestOptions(url: URL, method: string, headers: Record<string, string>, path: string): http.RequestOptions {
   return {
     protocol: url.protocol,
@@ -53,7 +62,7 @@ function toNodeRequestOptions(url: URL, method: string, headers: Record<string, 
     method,
     path,
     headers,
-    agent: false
+    agent: selectAgent(url)
   };
 }
 
@@ -246,7 +255,7 @@ export async function fetchWithRetry(
   input: string | URL,
   init: FetchWithProxyInit,
   timeoutMs: number,
-  maxRetries: number = 5
+  maxRetries: number = 2
 ): Promise<Response> {
   let lastError: Error | null = null;
 
