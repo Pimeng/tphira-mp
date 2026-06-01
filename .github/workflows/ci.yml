@@ -77,15 +77,15 @@ jobs:
     - name: 运行集成测试
       run: >
         pnpm vitest run
-        'test/game/**'
-        'test/network/protocol*'
-        'test/network/websocket*'
-        'test/network/client-reconnect*'
-        'test/network/stream-priority*'
-        'test/network/outbound-proxy*'
-        'test/network/phira-api-endpoint*'
-        'test/config/config*'
-        'test/config/http-config*'
+        test/game
+        test/network/protocol
+        test/network/websocket
+        test/network/client-reconnect
+        test/network/stream-priority
+        test/network/outbound-proxy
+        test/network/phira-api-endpoint
+        test/config/config
+        test/config/http-config
 
     - name: 上传集成测试结果
       if: always()
