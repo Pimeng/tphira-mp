@@ -1,0 +1,36 @@
+name: Setup Node.js and pnpm
+description: Setup Node.js, pnpm and optionally install dependencies with pnpm cache.
+
+inputs:
+  node-version:
+    description: Node.js version to use.
+    required: false
+    default: '24'
+  pnpm-version:
+    description: pnpm version to use.
+    required: false
+    default: '10.29.3'
+  install:
+    description: Whether to install dependencies after setup.
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - name: 设置 pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        version: ${{ inputs.pnpm-version }}
+
+    - name: 设置 Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: pnpm
+        cache-dependency-path: pnpm-lock.yaml
+
+    - name: 安装依赖
+      if: ${{ inputs.install == 'true' }}
+      shell: pwsh
+      run: pnpm install --frozen-lockfile

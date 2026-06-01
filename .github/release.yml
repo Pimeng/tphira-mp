@@ -9,13 +9,13 @@ changelog:
       labels:
         - feature
         - enhancement
-      title_prefix: "feat"
+      title_prefix: "feat|enhancement"
     - title: 🐛 修复
       labels:
         - bug
         - fix
       title_prefix: "fix"
-    - title: 🔄 改进
+    - title: 🔄 重构/优化
       labels:
         - improvement
         - performance
@@ -23,12 +23,12 @@ changelog:
     - title: 📚 文档
       labels:
         - documentation
-      title_prefix: "docs"
+      title_prefix: "docs|doc"
     - title: 🧪 测试
       labels:
         - test
       title_prefix: "test"
-    - title: 📦 其他更新
+    - title: 📦 杂项
       labels:
         - chore
       title_prefix: "chore"

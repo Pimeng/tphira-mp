@@ -4,6 +4,12 @@ name: 版本号变更时自动发布
 on:
   push:
     branches: [ main ]
+    paths:
+      - package.json
+
+concurrency:
+  group: release-on-version-bump-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -21,13 +27,24 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: 检查版本是否比上一提交更新
+      - name: 设置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: 检查版本是否比推送前版本更新
         id: check
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
         run: |
           current=$(node -p "require('./package.json').version")
           echo "version=$current" >> "$GITHUB_OUTPUT"
 
-          git show HEAD~1:package.json > /tmp/old-package.json 2>/dev/null || true
+          rm -f /tmp/old-package.json
+          if [[ -n "$BEFORE_SHA" && "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ]]; then
+            git show "${BEFORE_SHA}:package.json" > /tmp/old-package.json 2>/dev/null || true
+          fi
+
           if [[ -s /tmp/old-package.json ]]; then
             previous=$(node -p "try { require('/tmp/old-package.json').version } catch(e) { '0.0.0' }" 2>/dev/null) || previous="0.0.0"
           else
@@ -49,331 +66,15 @@ jobs:
           echo "should_release=$should_release" >> "$GITHUB_OUTPUT"
 
           if [[ "$should_release" == "true" ]]; then
-            echo "当前提交版本: $current > 上一提交: $previous，触发发布"
+            echo "当前提交版本: $current > 推送前版本: $previous，触发发布"
           else
-            echo "当前 $current 未高于上一提交 $previous，跳过发布"
+            echo "当前 $current 未高于推送前版本 $previous，跳过发布"
           fi
-
-  test:
+  release:
     needs: [check-version]
     if: needs.check-version.outputs.should_release == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: 检出代码
-        uses: actions/checkout@v4
-
-      - name: 设置 Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-
-      - name: 设置 pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: "10.29.3"
-
-      - name: 安装依赖
-        run: pnpm install --frozen-lockfile
-
-      - name: 运行测试
-        run: pnpm test
-
-  build:
-    needs: [check-version, test]
-    if: needs.check-version.outputs.should_release == 'true'
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
-
-    steps:
-      - name: 检出代码
-        uses: actions/checkout@v4
-
-      - name: 设置 Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-
-      - name: 设置 pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: "10.29.3"
-
-      - name: 安装依赖
-        run: pnpm install --frozen-lockfile
-
-      - name: 构建可执行文件
-        run: pnpm run package:sea
-
-      - name: 制作压缩包（Win）
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $os = "${{ runner.os }}".ToLowerInvariant()
-          $arch = "${{ runner.arch }}".ToLowerInvariant()
-          $name = "phira-mp-$os-$arch.zip"
-          if (Test-Path $name) { Remove-Item $name -Force }
-          Compress-Archive -Path release\* -DestinationPath $name
-
-      - name: 制作压缩包（Linux/macOS）
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          os="$(printf "%s" "${{ runner.os }}" | tr '[:upper:]' '[:lower:]')"
-          arch="$(printf "%s" "${{ runner.arch }}" | tr '[:upper:]' '[:lower:]')"
-          name="phira-mp-${os}-${arch}.zip"
-          rm -f "$name"
-          (cd release && zip -r "../$name" .)
-
-      - name: 上传压缩包
-        uses: actions/upload-artifact@v4
-        with:
-          name: phira-mp-${{ runner.os }}-${{ runner.arch }}
-          path: |
-            phira-mp-*.zip
-
-  build-freebsd:
-    needs: [check-version, test]
-    if: needs.check-version.outputs.should_release == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: 检出代码
-        uses: actions/checkout@v4
-
-      - name: 在 FreeBSD 上构建
-        uses: vmactions/freebsd-vm@v1
-        with:
-          usesh: true
-          prepare: |
-            pkg install -y node22 npm-node22 zip
-            npm install -g pnpm@10.29.3
-          run: |
-            pnpm install --frozen-lockfile
-            pnpm run package:sea
-            cd release && zip -r ../phira-mp-freebsd-x64.zip .
-
-      - name: 上传压缩包
-        uses: actions/upload-artifact@v4
-        with:
-          name: phira-mp-FreeBSD-X64
-          path: phira-mp-freebsd-x64.zip
-
-  build-bundle:
-    needs: [check-version, test]
-    if: needs.check-version.outputs.should_release == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: 检出代码
-        uses: actions/checkout@v4
-
-      - name: 设置 Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-
-      - name: 设置 pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: "10.29.3"
-
-      - name: 安装依赖
-        run: pnpm install --frozen-lockfile
-
-      - name: 构建 Bundle
-        run: pnpm run bundle:server
-
-      - name: 制作压缩包
-        shell: bash
-        run: |
-          mkdir -p phira-mp-nodejs
-          cp dist-bundle/server.cjs phira-mp-nodejs/server.js
-          cp -r locales phira-mp-nodejs/locales
-          cp server_config.example.yml phira-mp-nodejs/server_config.yml
-          zip -r phira-mp-nodejs.zip phira-mp-nodejs
-
-      - name: 上传压缩包
-        uses: actions/upload-artifact@v4
-        with:
-          name: phira-mp-nodejs-bundle
-          path: phira-mp-nodejs.zip
-
-  release:
-    if: startsWith(github.ref, 'refs/tags/') || needs.check-version.outputs.should_release == 'true'
-    needs: [check-version, build, build-freebsd, build-bundle]
-    runs-on: ubuntu-latest
-    steps:
-      - name: 检出代码
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: 下载压缩包
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: 生成自定义 Release Notes
-        id: notes
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # 获取当前版本
-          CURRENT_VERSION="${{ needs.check-version.outputs.version }}"
-          echo "当前版本: v${CURRENT_VERSION}"
-          
-          # 从 GitHub Releases 获取最新的已发布版本号
-          PREVIOUS_VERSION=$(gh release list --limit 100 --json tagName,isPrerelease \
-            --jq '[.[] | select(.isPrerelease == false) | .tagName] | .[0]' 2>/dev/null || echo "")
-          
-          if [ -z "$PREVIOUS_VERSION" ]; then
-            echo "未找到上一个 release，读取所有提交"
-            COMMITS=$(git log --pretty=format:"%s")
-          else
-            echo "找到上一个 release 版本: ${PREVIOUS_VERSION}"
-            
-            # 获取远程 tags
-            git fetch --tags origin
-            
-            # 验证远程 tag 是否存在
-            if git rev-parse "refs/tags/${PREVIOUS_VERSION}" >/dev/null 2>&1; then
-              echo "从远程 tag ${PREVIOUS_VERSION} 到 HEAD 对比提交"
-              COMMITS=$(git log ${PREVIOUS_VERSION}..HEAD --pretty=format:"%s")
-            else
-              echo "警告: 远程 tag ${PREVIOUS_VERSION} 不存在，读取所有提交"
-              COMMITS=$(git log --pretty=format:"%s")
-            fi
-          fi
-          
-          echo "提交列表：$COMMITS"
-          
-          # 初始化分类
-          FEATURES=""
-          FIXES=""
-          IMPROVEMENTS=""
-          OTHERS=""
-          
-          # 分类处理每个 commit
-          while IFS= read -r line; do
-            # 跳过空行
-            [[ -z "$line" ]] && continue
-            
-            if [[ $line =~ ^feat(\(.*\))?:\ (.*) ]]; then
-              FEATURES+="* ${BASH_REMATCH[2]}"$'\n'
-            elif [[ $line =~ ^fix(\(.*\))?:\ (.*) ]]; then
-              FIXES+="* ${BASH_REMATCH[2]}"$'\n'
-            elif [[ $line =~ ^(perf|refactor|improvement|chore)(\(.*\))?:\ (.*) ]]; then
-              IMPROVEMENTS+="* ${BASH_REMATCH[3]}"$'\n'
-            elif [[ ! $line =~ ^(docs|test|ci)(\(.*\))?:\ (.*) ]]; then
-              # 不忽略任何其他格式的提交，只忽略 docs/test/ci
-              if [[ ! -z "$line" ]]; then
-                OTHERS+="* $line"$'\n'
-              fi
-            fi
-          done <<< "$COMMITS"
-          
-          # 生成 Release Notes
-          NOTES="## 更新"$'\n'
-          
-          if [ -n "$FEATURES" ]; then
-            NOTES+="### ✨ 新增"$'\n'
-            NOTES+="$FEATURES"
-          fi
-          
-          if [ -n "$FIXES" ]; then
-            NOTES+="### 🐛 修复"$'\n'
-            NOTES+="$FIXES"
-          fi
-          
-          if [ -n "$IMPROVEMENTS" ]; then
-            NOTES+="### 🔄 改进"$'\n'
-            NOTES+="$IMPROVEMENTS"
-          fi
-          
-          if [ -n "$OTHERS" ]; then
-            NOTES+="### 📝 其他"$'\n'
-            NOTES+="$OTHERS"
-          fi
-          
-          NOTES+="***"$'\n'
-          NOTES+="完整更新日志"
-          
-          echo "release_notes<<EOF" >> $GITHUB_OUTPUT
-          echo "$NOTES" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-      - name: 列出 artifacts 目录结构
-        shell: bash
-        run: find artifacts -type f -name "*.zip" | head -20
-
-      - name: 发布到 Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ needs.check-version.outputs.version }}
-          files: |
-            artifacts/phira-mp-Linux-ARM64/*.zip
-            artifacts/phira-mp-Linux-X64/*.zip
-            artifacts/phira-mp-Windows-X64/*.zip
-            artifacts/phira-mp-macOS-ARM64/*.zip
-            artifacts/phira-mp-FreeBSD-X64/*.zip
-            artifacts/phira-mp-nodejs-bundle/*.zip
-          body: ${{ steps.notes.outputs.release_notes }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  docker:
-    if: startsWith(github.ref, 'refs/tags/') || needs.check-version.outputs.should_release == 'true'
-    needs: [check-version, release]
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - name: 检出代码
-        uses: actions/checkout@v4
-
-      - name: 设置 Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: 登录 GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: 生成镜像标签
-        id: meta
-        shell: bash
-        env:
-          REPOSITORY: ${{ github.repository }}
-          VERSION: ${{ needs.check-version.outputs.version }}
-        run: |
-          repo_lc="${REPOSITORY,,}"
-          image="ghcr.io/${repo_lc}"
-          version_tag="v${VERSION,,}"
-          if [[ "$version_tag" =~ ^v([0-9]+)\.([0-9]+)\.0$ ]]; then
-            version_tag="v${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
-          fi
-          tags="${image}:${version_tag},${image}:latest"
-          echo "tags=${tags}" >> "$GITHUB_OUTPUT"
-          echo "version=${version_tag}" >> "$GITHUB_OUTPUT"
-
-      - name: 构建并推送
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          target: runtime-sea
-          tags: ${{ steps.meta.outputs.tags }}
-          build-args: |
-            PHIRA_MP_VERSION=${{ steps.meta.outputs.version }}
-          pull: true
-          no-cache: true
-
-      - name: 清理构建缓存
-        if: always()
-        shell: bash
-        run: |
-          docker builder prune -af || true
-          docker system prune -af || true
+    uses: ./.github/workflows/reusable-release.yml
+    with:
+      version: ${{ needs.check-version.outputs.version }}
+      prerelease: false
+    secrets: inherit
