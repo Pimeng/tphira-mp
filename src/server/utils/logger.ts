@@ -29,12 +29,15 @@ type LoggerOptions = {
 
 export type LogContext = { userId?: number; ip?: string; roomId?: string };
 
+const PAD2 = Array.from({ length: 100 }, (_, i) => String(i).padStart(2, "0"));
+const PAD3 = Array.from({ length: 1000 }, (_, i) => String(i).padStart(3, "0"));
+
 function pad2(n: number): string {
-  return String(n).padStart(2, "0");
+  return PAD2[n] ?? String(n).padStart(2, "0");
 }
 
 function pad3(n: number): string {
-  return String(n).padStart(3, "0");
+  return PAD3[n] ?? String(n).padStart(3, "0");
 }
 
 export function formatLocalDateKey(d: Date): string {
@@ -46,13 +49,9 @@ function formatLocalTimestamp(d: Date): string {
 }
 
 function formatMeta(meta?: Record<string, unknown>): string {
-  if (!meta || Object.keys(meta).length === 0) return "";
-  try {
-    return ` ${JSON.stringify(meta)}`;
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    return ` [meta-unserializable:${reason}]`;
-  }
+  if (!meta) return "";
+  for (const _ in meta) { try { return ` ${JSON.stringify(meta)}`; } catch (error) { const reason = error instanceof Error ? error.message : String(error); return ` [meta-unserializable:${reason}]`; } }
+  return "";
 }
 
 function parseLevel(input: string | undefined, fallback: LogLevel): LogLevel {
@@ -171,10 +170,18 @@ export class Logger {
   }
 
   private write(level: LogLevel, message: string, meta?: Record<string, unknown>, context?: LogContext & { isConnectionLog?: boolean }): void {
-    const now = new Date();
-    this.onLog?.(level, message, now, context);
+    // onLog 作为旁路监听不受 minLevel 过滤
+    if (this.onLog) {
+      const now = new Date();
+      this.onLog(level, message, now, context);
+      if (level === "INFO" && this.onInfoLog) {
+        this.onInfoLog(message, now, context);
+      }
+    }
 
     if (LEVEL_WEIGHT[level] < LEVEL_WEIGHT[this.minLevel]) return;
+
+    const now = new Date();
 
     // 检查是否应该跳过连接日志（限流）
     const isConnectionLog = context?.isConnectionLog === true || 

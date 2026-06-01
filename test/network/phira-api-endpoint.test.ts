@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { Client } from "../../src/client/client.js";
 import { startServer } from "../../src/server/core/server.js";
 import { chartCache } from "../../src/server/utils/cache.js";
+import { clearTokenCache } from "../../src/server/network/session/phiraApiClient.js";
 
 describe("Phira API 端点配置", () => {
   const originalFetch = globalThis.fetch;
@@ -59,6 +60,7 @@ describe("Phira API 端点配置", () => {
 
   beforeEach(async () => {
     fetchCalls = [];
+    clearTokenCache();
     await chartCache.clear();
   });
 

@@ -35,9 +35,7 @@ export class Language {
     if (!msg || !msg.value) {
       throw new Error(`缺少翻译：${key}（lang=${this.lang}）`);
     }
-    const errors: Error[] = [];
-    const out = bundle.formatPattern(msg.value, args ?? null, errors);
-    return out;
+    return bundle.formatPattern(msg.value, args ?? null, null);
   }
 }
 

@@ -17,6 +17,9 @@ import type { User } from "../game/user.js";
 import type { Logger } from "../utils/logger.js";
 import { logRoomInfo } from "../utils/logUtils.js";
 
+const ROOM_STATE_WAITING: RoomState = Object.freeze({ type: "WaitingForReady" });
+const ROOM_STATE_PLAYING: RoomState = Object.freeze({ type: "Playing" });
+
 /** 房间内部状态类型（比客户端状态更详细） */
 export type InternalRoomState =
   | { type: "SelectChart" }
@@ -129,14 +132,14 @@ export class Room {
     if (this.state.type === "SelectChart") {
       return { type: "SelectChart", id: this.chart ? this.chart.id : null };
     }
-    if (this.state.type === "WaitForReady") return { type: "WaitingForReady" };
-    return { type: "Playing" };
+    if (this.state.type === "WaitForReady") return ROOM_STATE_WAITING;
+    return ROOM_STATE_PLAYING;
   }
 
   clientState(user: User, usersById: (id: number) => User | undefined): ClientRoomState {
     const users = this._clientStateUsers;
     users.clear();
-    for (const id of [...this._users, ...this._monitors]) {
+    for (const id of this.allParticipantIds()) {
       const u = usersById(id);
       if (u) users.set(id, u);
     }
@@ -327,7 +330,7 @@ export class Room {
     }): Promise<void> {
       if (this.state.type === "WaitForReady") {
         const started = this.state.started;
-        const allIds = [...this.userIds(), ...this.monitorIds()];
+        const allIds = this.allParticipantIds();
         const allReady = allIds.every((id) => started.has(id));
         if (!allReady) return;
 

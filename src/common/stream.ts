@@ -68,6 +68,8 @@ export class Stream<S, R> {
   private processing = false;
   /** 接收消息队列（非 fast path 消息进入此队列） */
   private queue: R[] = [];
+  /** 队列头部索引，避免 O(n) shift() */
+  private queueHead = 0;
   /** 错误处理器（可选） */
   private readonly onError?: StreamErrorHandler;
 
@@ -387,8 +389,8 @@ export class Stream<S, R> {
     if (this.processing || this.closed) return;
     this.processing = true;
     try {
-      while (this.queue.length > 0) {
-        const packet = this.queue.shift()!;
+      while (this.queueHead < this.queue.length) {
+        const packet = this.queue[this.queueHead++]!;
         try {
           await this.handler(packet);
         } catch (e) {
@@ -400,6 +402,11 @@ export class Stream<S, R> {
       }
     } finally {
       this.processing = false;
+      // 队列已清空时重置索引，避免数组无限增长
+      if (this.queueHead >= this.queue.length) {
+        this.queue.length = 0;
+        this.queueHead = 0;
+      }
       if (this.queue.length > 0 && !this.closed) void this.processQueue();
     }
   }

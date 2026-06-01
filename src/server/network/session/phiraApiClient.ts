@@ -7,7 +7,9 @@
  * - /record/:id: 游戏记录(上报成绩时验证)
  *
  * 所有请求都携带统一的超时和重试配置,并支持出站代理。
+ * /me 接口的结果会缓存 30 秒,以加速重连场景的认证流程。
  */
+import { Cache } from "../../utils/cache.js";
 import { fetchWithRetry, type OutboundProxyValue } from "../../../common/http.js";
 import type { Chart, RecordData } from "../../core/types.js";
 
@@ -33,11 +35,28 @@ type PhiraUserInfo = {
   language: string;
 };
 
+/** Token 校验结果缓存(30 秒 TTL),重连场景下避免重复 HTTP 请求 */
+const tokenCache = new Cache<string, PhiraUserInfo>({
+  fileName: "token_cache.json",
+  maxMemorySize: 500,
+  ttl: 30_000,
+  persistToDisk: false
+});
+
+/** 正在进行的 token 校验请求(用于合并并发请求) */
+const tokenInFlight = new Map<string, Promise<PhiraUserInfo>>();
+
+/** 清空 token 缓存(仅用于测试) */
+export function clearTokenCache(): void {
+  tokenInFlight.clear();
+  void tokenCache.clear();
+}
+
 /**
  * 调用 /me 接口获取当前 token 对应的用户信息
  *
- * 会进行运行时类型校验,任何字段缺失或类型不匹配都会抛出特定的错误码,
- * 用于上层在认证流程中区分错误来源。
+ * 结果会按 token 缓存 30 秒,重连时直接返回缓存结果,跳过 HTTP 请求。
+ * 并发的相同 token 请求会自动合并为一个 HTTP 调用。
  *
  * @throws auth-fetch-me-failed - HTTP 请求失败(非 2xx)
  * @throws auth-invalid-response - 响应体不是合法对象
@@ -45,26 +64,47 @@ type PhiraUserInfo = {
  * @throws auth-invalid-user-name - name 字段不是非空字符串
  */
 export async function fetchPhiraUserInfo(opts: PhiraApiOptions & { token: string }): Promise<PhiraUserInfo> {
-  const { endpoint, token, proxy, timeoutMs } = opts;
-  const r = await fetchWithRetry(
-    `${endpoint}/me`,
-    {
-      headers: { Authorization: `Bearer ${token}` },
-      proxy
-    },
-    timeoutMs ?? FETCH_TIMEOUT_MS
-  );
-  if (!r.ok) throw new Error("auth-fetch-me-failed");
-  const data: unknown = await r.json();
-  if (!data || typeof data !== "object") throw new Error("auth-invalid-response");
-  const obj = data as Record<string, unknown>;
-  if (!Number.isInteger(obj.id)) throw new Error("auth-invalid-user-id");
-  if (typeof obj.name !== "string" || !obj.name.trim()) throw new Error("auth-invalid-user-name");
-  return {
-    id: obj.id as number,
-    name: (obj.name as string).trim(),
-    language: typeof obj.language === "string" ? obj.language : ""
-  };
+  const { token } = opts;
+
+  // 先查缓存
+  const cached = await tokenCache.get(token);
+  if (cached) return cached;
+
+  // 合并并发请求: 如果已有进行中的相同 token 请求,直接等待它
+  const existing = tokenInFlight.get(token);
+  if (existing) return await existing;
+
+  const promise = (async () => {
+    try {
+      const { endpoint, proxy, timeoutMs } = opts;
+      const r = await fetchWithRetry(
+        `${endpoint}/me`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          proxy
+        },
+        timeoutMs ?? FETCH_TIMEOUT_MS
+      );
+      if (!r.ok) throw new Error("auth-fetch-me-failed");
+      const data: unknown = await r.json();
+      if (!data || typeof data !== "object") throw new Error("auth-invalid-response");
+      const obj = data as Record<string, unknown>;
+      if (!Number.isInteger(obj.id)) throw new Error("auth-invalid-user-id");
+      if (typeof obj.name !== "string" || !obj.name.trim()) throw new Error("auth-invalid-user-name");
+      const info: PhiraUserInfo = {
+        id: obj.id as number,
+        name: (obj.name as string).trim(),
+        language: typeof obj.language === "string" ? obj.language : ""
+      };
+      await tokenCache.set(token, info);
+      return info;
+    } finally {
+      tokenInFlight.delete(token);
+    }
+  })();
+
+  tokenInFlight.set(token, promise);
+  return await promise;
 }
 
 /**

@@ -10,7 +10,7 @@
  */
 import type net from "node:net";
 import { err, ok, type StringResult } from "../../common/binary.js";
-import type { ClientCommand, ClientRoomState, JoinRoomResponse, ServerCommand } from "../../common/commands.js";
+import type { ClientCommand, ClientRoomState, JoinRoomResponse, ServerCommand, UserInfo } from "../../common/commands.js";
 import { HEARTBEAT_DISCONNECT_TIMEOUT_MS } from "../../common/commands.js";
 import type { Stream } from "../../common/stream.js";
 import type { Room } from "../game/room.js";
@@ -535,10 +535,11 @@ export class Session {
     await this.broadcastRoom(room, { type: "OnJoinRoom", info: user.toInfo() });
     await this.broadcastRoomMessage(room, { type: "JoinRoom", user: user.id, name: user.name });
 
-    const users = room.allParticipantIds()
-      .map((id) => this.state.users.get(id))
-      .filter((it): it is User => Boolean(it))
-      .map((it) => it.toInfo());
+    const userList: UserInfo[] = [];
+    for (const id of room.allParticipantIds()) {
+      const u = this.state.users.get(id);
+      if (u) userList.push(u.toInfo());
+    }
 
     let respState = room.clientRoomState();
     // ProtocolHack：如果当前不是选谱状态但已有谱面，响应中伪装成 SelectChart 让客户端先获知谱面 ID
@@ -548,7 +549,7 @@ export class Session {
 
     const resp: JoinRoomResponse = {
       state: respState,
-      users,
+      users: userList,
       live: room.isLive()
     };
 
@@ -668,12 +669,13 @@ export class Session {
 
   private async disbandRoom(room: Room): Promise<void> {
     const ids = room.allParticipantIds();
+    const baseOpts = this.makeRoomCallbacks(room);
     const leavePromises: Promise<boolean>[] = [];
     for (const id of ids) {
       const u = this.state.users.get(id);
       if (!u) continue;
       if (!u.room || u.room.id !== room.id) continue;
-      leavePromises.push(room.onUserLeave({ user: u, ...this.makeRoomCallbacks(room) }));
+      leavePromises.push(room.onUserLeave({ user: u, ...baseOpts }));
     }
     await Promise.all(leavePromises).catch(NOOP);
     await this.state.mutex.runExclusive(async () => {

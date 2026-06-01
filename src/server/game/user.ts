@@ -34,6 +34,9 @@ export class User {
 
   /** 是否为观战者 */
   monitor = false;
+
+  private _infoCache: UserInfo | null = null;
+
   /** 当前游戏时间（用于回放同步，游戏中更新） */
   gameTime = Number.NEGATIVE_INFINITY;
 
@@ -56,7 +59,10 @@ export class User {
    * @returns 用户基本信息
    */
   toInfo(): UserInfo {
-    return { id: this.id, name: this.name, monitor: this.monitor };
+    if (!this._infoCache || this._infoCache.monitor !== this.monitor) {
+      this._infoCache = { id: this.id, name: this.name, monitor: this.monitor };
+    }
+    return this._infoCache;
   }
 
   /**
