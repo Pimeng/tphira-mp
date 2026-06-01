@@ -196,6 +196,11 @@ export class BinaryWriter {
     this.pos = reserveHead;
   }
 
+  /** 重置写入位置以复用缓冲区，避免重复分配 */
+  reset(): void {
+    this.pos = this.reserveHead;
+  }
+
   private ensure(capacity: number): void {
     if (this.pos + capacity <= this.buf.length) return;
     let newSize = this.buf.length * 2;

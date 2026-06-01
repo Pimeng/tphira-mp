@@ -48,6 +48,7 @@ type CommandContext = {
   errToStr: <T>(fn: () => Promise<T>) => Promise<StringResult<T>>;
   requireRoom: (user: User) => Room;
   broadcastRoom: (room: Room, cmd: ServerCommand) => Promise<void>;
+  broadcastRoomFast: (room: Room, cmd: ServerCommand) => void;
   broadcastRoomMessage: (room: Room, msg: Parameters<Room["send"]>[1]) => Promise<void>;
   monitorBuffer: MonitorBuffer;
   processCreateRoom: (user: User, id: string) => Promise<Record<never, never>>;
@@ -204,9 +205,11 @@ export async function processClientCommand(
             { user: user.name, userId: String(user.id), chart: chart.name },
             { userId: user.id }
           );
-          await ctx.broadcastRoomMessage(room, { type: "SelectChart", user: user.id, name: chart.name, id: chart.id });
-          await room.onStateChange((c) => ctx.broadcastRoom(room, c));
-          await room.notifyWebSocket(state);
+          // 并行发送 Message 广播和状态变更，不相互等待
+          const msgPromise = ctx.broadcastRoomMessage(room, { type: "SelectChart", user: user.id, name: chart.name, id: chart.id });
+          const statePromise = room.onStateChange((c) => ctx.broadcastRoom(room, c));
+          void room.notifyWebSocket(state);
+          await Promise.all([msgPromise, statePromise]);
           return EMPTY_RECORD;
         })
       };
@@ -219,10 +222,11 @@ export async function processClientCommand(
           room.validateStart(user);
           room.resetGameTime((id) => state.users.get(id));
           logRoomMark(state.logger, state.serverLang, room.id, "log-room-request-start", { user: user.name }, { userId: user.id });
-          await ctx.broadcastRoomMessage(room, { type: "GameStart", user: user.id });
+          const msgPromise = ctx.broadcastRoomMessage(room, { type: "GameStart", user: user.id });
           room.state = { type: "WaitForReady", started: new Set([user.id]) };
-          await room.onStateChange((c) => ctx.broadcastRoom(room, c));
-          await room.notifyWebSocket(state);
+          const statePromise = room.onStateChange((c) => ctx.broadcastRoom(room, c));
+          void room.notifyWebSocket(state);
+          await Promise.all([msgPromise, statePromise]);
           await ctx.checkRoomAllReady(room);
           return EMPTY_RECORD;
         })
@@ -238,8 +242,9 @@ export async function processClientCommand(
             if (room.state.started.has(user.id)) throw new Error(user.lang.format("room-already-ready"));
             room.state.started.add(user.id);
             logRoomInfo(state.logger, state.serverLang, room.id, "log-room-ready", { user: user.name }, { userId: user.id });
-            await ctx.broadcastRoomMessage(room, { type: "Ready", user: user.id });
-            await room.notifyWebSocket(state);
+            const msgPromise = ctx.broadcastRoomMessage(room, { type: "Ready", user: user.id });
+            void room.notifyWebSocket(state);
+            await msgPromise;
             await ctx.checkRoomAllReady(room);
           }
           return EMPTY_RECORD;
@@ -256,14 +261,17 @@ export async function processClientCommand(
             if (!room.state.started.delete(user.id)) throw new Error(user.lang.format("room-not-ready"));
             if (room.hostId === user.id) {
               logRoomMark(state.logger, state.serverLang, room.id, "log-room-cancel-game", { user: user.name }, { userId: user.id });
-              await ctx.broadcastRoomMessage(room, { type: "CancelGame", user: user.id });
+              const msgPromise = ctx.broadcastRoomMessage(room, { type: "CancelGame", user: user.id });
               room.state = { type: "SelectChart" };
-              await room.onStateChange((c) => ctx.broadcastRoom(room, c));
+              const statePromise = room.onStateChange((c) => ctx.broadcastRoom(room, c));
+              void room.notifyWebSocket(state);
+              await Promise.all([msgPromise, statePromise]);
             } else {
               logRoomInfo(state.logger, state.serverLang, room.id, "log-room-cancel-ready", { user: user.name }, { userId: user.id });
-              await ctx.broadcastRoomMessage(room, { type: "CancelReady", user: user.id });
+              const msgPromise = ctx.broadcastRoomMessage(room, { type: "CancelReady", user: user.id });
+              void room.notifyWebSocket(state);
+              await msgPromise;
             }
-            await room.notifyWebSocket(state);
           }
           return EMPTY_RECORD;
         })
@@ -284,7 +292,7 @@ export async function processClientCommand(
             { user: user.name, score: String(record.score), acc: String(record.accuracy) },
             { userId: user.id }
           );
-          await ctx.broadcastRoomMessage(room, {
+          const msgPromise = ctx.broadcastRoomMessage(room, {
             type: "Played",
             user: user.id,
             score: record.score,
@@ -296,7 +304,8 @@ export async function processClientCommand(
             if (room.state.results.has(user.id)) throw new Error(user.lang.format("record-already-uploaded"));
             room.state.results.set(user.id, record);
             if (state.replayEnabled && room.replayEligible) state.replayRecorder.setRecordId(room.id, user.id, record.id);
-            await room.notifyWebSocket(state);
+            void room.notifyWebSocket(state);
+            await msgPromise;
             await ctx.checkRoomAllReady(room);
           }
           return EMPTY_RECORD;
@@ -313,8 +322,9 @@ export async function processClientCommand(
             if (room.state.aborted.has(user.id)) throw new Error(user.lang.format("room-game-aborted"));
             room.state.aborted.add(user.id);
             logRoomMark(state.logger, state.serverLang, room.id, "log-room-abort", { user: user.name }, { userId: user.id });
-            await ctx.broadcastRoomMessage(room, { type: "Abort", user: user.id });
-            await room.notifyWebSocket(state);
+            const msgPromise = ctx.broadcastRoomMessage(room, { type: "Abort", user: user.id });
+            void room.notifyWebSocket(state);
+            await msgPromise;
             await ctx.checkRoomAllReady(room);
           }
           return EMPTY_RECORD;

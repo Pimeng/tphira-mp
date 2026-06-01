@@ -153,7 +153,7 @@ export function startWebSocketService(opts: { httpServer: http.Server; state: Se
         if (msg.type === "subscribe") {
           try {
             const roomId = parseRoomId(msg.roomId);
-            const room = await state.mutex.runExclusive(async () => state.rooms.get(roomId) ?? null);
+            const room = state.rooms.get(roomId) ?? null;
 
             if (!room) {
               sendResponse(ws, { type: "error", message: "room-not-found" });
@@ -325,12 +325,12 @@ export function startWebSocketService(opts: { httpServer: http.Server; state: Se
   };
 
   const broadcastRoomUpdate = async (roomId: RoomId): Promise<void> => {
+    const subscribers = roomSubscribers.get(roomIdToString(roomId));
+    if (!subscribers || subscribers.size === 0) return;
     const data = buildRoomUpdateData(state, roomId);
     if (!data) return;
 
     const message = JSON.stringify({ type: "room_update", data } satisfies WebSocketResponse);
-    const subscribers = roomSubscribers.get(roomIdToString(roomId));
-    if (!subscribers) return;
 
     for (const ws of subscribers) {
       if (ws.readyState !== WebSocket.OPEN) continue;

@@ -16,6 +16,7 @@ export class Mutex {
    * @throws 当超时时会抛出 Error("mutex-timeout")
    */
   async runExclusive<T>(fn: () => Promise<T>, timeoutMs?: number): Promise<T> {
+    const t0 = Mutex._profilerStart?.();
     const prev = this.current;
     let release!: () => void;
     this.queueSize++;
@@ -24,6 +25,8 @@ export class Mutex {
     });
 
     await prev;
+    Mutex._profilerAcquired?.(t0 ?? 0, this.queueSize);
+    const tExec = Mutex._profilerStart?.();
     try {
       if (timeoutMs !== undefined && timeoutMs > 0) {
         // 使用 Promise.race 实现超时
@@ -38,10 +41,16 @@ export class Mutex {
       }
       return await fn();
     } finally {
+      Mutex._profilerDone?.(tExec ?? 0);
       this.queueSize--;
       release();
     }
   }
+
+  /** Profiler hooks — set by test/perf/timing.ts before running profiling tests */
+  static _profilerStart: (() => number) | null = null;
+  static _profilerAcquired: ((waitStart: number, queueLen: number) => void) | null = null;
+  static _profilerDone: ((execStart: number) => void) | null = null;
 
   /**
    * 尝试立即获取锁，如果锁被占用则返回 undefined

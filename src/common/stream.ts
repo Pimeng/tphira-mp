@@ -249,12 +249,6 @@ export class Stream<S, R> {
     }
   }
 
-  /**
-   * 立即把累计的发送批次写入 socket
-   *
-   * 用于需要绕过批量延迟的场景（如认证响应）。
-   * 会自动合并批次中的所有帧，一次性写入 socket。
-   */
   async flushSendBatch(): Promise<void> {
     if (this.sendBatchTimer) {
       clearTimeout(this.sendBatchTimer);
@@ -269,6 +263,7 @@ export class Stream<S, R> {
 
     try {
       const combined = Buffer.concat(batch);
+      const t0 = Stream._profilerStart?.();
       await new Promise<void>((resolve, reject) => {
         let done = false;
         const timer = setTimeout(() => {
@@ -284,6 +279,7 @@ export class Stream<S, R> {
           else resolve();
         });
       });
+      Stream._profilerWrite?.(t0 ?? 0, batch.length, combined.length);
     } finally {
       this.sending = false;
       // 批量发送期间如果有新消息进入队列（例如高优先级消息），继续发送
@@ -339,6 +335,10 @@ export class Stream<S, R> {
   private readonly onSocketError = (): void => {
     this.closed = true;
   };
+
+  /** Profiler hooks */
+  static _profilerStart: (() => number) | null = null;
+  static _profilerWrite: ((start: number, batchCount: number, totalBytes: number) => void) | null = null;
 
   private scheduleDecode(): void {
     if (this.closed) return;

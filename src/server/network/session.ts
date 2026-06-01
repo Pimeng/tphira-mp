@@ -255,7 +255,8 @@ export class Session {
       get user() { return self.user!; },
       errToStr: (fn) => this.errToStr(fn),
       requireRoom: (u) => this.requireRoom(u),
-      broadcastRoom: (room, c) => this.broadcastRoom(room, c),
+      broadcastRoom: (room, c) => this.broadcastRoom(room, c, false) as Promise<void>,
+      broadcastRoomFast: (room, c) => { this.broadcastRoom(room, c, true); },
       broadcastRoomMessage: (room, msg) => this.broadcastRoomMessage(room, msg),
       monitorBuffer: this.monitorBuffer,
       processCreateRoom: (u, id) => this.processCreateRoom(u, id),
@@ -333,13 +334,21 @@ export class Session {
 
     if (this.waitingForAuthenticate) {
       if (cmd.type !== "Authenticate") return;
+      const t0 = Session._profilerStart?.();
       await this.handleAuthenticate(cmd.token);
+      Session._profilerEnd?.(t0 ?? 0, "auth");
       return;
     }
 
+    const t0 = Session._profilerStart?.();
     const resp = await this.process(cmd);
     if (resp) await this.trySend(resp);
+    Session._profilerEnd?.(t0 ?? 0, cmd.type);
   }
+
+  /** Profiler hooks */
+  static _profilerStart: (() => number) | null = null;
+  static _profilerEnd: ((start: number, label: string) => void) | null = null;
 
   private getPhiraApiEndpoint(): string {
     return this.state.config.phira_api_endpoint || DEFAULT_PHIRA_API_ENDPOINT;
@@ -702,7 +711,11 @@ export class Session {
     }
   }
 
-  private broadcastRoom(room: Room, cmd: ServerCommand): Promise<void> {
+  private broadcastRoom(room: Room, cmd: ServerCommand, fireAndForget = false): Promise<void> | void {
+    if (fireAndForget) {
+      this.broadcastToIdsFast(room.allParticipantIds(), cmd);
+      return;
+    }
     return this.broadcastToIds(room.allParticipantIds(), cmd);
   }
 
@@ -718,7 +731,7 @@ export class Session {
    */
   private broadcastRoomMessage(room: Room, msg: Parameters<Room["send"]> [1]): Promise<void> {
     return room.send(
-      (c) => this.broadcastRoom(room, c),
+      (c) => this.broadcastRoom(room, c, false) as Promise<void>,
       msg,
       (id) => this.state.users.get(id),
       this.state.serverLang
@@ -730,7 +743,7 @@ export class Session {
     if (!callbacks) {
       callbacks = {
         usersById: (id: number) => this.state.users.get(id),
-        broadcast: (c: ServerCommand) => this.broadcastRoom(room, c),
+        broadcast: (c: ServerCommand) => this.broadcastRoom(room, c, false) as Promise<void>,
         broadcastToMonitors: (c: ServerCommand) => this.broadcastRoomMonitors(room, c),
         pickRandomUserId: (ids: number[]) => pickRandom(ids),
         lang: this.state.serverLang,
