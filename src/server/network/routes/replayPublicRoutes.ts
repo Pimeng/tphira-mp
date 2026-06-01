@@ -122,13 +122,17 @@ export async function tryHandleReplayPublicRoutes(ctx: RequestContext): Promise<
       res.setHeader("content-length", String(info.size));
 
       const bytesPerSec = 50 * 1024;
-      const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+      const startTime = Date.now();
+      let totalSent = 0;
       const stream = createReadStream(filePath, { highWaterMark: 4096 });
       try {
         for await (const chunk of stream) {
           if (!res.write(chunk)) await once(res, "drain");
-          const delayMs = Math.ceil((chunk.length / bytesPerSec) * 1000);
-          if (delayMs > 0) await sleep(delayMs);
+          totalSent += chunk.length;
+          const elapsedMs = Date.now() - startTime;
+          const targetMs = (totalSent / bytesPerSec) * 1000;
+          const sleepMs = Math.max(0, Math.ceil(targetMs - elapsedMs));
+          if (sleepMs > 0) await new Promise<void>((r) => setTimeout(r, sleepMs));
         }
         res.end();
       } catch {

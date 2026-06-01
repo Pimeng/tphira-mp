@@ -9,7 +9,7 @@
  * 所有请求都携带统一的超时和重试配置,并支持出站代理。
  * /me 接口的结果会缓存 30 秒,以加速重连场景的认证流程。
  */
-import { Cache } from "../../utils/cache.js";
+import { Cache, recordCache } from "../../utils/cache.js";
 import { fetchWithRetry, type OutboundProxyValue } from "../../../common/http.js";
 import type { Chart, RecordData } from "../../core/types.js";
 
@@ -129,17 +129,27 @@ export async function fetchPhiraChart(
 /**
  * 调用 /record/:id 接口获取游戏记录
  *
+ * 结果会按 record ID 缓存 1 小时，避免重复请求不可变的游戏记录。
+ *
  * @param errorFactory - HTTP 失败时使用的错误工厂(通常用于注入本地化错误信息)
  */
 export async function fetchPhiraRecord(
   opts: PhiraApiOptions & { id: number; errorFactory: () => Error }
 ): Promise<RecordData> {
-  const { endpoint, id, proxy, timeoutMs, errorFactory } = opts;
+  const { id } = opts;
+
+  // 先查缓存
+  const cached = await recordCache.get(id);
+  if (cached) return cached;
+
+  const { endpoint, proxy, timeoutMs, errorFactory } = opts;
   const r = await fetchWithRetry(
     `${endpoint}/record/${id}`,
     { proxy },
     timeoutMs ?? FETCH_TIMEOUT_MS
   );
   if (!r.ok) throw errorFactory();
-  return (await r.json()) as RecordData;
+  const data = (await r.json()) as RecordData;
+  await recordCache.set(id, data);
+  return data;
 }

@@ -23,8 +23,11 @@ export function isHighPriorityServerCommand(cmd: ServerCommand): boolean {
 export function prepareServerCommand(cmd: ServerCommand): PreparedServerCommand {
   const body = encodePacket(cmd, encodeServerCommand);
   const header = encodeLengthPrefixU32(body.length);
+  const frame = Buffer.allocUnsafe(header.length + body.length);
+  header.copy(frame, 0);
+  body.copy(frame, header.length);
   return {
-    frame: Buffer.concat([header, body]),
+    frame,
     highPriority: isHighPriorityServerCommand(cmd)
   };
 }

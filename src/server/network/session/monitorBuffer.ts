@@ -124,6 +124,15 @@ export class MonitorBuffer {
     if (ids instanceof Set) return [...ids];
     const arr = Array.isArray(ids) ? ids as number[] : [...ids];
     if (arr.length <= 1) return arr;
+    // Fast path: already sorted and unique
+    let isSortedUnique = true;
+    for (let i = 1; i < arr.length; i++) {
+      if (arr[i]! <= arr[i - 1]!) {
+        isSortedUnique = false;
+        break;
+      }
+    }
+    if (isSortedUnique) return arr;
     return [...new Set(arr)].sort((a, b) => a - b);
   }
 

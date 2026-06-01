@@ -184,9 +184,7 @@ export class Logger {
     const now = new Date();
 
     // 检查是否应该跳过连接日志（限流）
-    const isConnectionLog = context?.isConnectionLog === true || 
-                           message.includes("log-new-connection") || 
-                           message.includes("log-handshake");
+    const isConnectionLog = context?.isConnectionLog === true;
     if (isConnectionLog && this.rateLimiter && context?.ip) {
       if (!this.rateLimiter.shouldLogConnection(context.ip)) {
         return; // 跳过此日志，既不输出到控制台也不写入文件

@@ -1,6 +1,11 @@
 import { roomIdToString } from "../../../common/roomId.js";
 import type { RequestContext } from "./types.js";
 
+/** /room 列表缓存 TTL（毫秒） */
+const ROOM_LIST_CACHE_TTL_MS = 2000;
+
+let roomListCache: { data: unknown; expiresAt: number } | null = null;
+
 /**
  * 处理公共路由：无需鉴权的查询接口
  * 返回 true 表示已处理。
@@ -9,6 +14,12 @@ export async function tryHandlePublicRoutes(ctx: RequestContext): Promise<boolea
   const { req, url, state, write } = ctx;
 
   if (req.method === "GET" && url.pathname === "/room") {
+    const now = Date.now();
+    if (roomListCache && now < roomListCache.expiresAt) {
+      write(200, roomListCache.data);
+      return true;
+    }
+
     const rooms: Array<{
       roomid: string;
       cycle: boolean;
@@ -50,7 +61,9 @@ export async function tryHandlePublicRoutes(ctx: RequestContext): Promise<boolea
     }
 
     rooms.sort((a, b) => a.roomid.localeCompare(b.roomid));
-    write(200, { rooms, total });
+    const result = { rooms, total };
+    roomListCache = { data: result, expiresAt: now + ROOM_LIST_CACHE_TTL_MS };
+    write(200, result);
     return true;
   }
 

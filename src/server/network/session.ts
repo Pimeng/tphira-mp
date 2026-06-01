@@ -48,6 +48,9 @@ const activeSessions = new Set<Session>();
 /** 全局心跳定时器句柄 */
 let globalHeartbeatTimer: NodeJS.Timeout | null = null;
 
+/** 全局心跳检查间隔（毫秒） */
+const HEARTBEAT_CHECK_INTERVAL_MS = 2000;
+
 function startGlobalHeartbeat(): void {
   if (globalHeartbeatTimer) return;
   globalHeartbeatTimer = setInterval(() => {
@@ -55,7 +58,89 @@ function startGlobalHeartbeat(): void {
     for (const session of activeSessions) {
       session.checkHeartbeat(now);
     }
-  }, 500);
+  }, HEARTBEAT_CHECK_INTERVAL_MS);
+}
+
+// ========== Dangle Sweep（统一扫掠定时器替代每用户 setTimeout） ==========
+type DangleTimeout = {
+  user: User;
+  token: object;
+  deadline: number;
+  state: ServerState;
+};
+
+const dangleTimeouts = new Map<number, DangleTimeout>();
+let dangleSweepTimer: NodeJS.Timeout | null = null;
+
+function startDangleSweepIfNeeded(): void {
+  if (dangleSweepTimer) return;
+  dangleSweepTimer = setInterval(() => {
+    const now = Date.now();
+    for (const [userId, timeout] of dangleTimeouts) {
+      if (now >= timeout.deadline) {
+        dangleTimeouts.delete(userId);
+        void processDangleTimeout(timeout);
+      }
+    }
+    if (dangleTimeouts.size === 0 && dangleSweepTimer) {
+      clearInterval(dangleSweepTimer);
+      dangleSweepTimer = null;
+    }
+  }, 1000);
+}
+
+async function processDangleTimeout(timeout: DangleTimeout): Promise<void> {
+  const { user, token, state } = timeout;
+  if (!user.isStillDangling(token)) return;
+
+  const room2 = user.room;
+  if (!room2) {
+    await state.mutex.runExclusive(async () => {
+      state.users.delete(user.id);
+    });
+    state.cleanupUserData(user.id);
+    return;
+  }
+
+  logRoomWarn(state.logger, state.serverLang, room2.id, "log-user-dangle-timeout-remove", { user: user.name }, { userId: user.id });
+  await state.mutex.runExclusive(async () => {
+    state.users.delete(user.id);
+  });
+  state.cleanupUserData(user.id);
+
+  const shouldDrop = await room2.onUserLeave({
+    user,
+    usersById: (id: number) => state.users.get(id),
+    broadcast: async (cmd: ServerCommand) => {
+      const prepared = prepareServerCommand(cmd);
+      for (const id of room2.allParticipantIds()) {
+        const u = state.users.get(id);
+        const session = u?.session;
+        if (session) await session.trySendPrepared(prepared).catch(NOOP);
+      }
+    },
+    broadcastToMonitors: (cmd: ServerCommand) => {
+      const prepared = prepareServerCommand(cmd);
+      for (const id of room2.monitorIds()) {
+        const u = state.users.get(id);
+        const session = u?.session;
+        if (session) void session.trySendPrepared(prepared).catch(NOOP);
+      }
+    },
+    pickRandomUserId: (ids: number[]) => pickRandom(ids),
+    lang: state.serverLang,
+    logger: state.logger,
+    wsService: state.wsService,
+  });
+
+  if (shouldDrop) {
+    logRoomInfo(state.logger, state.serverLang, room2.id, "log-room-recycled", undefined, { userId: user.id });
+    await state.mutex.runExclusive(async () => {
+      state.rooms.delete(room2.id);
+    });
+  } else {
+    refreshRoomLiveState(room2, state.replayEnabled);
+  }
 }
 
 /**
@@ -453,28 +538,8 @@ export class Session {
 
     this.state.logger.log("INFO", tl(this.state.serverLang, "log-user-dangle", { user: user.name }), undefined, { userId: user.id });
     const token = user.markDangle();
-    setTimeout(() => {
-      if (!user.isStillDangling(token)) return;
-      void (async () => {
-        const room2 = user.room;
-        if (!room2) {
-          // 用户已不在房间，直接从状态管理中移除
-          await this.state.mutex.runExclusive(async () => {
-            this.state.users.delete(user.id);
-          });
-          // 清理用户相关内存数据，防止泄漏
-          this.state.cleanupUserData(user.id);
-          return;
-        }
-        logRoomWarn(this.state.logger, this.state.serverLang, room2.id, "log-user-dangle-timeout-remove", { user: user.name }, { userId: user.id });
-        await this.state.mutex.runExclusive(async () => {
-          this.state.users.delete(user.id);
-        });
-        // 清理用户相关内存数据，防止泄漏
-        this.state.cleanupUserData(user.id);
-        await this.handleUserLeaveRoom(user, room2);
-      })();
-    }, 10_000);
+    dangleTimeouts.set(user.id, { user, token, deadline: Date.now() + 10_000, state: this.state });
+    startDangleSweepIfNeeded();
   }
 
   private async handleUserLeaveRoom(user: User, room: Room): Promise<void> {

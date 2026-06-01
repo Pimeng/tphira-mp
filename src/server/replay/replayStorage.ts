@@ -27,6 +27,9 @@ type ReplayEntry = {
   path: string;
 };
 
+/** 回放文件头缓存（文件不可变，缓存永不过期） */
+const headerCache = new Map<string, ReplayHeader>();
+
 export function defaultReplayBaseDir(): string {
   return join(process.cwd(), "record");
 }
@@ -42,36 +45,51 @@ export async function ensureReplayDir(baseDir: string, userId: number, chartId: 
 }
 
 export async function readReplayHeader(filePath: string): Promise<ReplayHeader | null> {
+  const cached = headerCache.get(filePath);
+  if (cached) return cached;
+
   const buf = await readFile(filePath);
   if (buf.length < 12) return null;
 
+  let header: ReplayHeader | null = null;
+
   if (isPhiraRecordV2(buf)) {
-    return readPhiraRecordV2Header(buf);
+    header = readPhiraRecordV2Header(buf);
+  } else {
+    const magicU16 = buf.length >= 2 ? buf.readUInt16LE(0) : null;
+    const isMagicPM = magicU16 === 0x504d || magicU16 === 0x4d50;
+    if (isMagicPM) {
+      if (buf.length >= 14) {
+        header = {
+          chartId: buf.readUInt32LE(2),
+          userId: buf.readUInt32LE(6),
+          recordId: buf.readUInt32LE(10)
+        };
+      }
+    } else {
+      const isMagicPHIR = buf.length >= 4 && buf[0] === 0x50 && buf[1] === 0x48 && buf[2] === 0x49 && buf[3] === 0x52;
+      if (isMagicPHIR) {
+        if (buf.length >= 16) {
+          header = {
+            chartId: buf.readUInt32LE(4),
+            userId: buf.readUInt32LE(8),
+            recordId: buf.readUInt32LE(12)
+          };
+        }
+      } else {
+        header = {
+          chartId: buf.readUInt32LE(0),
+          userId: buf.readUInt32LE(4),
+          recordId: buf.readUInt32LE(8)
+        };
+      }
+    }
   }
 
-  const magicU16 = buf.length >= 2 ? buf.readUInt16LE(0) : null;
-  const isMagicPM = magicU16 === 0x504d || magicU16 === 0x4d50;
-  if (isMagicPM) {
-    if (buf.length < 14) return null;
-    const chartId = buf.readUInt32LE(2);
-    const userId = buf.readUInt32LE(6);
-    const recordId = buf.readUInt32LE(10);
-    return { chartId, userId, recordId };
+  if (header) {
+    headerCache.set(filePath, header);
   }
-
-  const isMagicPHIR = buf.length >= 4 && buf[0] === 0x50 && buf[1] === 0x48 && buf[2] === 0x49 && buf[3] === 0x52;
-  if (isMagicPHIR) {
-    if (buf.length < 16) return null;
-    const chartId = buf.readUInt32LE(4);
-    const userId = buf.readUInt32LE(8);
-    const recordId = buf.readUInt32LE(12);
-    return { chartId, userId, recordId };
-  }
-
-  const chartId = buf.readUInt32LE(0);
-  const userId = buf.readUInt32LE(4);
-  const recordId = buf.readUInt32LE(8);
-  return { chartId, userId, recordId };
+  return header;
 }
 
 function readPhiraRecordV2Header(buf: Buffer): ReplayHeader | null {
@@ -139,6 +157,7 @@ export async function listReplaysForUser(baseDir: string, userId: number): Promi
 
 export async function deleteReplayForUser(baseDir: string, userId: number, chartId: number, timestamp: number): Promise<boolean> {
   const filePath = replayFilePath(baseDir, userId, chartId, timestamp);
+  headerCache.delete(filePath); // 清除文件头缓存
   try {
     await rm(filePath);
   } catch (e: any) {

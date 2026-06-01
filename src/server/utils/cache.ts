@@ -460,3 +460,11 @@ export const chartCache = new Cache<number, Chart>({
   ttl: 60 * 60 * 1000, // 1 小时
   keyType: "number"
 });
+
+// 游戏记录缓存实例，TTL 1 小时（记录不可变）
+export const recordCache = new Cache<number, import("../core/types.js").RecordData>({
+  fileName: "record_cache.json",
+  maxMemorySize: 500,
+  ttl: 60 * 60 * 1000, // 1 小时
+  keyType: "number"
+});
