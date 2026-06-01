@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs";
 import { join } from "node:path";
 import { Redis } from "ioredis";
 import { getAppPaths } from "./appPaths.js";
+import { NOOP } from "../../common/utils.js";
 import type { Chart, RedisConfig } from "../core/types.js";
 
 type CacheEntry<V> = {
@@ -367,7 +368,7 @@ export class Cache<K extends string | number, V> {
         clearTimeout(this.saveTimer);
         this.saveTimer = null;
       }
-      await this.flushToDisk().catch(() => {});
+      await this.flushToDisk().catch(NOOP);
     }
   }
 

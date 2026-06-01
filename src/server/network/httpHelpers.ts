@@ -3,6 +3,7 @@
 import type http from "node:http";
 import { writeJson, fetchWithRetry } from "../../common/http.js";
 import { parseRoomId, type RoomId } from "../../common/roomId.js";
+import { NOOP } from "../../common/utils.js";
 import type { ServerState } from "../core/state.js";
 import type { ServerCommand } from "../../common/commands.js";
 import type { Room } from "../game/room.js";
@@ -66,7 +67,7 @@ export async function broadcastRoomAll(state: ServerState, roomId: RoomId, cmd: 
     const u = state.users.get(id);
     if (u) tasks.push(u.trySend(cmd));
   }
-  if (tasks.length > 0) await Promise.allSettled(tasks);
+  if (tasks.length > 0) await Promise.all(tasks).catch(NOOP);
 }
 
 /**

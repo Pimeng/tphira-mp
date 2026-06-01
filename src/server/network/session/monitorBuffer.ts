@@ -31,6 +31,8 @@ export class MonitorBuffer {
   private judgeBuffer: Array<{ targets: MonitorTargets; player: number; judges: JudgeEvent[] }> = [];
   private flushTimer: NodeJS.Timeout | null = null;
   private readonly opts: MonitorBufferOptions;
+  private mergedTouches = new Map<string, { ids: number[]; player: number; frames: TouchFrame[] }>();
+  private mergedJudges = new Map<string, { ids: number[]; player: number; judges: JudgeEvent[] }>();
 
   constructor(opts: MonitorBufferOptions) {
     this.opts = opts;
@@ -55,35 +57,41 @@ export class MonitorBuffer {
   /** 立即 flush 缓冲区,合并并广播 */
   flush(): void {
     if (this.touchBuffer.length > 0) {
-      const merged = new Map<string, { ids: number[]; player: number; frames: TouchFrame[] }>();
+      this.mergedTouches.clear();
       for (const item of this.touchBuffer) {
         const ids = this.liveMonitorIds(item.targets);
         if (ids.length === 0) continue;
         const key = this.mergeKey(ids, item.player);
-        const existing = merged.get(key);
-        if (existing) existing.frames.push(...item.frames);
-        else merged.set(key, { ids, player: item.player, frames: [...item.frames] });
+        const existing = this.mergedTouches.get(key);
+        if (existing) {
+          for (let i = 0; i < item.frames.length; i++) existing.frames.push(item.frames[i]!);
+        } else {
+          this.mergedTouches.set(key, { ids, player: item.player, frames: item.frames.slice() });
+        }
       }
-      for (const { ids, player, frames } of merged.values()) {
+      for (const { ids, player, frames } of this.mergedTouches.values()) {
         this.opts.broadcastFast(ids, { type: "Touches", player, frames });
       }
-      this.touchBuffer = [];
+      this.touchBuffer.length = 0;
     }
 
     if (this.judgeBuffer.length > 0) {
-      const merged = new Map<string, { ids: number[]; player: number; judges: JudgeEvent[] }>();
+      this.mergedJudges.clear();
       for (const item of this.judgeBuffer) {
         const ids = this.liveMonitorIds(item.targets);
         if (ids.length === 0) continue;
         const key = this.mergeKey(ids, item.player);
-        const existing = merged.get(key);
-        if (existing) existing.judges.push(...item.judges);
-        else merged.set(key, { ids, player: item.player, judges: [...item.judges] });
+        const existing = this.mergedJudges.get(key);
+        if (existing) {
+          for (let i = 0; i < item.judges.length; i++) existing.judges.push(item.judges[i]!);
+        } else {
+          this.mergedJudges.set(key, { ids, player: item.player, judges: item.judges.slice() });
+        }
       }
-      for (const { ids, player, judges } of merged.values()) {
+      for (const { ids, player, judges } of this.mergedJudges.values()) {
         this.opts.broadcastFast(ids, { type: "Judges", player, judges });
       }
-      this.judgeBuffer = [];
+      this.judgeBuffer.length = 0;
     }
   }
 
@@ -106,7 +114,9 @@ export class MonitorBuffer {
   }
 
   private normalizeMonitorIds(ids: Iterable<number>): number[] {
-    return [...new Set(ids)].sort((a, b) => a - b);
+    const arr = Array.isArray(ids) ? ids as number[] : [...ids];
+    if (arr.length <= 1) return arr;
+    return [...new Set(arr)].sort((a, b) => a - b);
   }
 
   private liveMonitorIds(targets: MonitorTargets): number[] {

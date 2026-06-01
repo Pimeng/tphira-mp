@@ -11,6 +11,7 @@
  */
 import type net from "node:net";
 import { encodeLengthPrefixU32, tryDecodeFrame } from "./framing.js";
+import { NOOP } from "./utils.js";
 
 /** Socket 发送超时时间（毫秒） */
 const SEND_TIMEOUT_MS = 5000;
@@ -238,7 +239,7 @@ export class Stream<S, R> {
     // 设置延迟发送定时器（轻微延迟换取更高吞吐量）
     if (!this.sendBatchTimer) {
       this.sendBatchTimer = setTimeout(() => {
-        void this.flushSendBatch().catch(() => {});
+        void this.flushSendBatch().catch(NOOP);
       }, BATCH_SEND_DELAY_MS);
     }
   }
@@ -284,7 +285,7 @@ export class Stream<S, R> {
       if (this.sendBatch.length > 0 && !this.sendBatchTimer) {
         this.sendBatchTimer = setTimeout(() => {
           this.sendBatchTimer = null;
-          void this.flushSendBatch().catch(() => {});
+          void this.flushSendBatch().catch(NOOP);
         }, 0);
       }
     }

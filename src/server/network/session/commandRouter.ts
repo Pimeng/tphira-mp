@@ -6,6 +6,7 @@
  * 委托命令处理,自身只关心连接、认证、心跳、断线等底层事务。
  */
 import { err, type StringResult } from "../../../common/binary.js";
+import { EMPTY_RECORD } from "../../../common/utils.js";
 import type { ClientCommand, JoinRoomResponse, ServerCommand } from "../../../common/commands.js";
 import { refreshRoomLive as refreshRoomLiveState } from "../../game/roomUtils.js";
 import type { Room } from "../../game/room.js";
@@ -91,7 +92,7 @@ export async function processClientCommand(
           const rawContent = state.config.chat_enabled === false ? tl(state.serverLang, "chat-disabled-by-server") : cmd.message;
           const content = rawContent.length > MAX_CHAT_LENGTH ? rawContent.slice(0, MAX_CHAT_LENGTH) : rawContent;
           await room.sendAs((c) => ctx.broadcastRoom(room, c), user, content, state.serverLang);
-          return {};
+          return EMPTY_RECORD;
         })
       };
 
@@ -102,17 +103,9 @@ export async function processClientCommand(
       if (room.state.aborted.has(user.id) || room.state.results.has(user.id)) return null;
       const last = cmd.frames.at(-1);
       if (last) user.gameTime = last.time;
-      state.logger.log(
-        "DEBUG",
-        tl(state.serverLang, "log-user-touches", { user: user.name, room: room.id, count: String(cmd.frames.length) }),
-        { frames: cmd.frames },
-        { userId: user.id }
-      );
-      // monitor 数据转发: 聚合缓冲,避免高频实时数据冲击网络
       if (room.monitors.size > 0) {
         ctx.monitorBuffer.bufferTouches(room, room.monitors, user.id, cmd.frames);
       }
-      // 录制回放: 独立判断、独立执行
       if (state.replayEnabled && room.replayEligible) {
         state.replayRecorder.appendTouches(room.id, user.id, cmd.frames);
       }
@@ -124,12 +117,6 @@ export async function processClientCommand(
       if (!room) return null;
       if (room.state.type !== "Playing") return null;
       if (room.state.aborted.has(user.id) || room.state.results.has(user.id)) return null;
-      state.logger.log(
-        "DEBUG",
-        tl(state.serverLang, "log-user-judges", { user: user.name, room: room.id, count: String(cmd.judges.length) }),
-        { judges: cmd.judges },
-        { userId: user.id }
-      );
       if (room.monitors.size > 0) {
         ctx.monitorBuffer.bufferJudges(room, room.monitors, user.id, cmd.judges);
       }
@@ -171,7 +158,7 @@ export async function processClientCommand(
           } else {
             refreshRoomLiveState(room, state.replayEnabled);
           }
-          return {};
+          return EMPTY_RECORD;
         })
       };
 
@@ -184,7 +171,7 @@ export async function processClientCommand(
           room.locked = cmd.lock;
           logRoomMark(state.logger, state.serverLang, room.id, "log-room-lock", { user: user.name, lock: cmd.lock ? "true" : "false" }, { userId: user.id });
           await ctx.broadcastRoomMessage(room, { type: "LockRoom", lock: cmd.lock });
-          return {};
+          return EMPTY_RECORD;
         })
       };
 
@@ -197,7 +184,7 @@ export async function processClientCommand(
           room.cycle = cmd.cycle;
           logRoomMark(state.logger, state.serverLang, room.id, "log-room-cycle", { user: user.name, cycle: cmd.cycle ? "true" : "false" }, { userId: user.id });
           await ctx.broadcastRoomMessage(room, { type: "CycleRoom", cycle: cmd.cycle });
-          return {};
+          return EMPTY_RECORD;
         })
       };
 
@@ -220,7 +207,7 @@ export async function processClientCommand(
           await ctx.broadcastRoomMessage(room, { type: "SelectChart", user: user.id, name: chart.name, id: chart.id });
           await room.onStateChange((c) => ctx.broadcastRoom(room, c));
           await room.notifyWebSocket(state);
-          return {};
+          return EMPTY_RECORD;
         })
       };
 
@@ -237,7 +224,7 @@ export async function processClientCommand(
           await room.onStateChange((c) => ctx.broadcastRoom(room, c));
           await room.notifyWebSocket(state);
           await ctx.checkRoomAllReady(room);
-          return {};
+          return EMPTY_RECORD;
         })
       };
 
@@ -255,7 +242,7 @@ export async function processClientCommand(
             await room.notifyWebSocket(state);
             await ctx.checkRoomAllReady(room);
           }
-          return {};
+          return EMPTY_RECORD;
         })
       };
 
@@ -278,7 +265,7 @@ export async function processClientCommand(
             }
             await room.notifyWebSocket(state);
           }
-          return {};
+          return EMPTY_RECORD;
         })
       };
 
@@ -312,7 +299,7 @@ export async function processClientCommand(
             await room.notifyWebSocket(state);
             await ctx.checkRoomAllReady(room);
           }
-          return {};
+          return EMPTY_RECORD;
         })
       };
 
@@ -330,7 +317,7 @@ export async function processClientCommand(
             await room.notifyWebSocket(state);
             await ctx.checkRoomAllReady(room);
           }
-          return {};
+          return EMPTY_RECORD;
         })
       };
 

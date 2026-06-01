@@ -153,14 +153,14 @@ export class ReplayRecorder {
     this.log("DEBUG", `appendTouches: roomId=${roomIdToString(roomId)}, userId=${userId}, frames=${frames.length}`);
     const it = this.get(roomId, userId);
     if (!it) return;
-    it.touchFrames.push(...frames);
+    for (let i = 0; i < frames.length; i++) it.touchFrames.push(frames[i]!);
   }
 
   appendJudges(roomId: RoomId, userId: number, judges: JudgeEvent[]): void {
     this.log("DEBUG", `appendJudges: roomId=${roomIdToString(roomId)}, userId=${userId}, judges=${judges.length}`);
     const it = this.get(roomId, userId);
     if (!it) return;
-    it.judgeEvents.push(...judges);
+    for (let i = 0; i < judges.length; i++) it.judgeEvents.push(judges[i]!);
   }
 
   listRoomFiles(roomId: RoomId): ReplayFileInfo[] {

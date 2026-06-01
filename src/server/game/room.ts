@@ -54,6 +54,16 @@ export class Room {
   private _users = new Set<number>();
   /** 房间内观战者 ID 集合 */
   private _monitors = new Set<number>();
+  /** 缓存的参与者 ID 数组，成员变更时置空 */
+  private _cachedUserIds: number[] | null = null;
+  private _cachedMonitorIds: number[] | null = null;
+  private _cachedAllParticipantIds: number[] | null = null;
+
+  private invalidateIdCache(): void {
+    this._cachedUserIds = null;
+    this._cachedMonitorIds = null;
+    this._cachedAllParticipantIds = null;
+  }
 
   /** 只读用户 ID 集合 */
   get users(): ReadonlySet<number> { return this._users; }
@@ -66,6 +76,9 @@ export class Room {
   private recentLogs: Array<{ message: string; timestamp: number }> = [];
   /** 最大保留日志条数 */
   private static readonly MAX_RECENT_LOGS = 50;
+
+  private _clientStateUsers = new Map<number, User>();
+  private _clientStateInfoMap = new Map<number, ReturnType<User["toInfo"]>>();
 
   /**
    * 创建新房间
@@ -121,13 +134,15 @@ export class Room {
   }
 
   clientState(user: User, usersById: (id: number) => User | undefined): ClientRoomState {
-    const users = new Map<number, User>();
+    const users = this._clientStateUsers;
+    users.clear();
     for (const id of [...this._users, ...this._monitors]) {
       const u = usersById(id);
       if (u) users.set(id, u);
     }
 
-    const infoMap = new Map<number, ReturnType<User["toInfo"]>>();
+    const infoMap = this._clientStateInfoMap;
+    infoMap.clear();
     for (const [id, u] of users) infoMap.set(id, u.toInfo());
 
     const isReady = this.state.type === "WaitForReady" ? this.state.started.has(user.id) : false;
@@ -161,24 +176,29 @@ export class Room {
   addUser(user: User, monitor: boolean): boolean {
     if (monitor) {
       this._monitors.add(user.id);
-      return true;
+    } else if (this._users.size >= this.maxUsers) {
+      return false;
+    } else {
+      this._users.add(user.id);
     }
-    if (this._users.size >= this.maxUsers) return false;
-    this._users.add(user.id);
+    this.invalidateIdCache();
     return true;
   }
 
   userIds(): number[] {
-    return [...this._users];
+    if (!this._cachedUserIds) this._cachedUserIds = [...this._users];
+    return this._cachedUserIds;
   }
 
   monitorIds(): number[] {
-    return [...this._monitors];
+    if (!this._cachedMonitorIds) this._cachedMonitorIds = [...this._monitors];
+    return this._cachedMonitorIds;
   }
 
-  /** 返回所有参与者 ID（用户 + 观战者），避免多处重复 spread 分配 */
+  /** 返回所有参与者 ID（用户 + 观战者），缓存避免重复分配 */
   allParticipantIds(): number[] {
-    return [...this._users, ...this._monitors];
+    if (!this._cachedAllParticipantIds) this._cachedAllParticipantIds = [...this._users, ...this._monitors];
+    return this._cachedAllParticipantIds;
   }
 
   async send(
@@ -260,6 +280,7 @@ export class Room {
 
       if (user.monitor) this._monitors.delete(user.id);
       else this._users.delete(user.id);
+      this.invalidateIdCache();
 
       if (this.hostId === user.id) {
         const users = this.userIds();

@@ -40,8 +40,7 @@ const MONITOR_FLUSH_INTERVAL_MS = 50;
 /** 心跳响应常量，避免每次新建对象 */
 const PONG = { type: "Pong" } as const;
 
-/** 空操作函数，用于复用避免重复创建箭头函数 */
-const NOOP = () => {};
+import { NOOP } from "../../common/utils.js";
 
 /** 活跃会话集合，供全局心跳定时器统一扫描 */
 const activeSessions = new Set<Session>();
@@ -598,7 +597,7 @@ export class Session {
       const u = this.state.users.get(id);
       if (u) tasks.push(u.trySend(cmd));
     }
-    if (tasks.length > 0) await Promise.allSettled(tasks);
+    if (tasks.length > 0) await Promise.all(tasks).catch(NOOP);
   }
 
   /**
@@ -675,7 +674,7 @@ export class Session {
       if (!u.room || u.room.id !== room.id) continue;
       leavePromises.push(room.onUserLeave({ user: u, ...this.makeRoomCallbacks(room) }));
     }
-    await Promise.allSettled(leavePromises);
+    await Promise.all(leavePromises).catch(NOOP);
     await this.state.mutex.runExclusive(async () => {
       this.state.rooms.delete(room.id);
     });

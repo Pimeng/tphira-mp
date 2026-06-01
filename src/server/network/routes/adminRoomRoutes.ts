@@ -2,6 +2,7 @@ import { roomIdToString } from "../../../common/roomId.js";
 import { logRoomInfo } from "../../utils/logUtils.js";
 import { buildAdminRoomsData } from "../../game/adminViews.js";
 import { broadcastRoomAll, parseRoomIdOrWriteError } from "../httpHelpers.js";
+import { NOOP } from "../../../common/utils.js";
 import type { RequestContext } from "./types.js";
 
 /**
@@ -106,7 +107,7 @@ export async function tryHandleAdminRoomRoutes(ctx: RequestContext): Promise<boo
     }
 
     room.addLog(message, Date.now());
-    void broadcastRoomAll(state, rid, { type: "Message", message: { type: "Chat", user: 0, content: message } }).catch(() => {});
+    void broadcastRoomAll(state, rid, { type: "Message", message: { type: "Chat", user: 0, content: message } }).catch(NOOP);
     logRoomInfo(state.logger, state.serverLang, rid, "log-admin-room-message", { message });
     write(200, { ok: true });
     return true;

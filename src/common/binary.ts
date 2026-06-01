@@ -177,80 +177,83 @@ export class BinaryReader {
 /**
  * 二进制数据写入器
  *
- * 提供向 Buffer 写入各种数据类型的方法。
- * 内部使用 chunks 数组累积数据，最后通过 toBuffer() 合并输出。
- * 使用 allocUnsafe 优化性能，适合大量小数据写入场景。
+ * 使用单 buffer 直接写入替代 chunks 数组，消除 per-field allocUnsafe 和最终 Buffer.concat。
+ * 初始容量 512 字节，按需 2x 扩容。
  */
 export class BinaryWriter {
-  private chunks: Buffer[] = [];
+  private buf: Buffer;
+  private pos = 0;
 
-  /** 将所有已写入的数据合并为单个 Buffer */
+  constructor(initialCapacity = 512) {
+    this.buf = Buffer.allocUnsafe(initialCapacity);
+  }
+
+  private ensure(capacity: number): void {
+    if (this.pos + capacity <= this.buf.length) return;
+    let newSize = this.buf.length * 2;
+    while (newSize < this.pos + capacity) newSize *= 2;
+    const newBuf = Buffer.allocUnsafe(newSize);
+    this.buf.copy(newBuf, 0, 0, this.pos);
+    this.buf = newBuf;
+  }
+
   toBuffer(): Buffer {
-    return Buffer.concat(this.chunks);
+    return this.buf.subarray(0, this.pos);
   }
 
-  /** 直接写入一个 Buffer */
   writeBuffer(buf: Buffer): void {
-    this.chunks.push(buf);
+    this.ensure(buf.length);
+    buf.copy(this.buf, this.pos);
+    this.pos += buf.length;
   }
 
-  /** 写入无符号 8 位整数 */
   writeU8(v: number): void {
-    const b = Buffer.allocUnsafe(1);
-    b[0] = v & 0xff;
-    this.chunks.push(b);
+    this.ensure(1);
+    this.buf[this.pos++] = v & 0xff;
   }
 
-  /** 写入有符号 8 位整数 */
   writeI8(v: number): void {
     this.writeU8(v & 0xff);
   }
 
-  /** 写入布尔值（true=1, false=0） */
   writeBool(v: boolean): void {
     this.writeU8(v ? 1 : 0);
   }
 
-  /** 写入无符号 16 位整数（小端序） */
   writeU16(v: number): void {
-    const b = Buffer.allocUnsafe(2);
-    b.writeUInt16LE(v & 0xffff, 0);
-    this.chunks.push(b);
+    this.ensure(2);
+    this.buf.writeUInt16LE(v & 0xffff, this.pos);
+    this.pos += 2;
   }
 
-  /** 写入无符号 32 位整数（小端序） */
   writeU32(v: number): void {
-    const b = Buffer.allocUnsafe(4);
-    b.writeUInt32LE(v >>> 0, 0);
-    this.chunks.push(b);
+    this.ensure(4);
+    this.buf.writeUInt32LE(v >>> 0, this.pos);
+    this.pos += 4;
   }
 
-  /** 写入有符号 32 位整数（小端序） */
   writeI32(v: number): void {
-    const b = Buffer.allocUnsafe(4);
-    b.writeInt32LE(v | 0, 0);
-    this.chunks.push(b);
+    this.ensure(4);
+    this.buf.writeInt32LE(v | 0, this.pos);
+    this.pos += 4;
   }
 
-  /** 写入无符号 64 位整数（小端序） */
   writeU64(v: bigint): void {
-    const b = Buffer.allocUnsafe(8);
-    b.writeBigUInt64LE(v, 0);
-    this.chunks.push(b);
+    this.ensure(8);
+    this.buf.writeBigUInt64LE(v, this.pos);
+    this.pos += 8;
   }
 
-  /** 写入有符号 64 位整数（小端序） */
   writeI64(v: bigint): void {
-    const b = Buffer.allocUnsafe(8);
-    b.writeBigInt64LE(v, 0);
-    this.chunks.push(b);
+    this.ensure(8);
+    this.buf.writeBigInt64LE(v, this.pos);
+    this.pos += 8;
   }
 
-  /** 写入 32 位浮点数（小端序） */
   writeF32(v: number): void {
-    const b = Buffer.allocUnsafe(4);
-    b.writeFloatLE(v, 0);
-    this.chunks.push(b);
+    this.ensure(4);
+    this.buf.writeFloatLE(v, this.pos);
+    this.pos += 4;
   }
 
   /**
@@ -274,7 +277,7 @@ export class BinaryWriter {
   writeString(s: string): void {
     const buf = Buffer.from(s, "utf8");
     this.writeUleb(buf.length);
-    this.chunks.push(buf);
+    this.writeBuffer(buf);
   }
 
   /**
@@ -286,7 +289,7 @@ export class BinaryWriter {
     const buf = Buffer.from(s, "utf8");
     if (buf.length > maxLen) throw new Error("binary-string-too-long");
     this.writeUleb(buf.length);
-    this.chunks.push(buf);
+    this.writeBuffer(buf);
   }
 
   /** 写入 Option<T>（null 编码为 false，非 null 编码为 true + 值） */

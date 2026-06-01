@@ -1,5 +1,6 @@
 import { tl } from "../../utils/l10n.js";
 import { broadcastRoomAll } from "../httpHelpers.js";
+import { NOOP } from "../../../common/utils.js";
 import type { RequestContext } from "./types.js";
 
 /**
@@ -30,7 +31,7 @@ export async function tryHandleAdminLogRoutes(ctx: RequestContext): Promise<bool
     for (const roomId of snapshot) {
       const room = state.rooms.get(roomId);
       if (room) room.addLog(message, Date.now());
-      void broadcastRoomAll(state, roomId, { type: "Message", message: { type: "Chat", user: 0, content: message } }).catch(() => {});
+      void broadcastRoomAll(state, roomId, { type: "Message", message: { type: "Chat", user: 0, content: message } }).catch(NOOP);
     }
 
     state.logger.info(tl(state.serverLang, "log-admin-broadcast", { message, rooms: String(snapshot.length) }));

@@ -1,6 +1,7 @@
 import { mkdir, open, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { BinaryReader } from "../../common/binary.js";
+import { NOOP } from "../../common/utils.js";
 import {
   PHIRA_RECORD_HEADER_SIZE,
   decodePhiraRecordPayload,
@@ -91,7 +92,7 @@ function readPhiraRecordV2Header(buf: Buffer): ReplayHeader | null {
 
 async function removeIfEmpty(dir: string): Promise<void> {
   const remain = await readdir(dir).catch(() => []);
-  if (remain.length === 0) await rm(dir, { recursive: true, force: true }).catch(() => {});
+  if (remain.length === 0) await rm(dir, { recursive: true, force: true }).catch(NOOP);
 }
 
 function parseTimestampFromName(name: string): number | null {
@@ -189,7 +190,7 @@ export async function cleanupExpiredReplays(baseDir: string, nowMs: number, ttlD
         const ts = parseTimestampFromName(file);
         if (ts === null) continue;
         if (nowMs - ts <= ttlMs) continue;
-        await rm(join(chartDir, file), { force: true }).catch(() => {});
+        await rm(join(chartDir, file), { force: true }).catch(NOOP);
       }
 
       await removeIfEmpty(chartDir);

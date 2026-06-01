@@ -39,9 +39,7 @@ import {
   mergeConfig
 } from "./configValues.js";
 import { startConfigFileWatcher, type ConfigWatcher } from "./configWatcher.js";
-
-/** 空操作函数，用于复用避免重复创建箭头函数 */
-const NOOP = () => {};
+import { NOOP } from "../../common/utils.js";
 
 /** 启动服务器选项 */
 export type StartServerOptions = { host?: string; port?: number; config?: Partial<ServerConfig>; configPath?: string; watchConfig?: boolean };
@@ -348,7 +346,7 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
     // 启动失败：清理已分配的资源
     configWatcher?.close();
     replayCleanup.stop();
-    if (httpService) await httpService.close().catch(() => {});
+    if (httpService) await httpService.close().catch(NOOP);
     if (server.listening) {
       await new Promise<void>((resolve) => {
         server.close(() => resolve());
