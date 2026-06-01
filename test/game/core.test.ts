@@ -17,11 +17,17 @@ describe("核心功能", () => {
   });
 
   test("创建房间→观战加入→准备→开始→触控转发→结算结束", async () => {
-    const prevTip = process.env.ROOM_LIST_TIP;
-    process.env.ROOM_LIST_TIP = "群：123456；查房间：example.com";
-
     const tempDir = await createTempDir("core-test");
-    const running = await startServer({ port: 0, config: { monitors: [200], replay_enabled: true, replay_base_dir: tempDir, hitokoto_api_url: "https://v1.hitokoto.cn/" } });
+    const running = await startServer({
+      port: 0,
+      config: {
+        monitors: [200],
+        replay_enabled: true,
+        replay_base_dir: tempDir,
+        hitokoto_api_url: "https://v1.hitokoto.cn/",
+        room_list_tip: "群：123456；查房间：example.com"
+      }
+    });
     const port = running.address().port;
 
     const alice = await Client.connect("127.0.0.1", port);
@@ -75,7 +81,6 @@ describe("核心功能", () => {
         return endChats.some((s) => s.includes("本局结算：") && s.includes("无瑕度") && s.includes("0ms"));
       }, 1500);
     } finally {
-      process.env.ROOM_LIST_TIP = prevTip;
       await alice.close();
       await bob.close();
       await running.close();

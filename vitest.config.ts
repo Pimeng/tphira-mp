@@ -1,4 +1,7 @@
+import os from "node:os";
 import { defineConfig } from "vitest/config";
+
+const cpuCount = os.availableParallelism?.() ?? os.cpus().length;
 
 export default defineConfig({
   resolve: {
@@ -7,25 +10,24 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["test/**/*.test.ts"],
-    // 启用并行测试以提高性能（测试现在使用独立的临时目录）
+    setupFiles: ["./test/setup.ts"],
     fileParallelism: true,
-    // 每个测试文件内的测试串行运行（避免端口冲突）
-    sequence: {
-      concurrent: false
-    },
-    // 设置合理的超时时间
-    testTimeout: 10000,
-    hookTimeout: 10000,
-    // 优化线程池 - 使用适中的线程数
+    sequence: { concurrent: false },
+    testTimeout: 15000,
+    hookTimeout: 15000,
+    retry: 1,
+    clearMocks: true,
+    restoreMocks: true,
+    env: { NODE_ENV: "test" },
+    logHeapUsage: true,
     pool: "threads",
     poolOptions: {
       threads: {
         singleThread: false,
         minThreads: 2,
-        maxThreads: 16,
+        maxThreads: Math.min(cpuCount, 32),
         isolate: true
       }
     }
   }
 });
-

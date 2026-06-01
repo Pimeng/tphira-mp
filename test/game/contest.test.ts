@@ -1,4 +1,3 @@
-// 比赛房间测试
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { Client } from "../../src/client/client.js";
 import { startServer } from "../../src/server/core/server.js";
@@ -17,10 +16,10 @@ describe("比赛房间", () => {
   });
 
   test("比赛房间：白名单、手动开始、结算后解散", async () => {
-    const prev = process.env.ADMIN_TOKEN;
-    process.env.ADMIN_TOKEN = "test-token";
-
-    const running = await startServer({ port: 0, config: { monitors: [], http_service: true, http_port: 0 } });
+    const running = await startServer({
+      port: 0,
+      config: { monitors: [], http_service: true, http_port: 0, admin_token: "test-token" }
+    });
     const port = running.address().port;
     const httpPort = running.http!.address().port;
 
@@ -72,7 +71,6 @@ describe("比赛房间", () => {
       await waitFor(() => alice.roomId() === null, 3000);
       await waitFor(() => bob.roomId() === null, 3000);
     } finally {
-      process.env.ADMIN_TOKEN = prev;
       await alice.close();
       await bob.close();
       await carol.close();

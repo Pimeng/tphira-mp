@@ -1,20 +1,22 @@
-// 协议和连接测试
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import net from "node:net";
 import { Client } from "../../src/client/client.js";
-import { startServer } from "../../src/server/core/server.js";
+import { startServer, type RunningServer } from "../../src/server/core/server.js";
 import { sleep, waitFor, setupMockFetch, createTempDir, cleanupTempDir } from "../helpers.js";
 import type { TouchFrame } from "../../src/common/commands.js";
 
 describe("协议和连接", () => {
   const { originalFetch, mockFetch } = setupMockFetch();
+  let sharedServer: RunningServer;
+  let sharedPort: number;
 
   beforeAll(() => {
     globalThis.fetch = mockFetch;
   });
 
-  afterAll(() => {
+  afterAll(async () => {
     globalThis.fetch = originalFetch;
+    await sharedServer?.close();
   });
 
   test("认证阻塞时仍能响应 Ping（避免心跳误判/客户端超时）", async () => {
@@ -90,76 +92,72 @@ describe("协议和连接", () => {
     }
   }, 20000);
 
-  test("协议版本不为 1 时直接断开且不触发认证请求", async () => {
-    const running = await startServer({ port: 0, config: { monitors: [200] } });
-    const port = running.address().port;
-
-    const prevFetch = globalThis.fetch;
-    let fetchCalled = 0;
-    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
-      fetchCalled++;
-      return prevFetch(input, init);
-    }) as typeof fetch;
-
-    const socket = net.createConnection({ host: "127.0.0.1", port });
-    let closed = false;
-    socket.on("close", () => {
-      closed = true;
+  // 以下 3 个测试共享同一服务端实例（monitors: [200]）
+  describe("共享服务端", () => {
+    beforeAll(async () => {
+      sharedServer = await startServer({ port: 0, config: { monitors: [200] } });
+      sharedPort = sharedServer.address().port;
     });
 
-    try {
-      await new Promise<void>((resolve, reject) => {
-        socket.once("connect", resolve);
-        socket.once("error", reject);
+    test("协议版本不为 1 时直接断开且不触发认证请求", async () => {
+      const prevFetch = globalThis.fetch;
+      let fetchCalled = 0;
+      globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+        fetchCalled++;
+        return prevFetch(input, init);
+      }) as typeof fetch;
+
+      const socket = net.createConnection({ host: "127.0.0.1", port: sharedPort });
+      let closed = false;
+      socket.on("close", () => {
+        closed = true;
       });
 
-      socket.write(Buffer.from([2]));
-      await waitFor(() => closed, 1000);
-      expect(fetchCalled).toBe(0);
-    } finally {
-      globalThis.fetch = prevFetch;
-      socket.destroy();
-      await running.close();
-    }
-  });
+      try {
+        await new Promise<void>((resolve, reject) => {
+          socket.once("connect", resolve);
+          socket.once("error", reject);
+        });
 
-  test("同一玩家重复在线时新连接顶掉旧连接", async () => {
-    const running = await startServer({ port: 0, config: { monitors: [200] } });
-    const port = running.address().port;
+        socket.write(Buffer.from([2]));
+        await waitFor(() => closed, 1000);
+        expect(fetchCalled).toBe(0);
+      } finally {
+        globalThis.fetch = prevFetch;
+        socket.destroy();
+      }
+    });
 
-    const c1 = await Client.connect("127.0.0.1", port);
-    const c2 = await Client.connect("127.0.0.1", port);
+    test("同一玩家重复在线时新连接顶掉旧连接", async () => {
+      const c1 = await Client.connect("127.0.0.1", sharedPort);
+      const c2 = await Client.connect("127.0.0.1", sharedPort);
 
-    try {
-      await c1.authenticate("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-      await expect(c2.authenticate("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")).resolves.toBeUndefined();
-      await expect(c2.ping()).resolves.toBeGreaterThanOrEqual(0);
-    } finally {
-      await c1.close();
-      await c2.close();
-      await running.close();
-    }
-  });
+      try {
+        await c1.authenticate("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        await expect(c2.authenticate("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")).resolves.toBeUndefined();
+        await expect(c2.ping()).resolves.toBeGreaterThanOrEqual(0);
+      } finally {
+        await c1.close();
+        await c2.close();
+      }
+    });
 
-  test("断线（半关闭）后允许同账号立即重连", async () => {
-    const running = await startServer({ port: 0, config: { monitors: [200] } });
-    const port = running.address().port;
+    test("断线（半关闭）后允许同账号立即重连", async () => {
+      const c1 = await Client.connect("127.0.0.1", sharedPort);
+      const c2 = await Client.connect("127.0.0.1", sharedPort);
 
-    const c1 = await Client.connect("127.0.0.1", port);
-    const c2 = await Client.connect("127.0.0.1", port);
+      try {
+        await c1.authenticate("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        const c1Socket = ((c1 as any).stream as any).socket as net.Socket;
+        c1Socket.end();
+        await waitFor(() => c1Socket.writableEnded || c1Socket.destroyed, 1000);
 
-    try {
-      await c1.authenticate("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-      const c1Socket = ((c1 as any).stream as any).socket as net.Socket;
-      c1Socket.end();
-      await waitFor(() => c1Socket.writableEnded || c1Socket.destroyed, 1000);
-
-      await expect(c2.authenticate("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")).resolves.toBeUndefined();
-      await expect(c2.ping()).resolves.toBeGreaterThanOrEqual(0);
-    } finally {
-      await c1.close();
-      await c2.close();
-      await running.close();
-    }
+        await expect(c2.authenticate("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")).resolves.toBeUndefined();
+        await expect(c2.ping()).resolves.toBeGreaterThanOrEqual(0);
+      } finally {
+        await c1.close();
+        await c2.close();
+      }
+    });
   });
 });

@@ -14,9 +14,9 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  # 阶段 1：快速单元测试（纯逻辑，无服务端启动）
+  test-unit:
     runs-on: ubuntu-latest
-
     steps:
     - name: 检出代码
       uses: actions/checkout@v4
@@ -24,14 +24,81 @@ jobs:
     - name: 准备 Node.js 和依赖
       uses: ./.github/actions/setup-node-pnpm
 
-    - name: 运行测试
-      run: pnpm test
+    - name: 缓存 vitest 编译缓存
+      uses: actions/cache@v4
+      with:
+        path: node_modules/.vitest
+        key: vitest-cache-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+        restore-keys: |
+          vitest-cache-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+          vitest-cache-${{ runner.os }}-
 
-  memory-leak:
-    needs: [test]
+    - name: 运行单元测试
+      run: >
+        pnpm vitest run
+        --exclude 'test/game/**'
+        --exclude 'test/network/protocol*'
+        --exclude 'test/network/websocket*'
+        --exclude 'test/network/client-reconnect*'
+        --exclude 'test/network/stream-priority*'
+        --exclude 'test/network/outbound-proxy*'
+        --exclude 'test/network/phira-api-endpoint*'
+        --exclude 'test/config/config*'
+        --exclude 'test/config/http-config*'
+
+    - name: 上传单元测试结果
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results-unit
+        path: test-results/
+        if-no-files-found: ignore
+
+  # 阶段 2：集成测试（需服务端启动）
+  test-integration:
+    needs: [test-unit]
     runs-on: ubuntu-latest
-    # 仅在基础测试通过后再跑，避免在已知失败的提交上重复消耗 CI 时间
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
 
+    - name: 准备 Node.js 和依赖
+      uses: ./.github/actions/setup-node-pnpm
+
+    - name: 缓存 vitest 编译缓存
+      uses: actions/cache@v4
+      with:
+        path: node_modules/.vitest
+        key: vitest-cache-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+        restore-keys: |
+          vitest-cache-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+          vitest-cache-${{ runner.os }}-
+
+    - name: 运行集成测试
+      run: >
+        pnpm vitest run
+        --include 'test/game/**'
+        --include 'test/network/protocol*'
+        --include 'test/network/websocket*'
+        --include 'test/network/client-reconnect*'
+        --include 'test/network/stream-priority*'
+        --include 'test/network/outbound-proxy*'
+        --include 'test/network/phira-api-endpoint*'
+        --include 'test/config/config*'
+        --include 'test/config/http-config*'
+
+    - name: 上传集成测试结果
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results-integration
+        path: test-results/
+        if-no-files-found: ignore
+
+  # 阶段 3：内存泄漏回归测试
+  memory-leak:
+    needs: [test-unit, test-integration]
+    runs-on: ubuntu-latest
     steps:
     - name: 检出代码
       uses: actions/checkout@v4

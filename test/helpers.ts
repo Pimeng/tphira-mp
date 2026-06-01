@@ -2,6 +2,7 @@
 import { BinaryReader, decodePacket } from "../src/common/binary.js";
 import { decodeClientCommand, type ClientCommand, type CompactPos, type JudgeEvent, type TouchFrame } from "../src/common/commands.js";
 import { mkdir, rm } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { inflateSync, zstdDecompressSync } from "node:zlib";
@@ -15,7 +16,7 @@ let tempDirCounter = 0;
 /** 为测试创建唯一的临时目录 */
 export async function createTempDir(prefix = "phira-mp-test"): Promise<string> {
   const timestamp = Date.now();
-  const random = Math.random().toString(36).slice(2, 8);
+  const random = randomBytes(4).toString("hex");
   const counter = tempDirCounter++;
   const dir = join(tmpdir(), `${prefix}-${timestamp}-${random}-${counter}`);
   await mkdir(dir, { recursive: true });
@@ -31,10 +32,34 @@ export async function waitFor(cond: () => boolean, timeoutMs = 1000): Promise<vo
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     if (cond()) return;
-    await sleep(30);
+    await sleep(20);
   }
   throw new Error("等待超时");
 }
+
+/** 快速轮询版 waitFor，用于预期很快完成的操作（5ms 间隔） */
+export async function waitForFast(cond: () => boolean, timeoutMs = 500): Promise<void> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (cond()) return;
+    await sleep(5);
+  }
+  throw new Error("等待超时");
+}
+
+// 预定义的测试令牌常量
+export const TOKENS = {
+  alice: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  bob:   "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  carol: "cccccccccccccccccccccccccccccccc",
+  dave:  "dddddddddddddddddddddddddddddddd",
+} as const;
+
+export const MONITOR_IDS = {
+  bob: 200,
+  carol: 300,
+  dave: 400,
+} as const;
 
 export type ParsedPhiraRecordV2 = {
   recordId: number;

@@ -1,31 +1,41 @@
-// 管理员API测试
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { unlink } from "node:fs/promises";
 import { Client } from "../../src/client/client.js";
-import { startServer } from "../../src/server/core/server.js";
+import { startServer, type RunningServer } from "../../src/server/core/server.js";
 import { setupMockFetch, createTempDir, cleanupTempDir } from "../helpers.js";
 
 describe("管理员API", () => {
   const { originalFetch, mockFetch } = setupMockFetch();
 
-  beforeAll(() => {
+  // 共享服务器（测试 2,5,6,7,8,9 — 不修改全局状态）
+  let sharedServer: RunningServer;
+  let sharedPort: number;
+  let sharedHttpPort: number;
+
+  beforeAll(async () => {
     globalThis.fetch = mockFetch;
+    sharedServer = await startServer({
+      port: 0,
+      config: { monitors: [200], http_service: true, http_port: 0, admin_token: "test-token" }
+    });
+    sharedPort = sharedServer.address().port;
+    sharedHttpPort = sharedServer.http!.address().port;
   });
 
-  afterAll(() => {
+  afterAll(async () => {
     globalThis.fetch = originalFetch;
+    await sharedServer.close();
   });
 
   test("管理员 API：鉴权、封禁用户/房间", async () => {
-    const prev = process.env.ADMIN_TOKEN;
-    const prevPath = process.env.ADMIN_DATA_PATH;
-    process.env.ADMIN_TOKEN = "test-token";
     const dataPath = join(tmpdir(), `phira-mp-admin-data-${Date.now()}-${Math.random().toString(16).slice(2)}.json`);
-    process.env.ADMIN_DATA_PATH = dataPath;
 
-    const running = await startServer({ port: 0, config: { monitors: [200], http_service: true, http_port: 0 } });
+    const running = await startServer({
+      port: 0,
+      config: { monitors: [200], http_service: true, http_port: 0, admin_token: "test-token", admin_data_path: dataPath }
+    });
     const port = running.address().port;
     const httpPort = running.http!.address().port;
 
@@ -60,8 +70,6 @@ describe("管理员API", () => {
       });
       expect(banRoom.ok).toBe(true);
     } finally {
-      process.env.ADMIN_TOKEN = prev;
-      process.env.ADMIN_DATA_PATH = prevPath;
       await unlink(dataPath).catch(() => {});
       await alice.close();
       await running.close();
@@ -69,42 +77,31 @@ describe("管理员API", () => {
   });
 
   test("管理员 API CORS：允许所有来源并支持预检", async () => {
-    const prev = process.env.ADMIN_TOKEN;
-    process.env.ADMIN_TOKEN = "test-token";
+    const preflight = await originalFetch(`http://127.0.0.1:${sharedHttpPort}/admin/rooms`, {
+      method: "OPTIONS",
+      headers: {
+        Origin: "https://example.com",
+        "Access-Control-Request-Method": "GET",
+        "Access-Control-Request-Headers": "x-admin-token,content-type"
+      }
+    });
+    expect(preflight.status).toBe(204);
+    expect(preflight.headers.get("access-control-allow-origin")).toBe("*");
+    expect(preflight.headers.get("access-control-allow-methods")?.toLowerCase()).toContain("options");
+    expect(preflight.headers.get("access-control-allow-headers")?.toLowerCase()).toContain("x-admin-token");
 
-    const running = await startServer({ port: 0, config: { monitors: [200], http_service: true, http_port: 0 } });
-    const httpPort = running.http!.address().port;
-
-    try {
-      const preflight = await originalFetch(`http://127.0.0.1:${httpPort}/admin/rooms`, {
-        method: "OPTIONS",
-        headers: {
-          Origin: "https://example.com",
-          "Access-Control-Request-Method": "GET",
-          "Access-Control-Request-Headers": "x-admin-token,content-type"
-        }
-      });
-      expect(preflight.status).toBe(204);
-      expect(preflight.headers.get("access-control-allow-origin")).toBe("*");
-      expect(preflight.headers.get("access-control-allow-methods")?.toLowerCase()).toContain("options");
-      expect(preflight.headers.get("access-control-allow-headers")?.toLowerCase()).toContain("x-admin-token");
-
-      const res = await originalFetch(`http://127.0.0.1:${httpPort}/admin/rooms`, {
-        headers: { Origin: "https://example.com", "x-admin-token": "test-token" }
-      });
-      expect(res.ok).toBe(true);
-      expect(res.headers.get("access-control-allow-origin")).toBe("*");
-    } finally {
-      process.env.ADMIN_TOKEN = prev;
-      await running.close();
-    }
+    const res = await originalFetch(`http://127.0.0.1:${sharedHttpPort}/admin/rooms`, {
+      headers: { Origin: "https://example.com", "x-admin-token": "test-token" }
+    });
+    expect(res.ok).toBe(true);
+    expect(res.headers.get("access-control-allow-origin")).toBe("*");
   });
 
   test("管理员接口按 IP 错误次数封禁（5 次）", async () => {
-    const prev = process.env.ADMIN_TOKEN;
-    process.env.ADMIN_TOKEN = "test-token";
-
-    const running = await startServer({ port: 0, config: { monitors: [200], http_service: true, http_port: 0 } });
+    const running = await startServer({
+      port: 0,
+      config: { monitors: [200], http_service: true, http_port: 0, admin_token: "test-token" }
+    });
     const httpPort = running.http!.address().port;
 
     try {
@@ -127,19 +124,17 @@ describe("管理员API", () => {
       expect(stillBanned.status).toBe(401);
       expect(await stillBanned.json()).toMatchObject({ ok: false, error: "unauthorized" });
     } finally {
-      process.env.ADMIN_TOKEN = prev;
       await running.close();
     }
   });
 
   test("管理员封禁持久化：重启后仍生效", async () => {
-    const prevToken = process.env.ADMIN_TOKEN;
-    const prevPath = process.env.ADMIN_DATA_PATH;
-    process.env.ADMIN_TOKEN = "test-token";
     const dataPath = join(tmpdir(), `phira-mp-admin-data-${Date.now()}-${Math.random().toString(16).slice(2)}.json`);
-    process.env.ADMIN_DATA_PATH = dataPath;
 
-    const running1 = await startServer({ port: 0, config: { monitors: [200], http_service: true, http_port: 0 } });
+    const running1 = await startServer({
+      port: 0,
+      config: { monitors: [200], http_service: true, http_port: 0, admin_token: "test-token", admin_data_path: dataPath }
+    });
     const port1 = running1.address().port;
     const httpPort1 = running1.http!.address().port;
     const alice1 = await Client.connect("127.0.0.1", port1);
@@ -156,15 +151,16 @@ describe("管理员API", () => {
       await running1.close();
     }
 
-    const running2 = await startServer({ port: 0, config: { monitors: [200] } });
+    const running2 = await startServer({
+      port: 0,
+      config: { monitors: [200], admin_token: "test-token", admin_data_path: dataPath }
+    });
     const port2 = running2.address().port;
     const alice2 = await Client.connect("127.0.0.1", port2);
     try {
       await alice2.authenticate("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
       await expect(alice2.createRoom("test")).rejects.toThrow(/封禁|banned/i);
     } finally {
-      process.env.ADMIN_TOKEN = prevToken;
-      process.env.ADMIN_DATA_PATH = prevPath;
       await unlink(dataPath).catch(() => {});
       await alice2.close();
       await running2.close();
@@ -172,63 +168,54 @@ describe("管理员API", () => {
   });
 
   test("管理员接口：动态修改指定房间最大人数", async () => {
-    const prev = process.env.ADMIN_TOKEN;
-    process.env.ADMIN_TOKEN = "test-token";
-
-    const running = await startServer({ port: 0, config: { monitors: [200], http_service: true, http_port: 0 } });
-    const port = running.address().port;
-    const httpPort = running.http!.address().port;
-
-    const alice = await Client.connect("127.0.0.1", port);
-    const bob = await Client.connect("127.0.0.1", port);
+    const alice = await Client.connect("127.0.0.1", sharedPort);
+    const bob = await Client.connect("127.0.0.1", sharedPort);
+    const roomName = "room-max-users";
     try {
       await alice.authenticate("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
       await bob.authenticate("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
 
-      await alice.createRoom("room1");
+      await alice.createRoom(roomName);
 
-      const set1 = await originalFetch(`http://127.0.0.1:${httpPort}/admin/rooms/room1/max_users`, {
+      const set1 = await originalFetch(`http://127.0.0.1:${sharedHttpPort}/admin/rooms/${roomName}/max_users`, {
         method: "POST",
         headers: { "content-type": "application/json", "x-admin-token": "test-token" },
         body: JSON.stringify({ maxUsers: 1 })
       });
       expect(set1.ok).toBe(true);
 
-      await expect(bob.joinRoom("room1", false)).rejects.toThrow("房间已满");
+      await expect(bob.joinRoom(roomName, false)).rejects.toThrow("房间已满");
 
-      const set2 = await originalFetch(`http://127.0.0.1:${httpPort}/admin/rooms/room1/max_users`, {
+      const set2 = await originalFetch(`http://127.0.0.1:${sharedHttpPort}/admin/rooms/${roomName}/max_users`, {
         method: "POST",
         headers: { "content-type": "application/json", "x-admin-token": "test-token" },
         body: JSON.stringify({ maxUsers: 2 })
       });
       expect(set2.ok).toBe(true);
 
-      await expect(bob.joinRoom("room1", false)).resolves.toBeTruthy();
+      await expect(bob.joinRoom(roomName, false)).resolves.toBeTruthy();
+      await bob.leaveRoom();
+      await alice.leaveRoom();
     } finally {
-      process.env.ADMIN_TOKEN = prev;
       await alice.close();
       await bob.close();
-      await running.close();
     }
   });
 
   test("管理员 API：禁用房间创建功能", async () => {
-    const prev = process.env.ADMIN_TOKEN;
-    process.env.ADMIN_TOKEN = "test-token";
-
-    const running = await startServer({ port: 0, config: { monitors: [200], http_service: true, http_port: 0 } });
-    const port = running.address().port;
-    const httpPort = running.http!.address().port;
-
-    const alice = await Client.connect("127.0.0.1", port);
+    const alice = await Client.connect("127.0.0.1", sharedPort);
 
     try {
       await alice.authenticate("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
 
-      await alice.createRoom("room1");
+      const roomA = "room-create-a";
+      const roomB = "room-create-b";
+      const roomC = "room-create-c";
+
+      await alice.createRoom(roomA);
       await alice.leaveRoom();
 
-      const getResp = await originalFetch(`http://127.0.0.1:${httpPort}/admin/room-creation/config`, {
+      const getResp = await originalFetch(`http://127.0.0.1:${sharedHttpPort}/admin/room-creation/config`, {
         headers: { "X-Admin-Token": "test-token" }
       });
       expect(getResp.ok).toBe(true);
@@ -236,7 +223,7 @@ describe("管理员API", () => {
       expect(getJson.ok).toBe(true);
       expect(getJson.enabled).toBe(true);
 
-      const disableResp = await originalFetch(`http://127.0.0.1:${httpPort}/admin/room-creation/config`, {
+      const disableResp = await originalFetch(`http://127.0.0.1:${sharedHttpPort}/admin/room-creation/config`, {
         method: "POST",
         headers: { "X-Admin-Token": "test-token", "Content-Type": "application/json" },
         body: JSON.stringify({ enabled: false })
@@ -246,9 +233,9 @@ describe("管理员API", () => {
       expect(disableJson.ok).toBe(true);
       expect(disableJson.enabled).toBe(false);
 
-      await expect(alice.createRoom("room2")).rejects.toThrow();
+      await expect(alice.createRoom(roomB)).rejects.toThrow();
 
-      const enableResp = await originalFetch(`http://127.0.0.1:${httpPort}/admin/room-creation/config`, {
+      const enableResp = await originalFetch(`http://127.0.0.1:${sharedHttpPort}/admin/room-creation/config`, {
         method: "POST",
         headers: { "X-Admin-Token": "test-token", "Content-Type": "application/json" },
         body: JSON.stringify({ enabled: true })
@@ -258,114 +245,82 @@ describe("管理员API", () => {
       expect(enableJson.ok).toBe(true);
       expect(enableJson.enabled).toBe(true);
 
-      await alice.createRoom("room3");
+      await alice.createRoom(roomC);
+      await alice.leaveRoom();
     } finally {
       await alice.close();
-      await running.close();
-      if (prev === undefined) delete process.env.ADMIN_TOKEN;
-      else process.env.ADMIN_TOKEN = prev;
     }
   });
 
   test("管理员接口：解散房间", async () => {
-    const prev = process.env.ADMIN_TOKEN;
-    process.env.ADMIN_TOKEN = "test-token";
-
-    const running = await startServer({ port: 0, config: { monitors: [200], http_service: true, http_port: 0 } });
-    const port = running.address().port;
-    const httpPort = running.http!.address().port;
-
-    const alice = await Client.connect("127.0.0.1", port);
-    const bob = await Client.connect("127.0.0.1", port);
+    const alice = await Client.connect("127.0.0.1", sharedPort);
+    const bob = await Client.connect("127.0.0.1", sharedPort);
+    const roomName = "room-disband";
 
     try {
       await alice.authenticate("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
       await bob.authenticate("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
 
-      await alice.createRoom("room1");
-      await bob.joinRoom("room1", true);
+      await alice.createRoom(roomName);
+      await bob.joinRoom(roomName, true);
 
-      const roomsBefore = await originalFetch(`http://127.0.0.1:${httpPort}/admin/rooms`, {
+      const roomsBefore = await originalFetch(`http://127.0.0.1:${sharedHttpPort}/admin/rooms`, {
         headers: { "x-admin-token": "test-token" }
       });
       expect(roomsBefore.ok).toBe(true);
       const dataBeforeDisband = (await roomsBefore.json()) as any;
-      expect(dataBeforeDisband.rooms.some((r: any) => r.roomid === "room1")).toBe(true);
+      expect(dataBeforeDisband.rooms.some((r: any) => r.roomid === roomName)).toBe(true);
 
-      const disband = await originalFetch(`http://127.0.0.1:${httpPort}/admin/rooms/room1/disband`, {
+      const disband = await originalFetch(`http://127.0.0.1:${sharedHttpPort}/admin/rooms/${roomName}/disband`, {
         method: "POST",
         headers: { "x-admin-token": "test-token" }
       });
       expect(disband.ok).toBe(true);
       const disbandData = (await disband.json()) as any;
       expect(disbandData.ok).toBe(true);
-      expect(disbandData.roomid).toBe("room1");
+      expect(disbandData.roomid).toBe(roomName);
 
-      const roomsAfter = await originalFetch(`http://127.0.0.1:${httpPort}/admin/rooms`, {
+      const roomsAfter = await originalFetch(`http://127.0.0.1:${sharedHttpPort}/admin/rooms`, {
         headers: { "x-admin-token": "test-token" }
       });
       expect(roomsAfter.ok).toBe(true);
       const dataAfterDisband = (await roomsAfter.json()) as any;
-      expect(dataAfterDisband.rooms.some((r: any) => r.roomid === "room1")).toBe(false);
+      expect(dataAfterDisband.rooms.some((r: any) => r.roomid === roomName)).toBe(false);
     } finally {
-      process.env.ADMIN_TOKEN = prev;
       await alice.close();
       await bob.close();
-      await running.close();
     }
   });
 
   test("管理员接口：解散不存在的房间返回 404", async () => {
-    const prev = process.env.ADMIN_TOKEN;
-    process.env.ADMIN_TOKEN = "test-token";
-
-    const running = await startServer({ port: 0, config: { monitors: [200], http_service: true, http_port: 0 } });
-    const httpPort = running.http!.address().port;
-
-    try {
-      const disband = await originalFetch(`http://127.0.0.1:${httpPort}/admin/rooms/nonexistent/disband`, {
-        method: "POST",
-        headers: { "x-admin-token": "test-token" }
-      });
-      expect(disband.status).toBe(404);
-      const data = (await disband.json()) as any;
-      expect(data.ok).toBe(false);
-      expect(data.error).toBe("room-not-found");
-    } finally {
-      process.env.ADMIN_TOKEN = prev;
-      await running.close();
-    }
+    const disband = await originalFetch(`http://127.0.0.1:${sharedHttpPort}/admin/rooms/nonexistent/disband`, {
+      method: "POST",
+      headers: { "x-admin-token": "test-token" }
+    });
+    expect(disband.status).toBe(404);
+    const data = (await disband.json()) as any;
+    expect(data.ok).toBe(false);
+    expect(data.error).toBe("room-not-found");
   });
 
   test("管理员接口：解散房间时无效房间ID返回 400", async () => {
-    const prev = process.env.ADMIN_TOKEN;
-    process.env.ADMIN_TOKEN = "test-token";
-
-    const running = await startServer({ port: 0, config: { monitors: [200], http_service: true, http_port: 0 } });
-    const httpPort = running.http!.address().port;
-
-    try {
-      const disband = await originalFetch(`http://127.0.0.1:${httpPort}/admin/rooms/invalid%20room/disband`, {
-        method: "POST",
-        headers: { "x-admin-token": "test-token" }
-      });
-      expect(disband.status).toBe(400);
-      const data = (await disband.json()) as any;
-      expect(data.ok).toBe(false);
-      expect(data.error).toBe("bad-room-id");
-    } finally {
-      process.env.ADMIN_TOKEN = prev;
-      await running.close();
-    }
+    const disband = await originalFetch(`http://127.0.0.1:${sharedHttpPort}/admin/rooms/invalid%20room/disband`, {
+      method: "POST",
+      headers: { "x-admin-token": "test-token" }
+    });
+    expect(disband.status).toBe(400);
+    const data = (await disband.json()) as any;
+    expect(data.ok).toBe(false);
+    expect(data.error).toBe("bad-room-id");
   });
 
   test("管理员接口：解散启用回放录制的房间", async () => {
     const replayDir = await createTempDir("admin-replay-test");
 
-    const prev = process.env.ADMIN_TOKEN;
-    process.env.ADMIN_TOKEN = "test-token";
-
-    const running = await startServer({ port: 0, config: { monitors: [200], http_service: true, http_port: 0, replay_enabled: true, replay_base_dir: replayDir } });
+    const running = await startServer({
+      port: 0,
+      config: { monitors: [200], http_service: true, http_port: 0, admin_token: "test-token", replay_enabled: true, replay_base_dir: replayDir }
+    });
     const port = running.address().port;
     const httpPort = running.http!.address().port;
 
@@ -396,7 +351,6 @@ describe("管理员API", () => {
       const dataAfterDisband = (await roomsAfter.json()) as any;
       expect(dataAfterDisband.rooms.some((r: any) => r.roomid === "room_replay")).toBe(false);
     } finally {
-      process.env.ADMIN_TOKEN = prev;
       await alice.close();
       await bob.close();
       await running.close();
