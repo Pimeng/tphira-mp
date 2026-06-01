@@ -61,11 +61,15 @@ function uninstallProfiler(): void {
 }
 
 function makeExtendedMock(original: typeof fetch): typeof fetch {
+  const getAuth = (init?: RequestInit): string => {
+    const h = init?.headers as Record<string, string> | undefined;
+    const raw = h?.Authorization ?? (init?.headers as any)?.get?.("Authorization") ?? "";
+    return raw.replace(/^Bearer\s+/i, "");
+  };
+
   return (async (input, init) => {
     const url = typeof input === "string" ? input : input.toString();
-    const headers = init?.headers as Record<string, string> | undefined;
-    const auth = String(headers?.Authorization ?? "");
-    const token = auth.replace(/^Bearer\s+/i, "");
+    const token = getAuth(init);
 
     if (url.endsWith("/me")) {
       const match = /^s(\d+)/.exec(token);
@@ -90,7 +94,6 @@ function makeExtendedMock(original: typeof fetch): typeof fetch {
       }), { status: 200 });
     }
 
-    // 回退到原始 mock（处理 hitokoto 等）
     return original(input as string, init);
   }) as typeof fetch;
 }

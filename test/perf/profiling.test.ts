@@ -3,51 +3,34 @@
  *
  * 通过注入 TimingCollector 到 Mutex、Session、Stream 等关键路径，
  * 收集各环节耗时数据，定位性能瓶颈。
- *
- * 运行方式：npx vitest run test/perf/profiling.test.ts
- *
- * 若要单独跑某个场景，可以使用 .only：
- *   describe.only("auth-flow", ...)
  */
 
-import { beforeAll, afterAll, describe, expect, test } from "vitest";
+import { beforeAll, afterAll, describe, test } from "vitest";
 import { Client } from "../../src/client/client.js";
 import { type RunningServer, startServer } from "../../src/server/core/server.js";
 import { setupMockFetch, createTempDir, cleanupTempDir, TOKENS, waitFor } from "../helpers.js";
 import type { TouchFrame } from "../../src/common/commands.js";
 import { timing } from "./timing.js";
-
-// 延迟加载 profiler 目标模块（确保 hooks 在模块加载后设置）
 import { Mutex } from "../../src/server/utils/mutex.js";
 import { Session } from "../../src/server/network/session.js";
 import { Stream } from "../../src/common/stream.js";
 
 function installProfiler(): void {
   timing.enable();
-
-  // Mutex 计时
   Mutex._profilerStart = () => performance.now();
-  Mutex._profilerAcquired = (waitStart, queueLen) => {
-    const waitMs = performance.now() - waitStart;
-    timing.record("mutex.wait", waitMs);
-    if (queueLen > 0) timing.record("mutex.wait.queue_depth", queueLen);
+  Mutex._profilerAcquired = (waitStart) => {
+    timing.record("mutex.wait", performance.now() - waitStart);
   };
   Mutex._profilerDone = (execStart) => {
     timing.record("mutex.exec", performance.now() - execStart);
   };
-
-  // Session 命令处理计时
   Session._profilerStart = () => performance.now();
   Session._profilerEnd = (start, label) => {
     timing.record(`cmd.${label}`, performance.now() - start);
   };
-
-  // Stream 写入计时
   Stream._profilerStart = () => performance.now();
-  Stream._profilerWrite = (start, batchCount, totalBytes) => {
-    const elapsed = performance.now() - start;
-    timing.record("stream.write", elapsed);
-    if (batchCount > 1) timing.record("stream.write.batched", batchCount);
+  Stream._profilerWrite = (start) => {
+    timing.record("stream.write", performance.now() - start);
   };
 }
 
@@ -60,6 +43,11 @@ function uninstallProfiler(): void {
   Stream._profilerStart = null;
   Stream._profilerWrite = null;
   timing.disable();
+}
+
+function printPhase(title: string): void {
+  console.log(`\n--- [${title}] ---`);
+  console.log(timing.printReport());
 }
 
 describe("服务端性能分析", () => {
@@ -75,171 +63,154 @@ describe("服务端性能分析", () => {
     globalThis.fetch = originalFetch;
   });
 
-  test("完整游戏流程耗时分析", async () => {
-    const tempDir = await createTempDir("perf-test");
+  test("认证流程耗时", async () => {
+    const tempDir = await createTempDir("perf-auth");
     let running: RunningServer | undefined;
-
     try {
-      // 启动服务器
-      running = await startServer({
-        port: 0,
-        config: {
-          monitors: [200],
-          replay_enabled: false,
-          replay_base_dir: tempDir,
-          hitokoto_api_url: "https://v1.hitokoto.cn/",
-          room_list_tip: "perf test"
-        }
-      });
+      running = await startServer({ port: 0, config: { monitors: [200], replay_enabled: false, replay_base_dir: tempDir } });
       const port = running.address().port;
 
-      // --- 场景1: 认证 ---
       timing.reset();
       const alice = await Client.connect("127.0.0.1", port);
       await alice.authenticate(TOKENS.alice);
       const bob = await Client.connect("127.0.0.1", port);
       await bob.authenticate(TOKENS.bob);
 
-      console.log("\n--- [阶段1] 认证流程 (authenticate x2) ---");
-      console.log(timing.printReport());
+      printPhase("认证流程 (x2)");
+      await alice.close();
+      await bob.close();
+    } finally {
+      if (running) await running.close();
+      await cleanupTempDir(tempDir);
+    }
+  }, 15000);
 
-      // --- 场景2: 创建房间 + 加入 ---
+  test("房间操作流程耗时", async () => {
+    const tempDir = await createTempDir("perf-room");
+    let running: RunningServer | undefined;
+    try {
+      running = await startServer({ port: 0, config: { monitors: [200], replay_enabled: false, replay_base_dir: tempDir } });
+      const port = running.address().port;
+
+      const alice = await Client.connect("127.0.0.1", port);
+      await alice.authenticate(TOKENS.alice);
+      const bob = await Client.connect("127.0.0.1", port);
+      await bob.authenticate(TOKENS.bob);
+
       timing.reset();
-      await alice.createRoom("perf1");
-      await bob.joinRoom("perf1", false);
+      await alice.createRoom("perf-room");
+      await bob.joinRoom("perf-room", false);
 
-      console.log("\n--- [阶段2] 创建房间 + 加入 ---");
-      console.log(timing.printReport());
+      printPhase("创建房间 + 加入");
 
-      // --- 场景3: 选谱 + 准备 + 开始 ---
       timing.reset();
       await alice.selectChart(1);
       await alice.requestStart();
-      await bob.ready();
 
-      await waitFor(() => alice.roomState()?.type === "Playing", 2000);
-      await waitFor(() => bob.roomState()?.type === "Playing", 2000);
+      printPhase("选谱 + 请求开始");
 
-      console.log("\n--- [阶段3] 选谱 + 准备 + 开始游戏 ---");
-      console.log(timing.printReport());
-
-      // --- 场景4: 游戏中触控转发 ---
       timing.reset();
+      await bob.ready();
+      await waitFor(() => alice.roomState()?.type === "Playing", 2000);
+
+      printPhase("准备 + 开始游戏");
+
+      // 观战者接收 Touches
+      timing.reset();
+      await bob.leaveRoom();
+      await bob.joinRoom("perf-room", true);
       const frames: TouchFrame[] = [
         { time: 0.1, points: [[0, { x: 0, y: 1 }]] },
-        { time: 0.2, points: [[0, { x: 0.1, y: 0.9 }]] },
-        { time: 0.3, points: [[0, { x: 0.2, y: 0.8 }]] }
+        { time: 0.2, points: [[0, { x: 0.1, y: 0.9 }]] }
       ];
       await alice.sendTouches(frames);
+      await waitFor(() => bob.livePlayer(100).touch_frames.length >= 2, 1000);
 
-      console.log("\n--- [阶段4] 游戏中触控转发 (3帧) ---");
-      console.log(timing.printReport());
+      printPhase("触控转发 (2帧, 有观战者)");
 
-      // --- 场景5: 结算 ---
+      // 结算
       timing.reset();
       await alice.played(1);
       await waitFor(() => alice.roomState()?.type === "SelectChart", 3000);
 
-      console.log("\n--- [阶段5] 结算 (played + gameEnd) ---");
-      console.log(timing.printReport());
+      printPhase("结算 (played → SelectChart)");
 
-      // --- 汇总: 打印最耗时的操作 ---
-      timing.reset();
-      console.log("\n--- [检测] 全局 Mutex 队列深度 ---");
-      const qSize = running.state.mutex.getQueueSize();
-      console.log(`  当前队列深度: ${qSize}`);
-
+      await alice.close();
+      await bob.close();
     } finally {
       if (running) await running.close();
       await cleanupTempDir(tempDir);
-      // 在 finally 中打印，确保即使在失败时也能看到报告
-      console.log("\n=== 最终汇总 ===");
-      console.log(timing.printReport());
     }
   }, 30000);
 
-  test("并发加入房间压力分析", async () => {
+  test("并发加入房间 (10 客户端)", async () => {
     const tempDir = await createTempDir("perf-concurrent");
     let running: RunningServer | undefined;
-
     try {
-      running = await startServer({
-        port: 0,
-        config: {
-          monitors: [],
-          replay_enabled: false,
-          replay_base_dir: tempDir,
-          hitokoto_api_url: "https://v1.hitokoto.cn/",
-          room_list_tip: ""
-        }
-      });
+      running = await startServer({ port: 0, config: { monitors: [], replay_enabled: false, replay_base_dir: tempDir } });
       const port = running.address().port;
 
-      // 创建房主
       const alice = await Client.connect("127.0.0.1", port);
       await alice.authenticate(TOKENS.alice);
       await alice.createRoom("perf-concurrent");
 
-      // 并发连接并加入房间 (10 个客户端)
-      const CLIENT_COUNT = 10;
+      // 为每个客户端生成唯一 token (通过 mock 映射到不同 ID)
+      const tokens = [TOKENS.bob, TOKENS.carol, TOKENS.dave,
+        "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "ffffffffffffffffffffffffffffffff",
+        "gggggggggggggggggggggggggggggggg",
+        "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+        "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii",
+        "jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj",
+        "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk"
+      ];
+      // 扩展 mock 支持这些 token
+      const idOffsets = [200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100];
+      const names = ["Bob", "Carol", "Dave", "Eve", "Frank", "Grace", "Hank", "Ivy", "Jack", "Kate"];
+      const originalFetch2 = globalThis.fetch;
+      globalThis.fetch = (async (input, init) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url.endsWith("/me")) {
+          const headers = init?.headers as Record<string, string> | undefined;
+          const auth = String(headers?.Authorization ?? "");
+          const token = auth.replace(/^Bearer\s+/i, "");
+          const idx = tokens.indexOf(token);
+          if (idx >= 0) {
+            return new Response(JSON.stringify({ id: idOffsets[idx], name: names[idx], language: "zh-CN" }), { status: 200 });
+          }
+        }
+        return mockFetch(input as string, init);
+      }) as typeof fetch;
+
+      const clients: Client[] = [];
       timing.reset();
-
-      const startConnects: Promise<Client>[] = [];
-      for (let i = 0; i < CLIENT_COUNT; i++) {
-        startConnects.push(Client.connect("127.0.0.1", port));
+      for (let i = 0; i < 10; i++) {
+        const c = await Client.connect("127.0.0.1", port);
+        await c.authenticate(tokens[i]!);
+        clients.push(c);
       }
-      const clients = await Promise.all(startConnects);
+      printPhase("认证 (10 unique clients)");
 
-      // 并发认证
-      const authStarters: Promise<void>[] = [];
-      for (let i = 0; i < CLIENT_COUNT; i++) {
-        authStarters.push(clients[i]!.authenticate(TOKENS.bob)); // 都用 bob 的 token (会被认为是同一用户)
-      }
-      await Promise.allSettled(authStarters);
-
-      console.log("\n--- [并发] 认证阶段 (10 clients) ---");
-      console.log(timing.printReport());
-
-      // 并发加入房间
       timing.reset();
-      const joinStarters: Promise<unknown>[] = [];
-      for (let i = 0; i < clients.length; i++) {
-        const client = clients[i]!;
-        joinStarters.push(client.joinRoom("perf-concurrent", false).catch(() => {}));
-      }
-      await Promise.allSettled(joinStarters);
+      const joins = clients.map(c => c.joinRoom("perf-concurrent", false).catch(() => {}));
+      await Promise.all(joins);
 
-      console.log("\n--- [并发] 加入房间 (10 clients) ---");
-      console.log(timing.printReport());
+      printPhase("加入房间 (10 clients 并发)");
 
-      // 清理
-      for (const client of clients) {
-        await client.close().catch(() => {});
-      }
+      for (const c of clients) await c.close().catch(() => {});
       await alice.close();
-
+      globalThis.fetch = originalFetch2;
     } finally {
       if (running) await running.close();
       await cleanupTempDir(tempDir);
-      console.log("\n=== 并发测试最终汇总 ===");
-      console.log(timing.printReport());
     }
   }, 30000);
 
-  test("高频命令处理 (Touches) 分析", async () => {
+  test("高频 Touches 命令", async () => {
     const tempDir = await createTempDir("perf-touches");
     let running: RunningServer | undefined;
-
     try {
-      running = await startServer({
-        port: 0,
-        config: {
-          monitors: [],
-          replay_enabled: false,
-          replay_base_dir: tempDir,
-          hitokoto_api_url: "https://v1.hitokoto.cn/"
-        }
-      });
+      running = await startServer({ port: 0, config: { monitors: [], replay_enabled: false, replay_base_dir: tempDir } });
       const port = running.address().port;
 
       const alice = await Client.connect("127.0.0.1", port);
@@ -247,26 +218,17 @@ describe("服务端性能分析", () => {
       await alice.createRoom("perf-touch");
       await alice.selectChart(1);
       await alice.requestStart();
-
-      // 进入 Playing 状态
       await waitFor(() => alice.roomState()?.type === "Playing", 2000);
 
-      // 高频发送 Touches 命令
+      const COUNT = 100;
       timing.reset();
-      const BATCH_COUNT = 50;
-      for (let i = 0; i < BATCH_COUNT; i++) {
-        const f: TouchFrame = {
-          time: i * 0.1,
-          points: [[0, { x: i * 0.01, y: 1 - i * 0.01 }]]
-        };
+      for (let i = 0; i < COUNT; i++) {
+        const f: TouchFrame = { time: i * 0.1, points: [[0, { x: i * 0.01, y: 1 - i * 0.01 }]] };
         await alice.sendTouches([f]);
       }
-
-      console.log(`\n--- [高频] 发送 Touches (${BATCH_COUNT}次) ---`);
-      console.log(timing.printReport());
+      printPhase(`Touches x${COUNT}`);
 
       await alice.close();
-
     } finally {
       if (running) await running.close();
       await cleanupTempDir(tempDir);
