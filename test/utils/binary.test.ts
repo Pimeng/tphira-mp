@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { BinaryReader, BinaryWriter, decodePacket, encodePacket, ok, err, encodeStringResult, decodeStringResult } from "../../src/common/binary.js";
+import { encodeLengthPrefixU32 } from "../../src/common/framing.js";
 
 describe("BinaryReader", () => {
   it("readU8", () => {
@@ -184,6 +185,38 @@ describe("BinaryWriter", () => {
     const w = new BinaryWriter();
     w.writeU8(255);
     expect(w.toBuffer()).toEqual(Buffer.from([255]));
+  });
+
+  it("reserveHead 不影响 toBuffer 的 body 内容", () => {
+    const a = new BinaryWriter(512, 0);
+    const b = new BinaryWriter(512, 5);
+    for (const w of [a, b]) {
+      w.writeU32(0xdeadbeef);
+      w.writeString("hi");
+    }
+    expect(b.toBuffer()).toEqual(a.toBuffer());
+  });
+
+  it("toFrameBuffer 等价于「LEB128 长度前缀 + body」", () => {
+    for (const bodyLen of [0, 1, 127, 128, 16384]) {
+      const w = new BinaryWriter(512, 5);
+      for (let i = 0; i < bodyLen; i++) w.writeU8((i * 7) & 0xff);
+      const frame = w.toFrameBuffer();
+      const expectedPrefix = encodeLengthPrefixU32(bodyLen);
+      expect(frame.subarray(0, expectedPrefix.length)).toEqual(expectedPrefix);
+      expect(frame.length).toBe(expectedPrefix.length + bodyLen);
+      // body 部分应与原始内容一致
+      for (let i = 0; i < bodyLen; i++) {
+        expect(frame[expectedPrefix.length + i]).toBe((i * 7) & 0xff);
+      }
+    }
+  });
+
+  it("reserveHead 不足以容纳长度前缀时抛出", () => {
+    const w = new BinaryWriter(512, 1);
+    // 写入 >127 字节 body，需要 2 字节前缀，超出 reserveHead=1
+    for (let i = 0; i < 200; i++) w.writeU8(0);
+    expect(() => w.toFrameBuffer()).toThrow("frame-reserve-head-too-small");
   });
 
   it("writeI8", () => {

@@ -1,50 +1,36 @@
+/**
+ * 半精度浮点（IEEE-754 binary16）与单精度浮点的互转。
+ *
+ * 直接复用运行时原生的 `Float16Array` 做硬件级转换，避免 `Math.log2` /
+ * `Math.pow` 等超越函数开销——这两个函数在游戏数据管线里对每个触摸点的
+ * x、y 坐标、在解码（入站）与编码（广播给观战者）两个方向上都会被调用，
+ * 是高频热路径。
+ *
+ * 共享一个长度为 1 的 `Float16Array` 与其上的 `Uint16Array` 视图：写入浮点
+ * 数后读出底层 16 位即得编码结果，反之亦然。转换遵循 IEEE-754 标准的
+ * round-to-nearest-even，与原版 Phira（Rust `half` crate）一致；subnormal /
+ * Inf / NaN 均由原生实现正确处理。
+ */
+
+/** 长度为 1 的转换暂存区，f16 与 u16 共享同一段内存。 */
+const f16 = new Float16Array(1);
+const u16 = new Uint16Array(f16.buffer);
+
+/**
+ * 将 16 位半精度位模式解码为单精度浮点数。
+ * @param bits - 半精度的 16 位表示（仅低 16 位有效）
+ */
 export function f16BitsToF32(bits: number): number {
-  const sign = (bits & 0x8000) !== 0 ? -1 : 1;
-  const exp = (bits >>> 10) & 0x1f;
-  const frac = bits & 0x03ff;
-
-  if (exp === 0) {
-    if (frac === 0) return sign * 0;
-    return sign * Math.pow(2, -14) * (frac / 1024);
-  }
-
-  if (exp === 0x1f) {
-    if (frac === 0) return sign * Infinity;
-    return NaN;
-  }
-
-  return sign * Math.pow(2, exp - 15) * (1 + frac / 1024);
+  u16[0] = bits & 0xffff;
+  return f16[0]!;
 }
 
+/**
+ * 将单精度浮点数编码为 16 位半精度位模式。
+ * @param value - 待编码的浮点数
+ * @returns 半精度的 16 位无符号表示
+ */
 export function f32ToF16Bits(value: number): number {
-  if (Number.isNaN(value)) return 0x7e00;
-  if (value === Infinity) return 0x7c00;
-  if (value === -Infinity) return 0xfc00;
-
-  const sign = value < 0 || Object.is(value, -0) ? 0x8000 : 0;
-  const abs = Math.abs(value);
-
-  if (abs === 0) return sign;
-
-  const exp = Math.floor(Math.log2(abs));
-  const frac = abs / Math.pow(2, exp) - 1;
-
-  const halfExp = exp + 15;
-  if (halfExp >= 0x1f) return sign | 0x7c00;
-
-  if (halfExp <= 0) {
-    const sub = Math.round(abs / Math.pow(2, -14) * 1024);
-    if (sub <= 0) return sign;
-    return sign | (sub & 0x03ff);
-  }
-
-  const halfFrac = Math.round(frac * 1024);
-  if (halfFrac === 1024) {
-    const nextExp = halfExp + 1;
-    if (nextExp >= 0x1f) return sign | 0x7c00;
-    return sign | (nextExp << 10);
-  }
-
-  return sign | (halfExp << 10) | (halfFrac & 0x03ff);
+  f16[0] = value;
+  return u16[0]!;
 }
-

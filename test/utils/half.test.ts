@@ -104,3 +104,60 @@ describe("f32ToF16Bits", () => {
     }
   });
 });
+
+/**
+ * 参考实现：迁移到原生 Float16Array 之前的纯数学解码逻辑。
+ * 对所有正规/次正规/Inf 值都是精确的 IEEE-754 结果，用于逐位回归比对，
+ * 确保 wire 行为不变。
+ */
+function refDecode(bits: number): number {
+  const sign = (bits & 0x8000) !== 0 ? -1 : 1;
+  const exp = (bits >>> 10) & 0x1f;
+  const frac = bits & 0x03ff;
+  if (exp === 0) {
+    if (frac === 0) return sign * 0;
+    return sign * Math.pow(2, -14) * (frac / 1024);
+  }
+  if (exp === 0x1f) {
+    if (frac === 0) return sign * Infinity;
+    return NaN;
+  }
+  return sign * Math.pow(2, exp - 15) * (1 + frac / 1024);
+}
+
+function isNanBits(bits: number): boolean {
+  return (bits & 0x7c00) === 0x7c00 && (bits & 0x03ff) !== 0;
+}
+
+describe("half 穷举回归（全部 65536 个位模式）", () => {
+  it("f16BitsToF32 与迁移前参考实现逐位等价", () => {
+    for (let bits = 0; bits <= 0xffff; bits++) {
+      const got = f16BitsToF32(bits);
+      if (isNanBits(bits)) {
+        expect(Number.isNaN(got)).toBe(true);
+      } else {
+        // 精确相等，包含 ±0（用 Object.is 区分 -0）
+        expect(Object.is(got, refDecode(bits))).toBe(true);
+      }
+    }
+  });
+
+  it("decode→encode 往返稳定（非 NaN 位模式还原自身）", () => {
+    for (let bits = 0; bits <= 0xffff; bits++) {
+      if (isNanBits(bits)) continue;
+      const roundtrip = f32ToF16Bits(f16BitsToF32(bits));
+      expect(roundtrip).toBe(bits);
+    }
+  });
+
+  it("encode 对随机 f32 样本结果落在有效 half 范围且解码可还原", () => {
+    for (let i = 0; i < 100000; i++) {
+      const v = (Math.random() - 0.5) * 4; // 触摸坐标典型范围
+      const bits = f32ToF16Bits(v);
+      expect(bits).toBeGreaterThanOrEqual(0);
+      expect(bits).toBeLessThanOrEqual(0xffff);
+      // 编码再解码应得到同一个 half 值（量化后稳定）
+      expect(f32ToF16Bits(f16BitsToF32(bits))).toBe(bits);
+    }
+  });
+});

@@ -10,7 +10,7 @@
  * - Fast Path 优化（Ping 等简单命令绕过队列直接处理）
  */
 import type net from "node:net";
-import { encodeLengthPrefixU32, tryDecodeFrame } from "./framing.js";
+import { frameWithLengthPrefix, tryDecodeFrame } from "./framing.js";
 import { NOOP } from "./utils.js";
 
 /** Socket 发送超时时间（毫秒） */
@@ -216,8 +216,8 @@ export class Stream<S, R> {
     if (this.closed) throw new Error("net-connection-closed");
 
     const body = this.codec.encodeSend(payload);
-    const header = encodeLengthPrefixU32(body.length);
-    await this.sendFrame(Buffer.concat([header, body]), this.codec.isHighPriority?.(payload) === true);
+    const frame = frameWithLengthPrefix(body);
+    await this.sendFrame(frame, this.codec.isHighPriority?.(payload) === true);
   }
 
   async sendFrame(frame: Buffer, highPriority = false): Promise<void> {

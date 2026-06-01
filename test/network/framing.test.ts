@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { encodeLengthPrefixU32, tryDecodeFrame } from "../../src/common/framing.js";
+import { encodeLengthPrefixU32, frameWithLengthPrefix, tryDecodeFrame } from "../../src/common/framing.js";
 
 describe("encodeLengthPrefixU32", () => {
   it("编码 0 为单字节", () => {
@@ -39,6 +39,27 @@ describe("encodeLengthPrefixU32", () => {
 
   it("非整数应抛出", () => {
     expect(() => encodeLengthPrefixU32(1.5)).toThrow("frame-invalid-length");
+  });
+});
+
+describe("frameWithLengthPrefix", () => {
+  it("各种长度下与 concat(encodeLengthPrefixU32(len), body) 逐字节一致", () => {
+    for (const len of [0, 1, 5, 127, 128, 16383, 16384, 70000]) {
+      const body = Buffer.alloc(len);
+      for (let i = 0; i < len; i++) body[i] = (i * 31) & 0xff;
+      const expected = Buffer.concat([encodeLengthPrefixU32(len), body]);
+      expect(frameWithLengthPrefix(body)).toEqual(expected);
+    }
+  });
+
+  it("产出的帧可被 tryDecodeFrame 完整解析", () => {
+    const body = Buffer.from("hello frame");
+    const result = tryDecodeFrame(frameWithLengthPrefix(body));
+    expect(result.type).toBe("frame");
+    if (result.type === "frame") {
+      expect(result.payload.toString()).toBe("hello frame");
+      expect(result.remaining.length).toBe(0);
+    }
   });
 });
 

@@ -183,9 +183,17 @@ export class BinaryReader {
 export class BinaryWriter {
   private buf: Buffer;
   private pos = 0;
+  /** 头部预留字节数；body 从该偏移开始写入，供 toFrameBuffer 原地回填长度前缀 */
+  private readonly reserveHead: number;
 
-  constructor(initialCapacity = 512) {
+  /**
+   * @param initialCapacity - 初始容量（含预留头部），按需 2x 扩容
+   * @param reserveHead - 在 body 之前预留的字节数（用于 toFrameBuffer 写入变长长度前缀）
+   */
+  constructor(initialCapacity = 512, reserveHead = 0) {
     this.buf = Buffer.allocUnsafe(initialCapacity);
+    this.reserveHead = reserveHead;
+    this.pos = reserveHead;
   }
 
   private ensure(capacity: number): void {
@@ -198,7 +206,37 @@ export class BinaryWriter {
   }
 
   toBuffer(): Buffer {
-    return this.buf.subarray(0, this.pos);
+    return this.buf.subarray(this.reserveHead, this.pos);
+  }
+
+  /**
+   * 把 body 长度的 LEB128(u32) 前缀原地回填进预留头部，返回「长度前缀 + body」的完整帧。
+   *
+   * 要求构造时 `reserveHead >= 5`（u32 LEB128 最多 5 字节）。相比「先编码 body 再
+   * 拼接 header」省去一次 buffer 分配和一次 body 拷贝——返回的是底层 buffer 的 subarray。
+   */
+  toFrameBuffer(): Buffer {
+    const bodyLen = this.pos - this.reserveHead;
+    // 计算 LEB128(u32) 前缀字节数：每 7 位一字节
+    let prefixLen = 1;
+    let v = bodyLen >>> 0;
+    while (v >= 0x80) {
+      v >>>= 7;
+      prefixLen++;
+    }
+    if (prefixLen > this.reserveHead) {
+      throw new Error("frame-reserve-head-too-small");
+    }
+    // 从预留区末尾往前对齐写入前缀，使其紧邻 body
+    const start = this.reserveHead - prefixLen;
+    let x = bodyLen >>> 0;
+    let i = start;
+    while (x >= 0x80) {
+      this.buf[i++] = (x & 0x7f) | 0x80;
+      x >>>= 7;
+    }
+    this.buf[i] = x;
+    return this.buf.subarray(start, this.pos);
   }
 
   writeBuffer(buf: Buffer): void {

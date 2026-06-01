@@ -1,6 +1,5 @@
-import { encodePacket } from "../../common/binary.js";
+import { BinaryWriter } from "../../common/binary.js";
 import { encodeServerCommand, type ServerCommand } from "../../common/commands.js";
-import { encodeLengthPrefixU32 } from "../../common/framing.js";
 
 export type PreparedServerCommand = {
   frame: Buffer;
@@ -21,13 +20,12 @@ export function isHighPriorityServerCommand(cmd: ServerCommand): boolean {
 }
 
 export function prepareServerCommand(cmd: ServerCommand): PreparedServerCommand {
-  const body = encodePacket(cmd, encodeServerCommand);
-  const header = encodeLengthPrefixU32(body.length);
-  const frame = Buffer.allocUnsafe(header.length + body.length);
-  header.copy(frame, 0);
-  body.copy(frame, header.length);
+  // 预留 5 字节头部（u32 LEB128 长度前缀上限），编码完成后原地回填长度，
+  // 直接得到「长度前缀 + body」帧，省去单独的 header 分配与 body 拷贝。
+  const w = new BinaryWriter(512, 5);
+  encodeServerCommand(w, cmd);
   return {
-    frame,
+    frame: w.toFrameBuffer(),
     highPriority: isHighPriorityServerCommand(cmd)
   };
 }

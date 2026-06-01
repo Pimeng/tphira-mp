@@ -45,6 +45,32 @@ export function encodeLengthPrefixU32(len: number): Buffer {
   return out.subarray(0, n);
 }
 
+/**
+ * 给已编码的 body 加上 LEB128(u32) 长度前缀，返回完整帧。
+ *
+ * 相比 `Buffer.concat([encodeLengthPrefixU32(len), body])`，只分配一个目标
+ * buffer、只拷贝一次 body，省去中间 header buffer 的分配与拷贝。
+ */
+export function frameWithLengthPrefix(body: Buffer): Buffer {
+  const len = body.length;
+  let prefixLen = 1;
+  let v = len >>> 0;
+  while (v >= 0x80) {
+    v >>>= 7;
+    prefixLen++;
+  }
+  const out = Buffer.allocUnsafe(prefixLen + len);
+  let x = len >>> 0;
+  let i = 0;
+  while (x >= 0x80) {
+    out[i++] = (x & 0x7f) | 0x80;
+    x >>>= 7;
+  }
+  out[i++] = x;
+  body.copy(out, i);
+  return out;
+}
+
 export type DecodeFrameResult =
   | { type: "need_more" }
   | { type: "frame"; payload: Buffer; remaining: Buffer }
