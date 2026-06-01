@@ -121,6 +121,8 @@ export class Stream<S, R> {
   }): Promise<Stream<S, R>> {
     // 禁用 Nagle 算法，减少延迟
     opts.socket.setNoDelay(true);
+    // 启用 TCP KeepAlive，防止中间 NAT/防火墙断开静默连接
+    opts.socket.setKeepAlive(true, 60000);
 
     // 协议版本协商（带超时保护，防止恶意连接挂起）
     const { version, initialBuffer } = await new Promise<{ version: number; initialBuffer: Buffer }>((resolve, reject) => {
@@ -314,7 +316,14 @@ export class Stream<S, R> {
       this.close();
       return;
     }
-    this.recvBuffer = this.recvBuffer.length === 0 ? data : Buffer.concat([this.recvBuffer, data]);
+    if (this.recvBuffer.length === 0) {
+      this.recvBuffer = data;
+    } else {
+      const merged = Buffer.allocUnsafe(newSize);
+      this.recvBuffer.copy(merged, 0);
+      data.copy(merged, this.recvBuffer.length);
+      this.recvBuffer = merged;
+    }
     this.scheduleDecode();
   };
 

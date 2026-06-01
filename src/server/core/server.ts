@@ -89,7 +89,7 @@ function loadConfig(configPath: string): ServerConfig {
  * 高优先级消息会跳过批量发送延迟，立即发送，确保关键交互的实时性。
  */
 /** 高优先级消息类型：心跳响应、认证响应、状态变更、房主变更、用户加入 */
-const HIGH_PRIORITY_TYPES = new Set(["Pong", "Authenticate", "ChangeState", "ChangeHost", "OnJoinRoom"]);
+const HIGH_PRIORITY_TYPES = new Set(["Pong", "Authenticate", "ChangeState", "ChangeHost", "OnJoinRoom", "Message"]);
 
 const codec: StreamCodec<ServerCommand, ClientCommand> = {
   encodeSend: (payload) => encodePacket(payload, encodeServerCommand),

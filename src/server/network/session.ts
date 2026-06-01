@@ -250,7 +250,7 @@ export class Session {
   private async handleAuthenticate(token: string): Promise<void> {
     try {
       // 并行发起 Phira API 认证和一言预热，减少总延迟
-      const [me] = await Promise.all([
+      const [me, hitokoto] = await Promise.all([
         fetchPhiraUserInfo({
           endpoint: this.getPhiraApiEndpoint(),
           token,
@@ -310,7 +310,8 @@ export class Session {
       void sendWelcomeExtras({
         user,
         state: this.state,
-        sendSystemChat: (content) => this.sendSystemChat(content)
+        sendSystemChat: (content) => this.sendSystemChat(content),
+        hitokoto
       }).catch(NOOP);
     } catch (e) {
       const localized = this.localizeError(this.state.serverLang, e instanceof Error ? e : new Error("auth-failed"));
