@@ -31,6 +31,7 @@ import {
   fetchPhiraUserInfo
 } from "./session/phiraApiClient.js";
 import { sendWelcomeExtras } from "./session/welcomeMessage.js";
+import { getHitokotoCached } from "../utils/hitokotoCache.js";
 import { processClientCommand, type RoomCallbacks } from "./session/commandRouter.js";
 
 /** 观战数据聚合间隔（毫秒） */
@@ -257,6 +258,9 @@ export class Session {
 
       // Don't reject banned users at auth time - allow them to connect
       // They will be blocked from operations later
+
+      // 预热一言缓存：在认证响应发送的同时并行获取，减少欢迎消息延迟
+      void getHitokotoCached(this.state.config.outbound_proxy, this.state.config.hitokoto_api_url);
 
       const { user, staleSession } = await this.state.mutex.runExclusive(async () => {
         const existing = this.state.users.get(me.id);
