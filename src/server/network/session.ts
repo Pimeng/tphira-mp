@@ -33,6 +33,7 @@ import {
 import { sendWelcomeExtras } from "./session/welcomeMessage.js";
 import { getHitokotoCached } from "../utils/hitokotoCache.js";
 import { processClientCommand, type RoomCallbacks } from "./session/commandRouter.js";
+import { prepareServerCommand, type PreparedServerCommand } from "./serverCommandTransport.js";
 
 /** 观战数据聚合间隔（毫秒） */
 const MONITOR_FLUSH_INTERVAL_MS = 50;
@@ -217,6 +218,18 @@ export class Session {
     if (!stream) return;
     try {
       await stream.send(cmd);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      this.state.logger.log("DEBUG", `[${this.id}] Send failed: ${msg}`, undefined, { userId: this.user?.id });
+      await this.markLost();
+    }
+  }
+
+  async trySendPrepared(prepared: PreparedServerCommand): Promise<void> {
+    const stream = this.stream;
+    if (!stream) return;
+    try {
+      await stream.sendFrame(prepared.frame, prepared.highPriority);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       this.state.logger.log("DEBUG", `[${this.id}] Send failed: ${msg}`, undefined, { userId: this.user?.id });
@@ -594,10 +607,12 @@ export class Session {
   }
 
   private async broadcastToIds(ids: number[], cmd: ServerCommand): Promise<void> {
+    const prepared = prepareServerCommand(cmd);
     const tasks: Promise<void>[] = [];
     for (const id of ids) {
       const u = this.state.users.get(id);
-      if (u) tasks.push(u.trySend(cmd));
+      const session = u?.session;
+      if (session) tasks.push(session.trySendPrepared(prepared));
     }
     if (tasks.length > 0) await Promise.all(tasks).catch(NOOP);
   }
@@ -607,9 +622,11 @@ export class Session {
    * 用于实时游戏数据（Touches/Judges），避免慢客户端拖累全场
    */
   private broadcastToIdsFast(ids: number[], cmd: ServerCommand): void {
+    const prepared = prepareServerCommand(cmd);
     for (const id of ids) {
       const u = this.state.users.get(id);
-      if (u) void u.trySend(cmd).catch(NOOP);
+      const session = u?.session;
+      if (session) void session.trySendPrepared(prepared).catch(NOOP);
     }
   }
 

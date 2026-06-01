@@ -20,6 +20,9 @@ type MonitorTargets = {
   ids: number[];
 };
 
+type MergedTouchEntry = { ids: number[]; player: number; frames: TouchFrame[] };
+type MergedJudgeEntry = { ids: number[]; player: number; judges: JudgeEvent[] };
+
 /**
  * 观战数据缓冲器
  *
@@ -31,8 +34,8 @@ export class MonitorBuffer {
   private judgeBuffer: Array<{ targets: MonitorTargets; player: number; judges: JudgeEvent[] }> = [];
   private flushTimer: NodeJS.Timeout | null = null;
   private readonly opts: MonitorBufferOptions;
-  private mergedTouches = new Map<string, { ids: number[]; player: number; frames: TouchFrame[] }>();
-  private mergedJudges = new Map<string, { ids: number[]; player: number; judges: JudgeEvent[] }>();
+  private mergedTouches = new Map<number, MergedTouchEntry[]>();
+  private mergedJudges = new Map<number, MergedJudgeEntry[]>();
 
   constructor(opts: MonitorBufferOptions) {
     this.opts = opts;
@@ -61,16 +64,18 @@ export class MonitorBuffer {
       for (const item of this.touchBuffer) {
         const ids = this.liveMonitorIds(item.targets);
         if (ids.length === 0) continue;
-        const key = this.mergeKey(ids, item.player);
-        const existing = this.mergedTouches.get(key);
+        const bucket = this.getTouchBucket(item.player);
+        const existing = this.findTouchEntry(bucket, ids);
         if (existing) {
           for (let i = 0; i < item.frames.length; i++) existing.frames.push(item.frames[i]!);
         } else {
-          this.mergedTouches.set(key, { ids, player: item.player, frames: item.frames.slice() });
+          bucket.push({ ids, player: item.player, frames: item.frames.slice() });
         }
       }
-      for (const { ids, player, frames } of this.mergedTouches.values()) {
-        this.opts.broadcastFast(ids, { type: "Touches", player, frames });
+      for (const entries of this.mergedTouches.values()) {
+        for (const { ids, player, frames } of entries) {
+          this.opts.broadcastFast(ids, { type: "Touches", player, frames });
+        }
       }
       this.touchBuffer.length = 0;
     }
@@ -80,16 +85,18 @@ export class MonitorBuffer {
       for (const item of this.judgeBuffer) {
         const ids = this.liveMonitorIds(item.targets);
         if (ids.length === 0) continue;
-        const key = this.mergeKey(ids, item.player);
-        const existing = this.mergedJudges.get(key);
+        const bucket = this.getJudgeBucket(item.player);
+        const existing = this.findJudgeEntry(bucket, ids);
         if (existing) {
           for (let i = 0; i < item.judges.length; i++) existing.judges.push(item.judges[i]!);
         } else {
-          this.mergedJudges.set(key, { ids, player: item.player, judges: item.judges.slice() });
+          bucket.push({ ids, player: item.player, judges: item.judges.slice() });
         }
       }
-      for (const { ids, player, judges } of this.mergedJudges.values()) {
-        this.opts.broadcastFast(ids, { type: "Judges", player, judges });
+      for (const entries of this.mergedJudges.values()) {
+        for (const { ids, player, judges } of entries) {
+          this.opts.broadcastFast(ids, { type: "Judges", player, judges });
+        }
       }
       this.judgeBuffer.length = 0;
     }
@@ -114,16 +121,66 @@ export class MonitorBuffer {
   }
 
   private normalizeMonitorIds(ids: Iterable<number>): number[] {
+    if (ids instanceof Set) return [...ids];
     const arr = Array.isArray(ids) ? ids as number[] : [...ids];
     if (arr.length <= 1) return arr;
     return [...new Set(arr)].sort((a, b) => a - b);
   }
 
   private liveMonitorIds(targets: MonitorTargets): number[] {
-    return targets.ids.filter((id) => targets.room.monitors.has(id));
+    const { ids, room } = targets;
+    let filtered: number[] | null = null;
+    for (let i = 0; i < ids.length; i++) {
+      const id = ids[i]!;
+      if (room.monitors.has(id)) {
+        if (filtered) filtered.push(id);
+        continue;
+      }
+      if (!filtered) filtered = ids.slice(0, i);
+    }
+    return filtered ?? ids;
   }
 
-  private mergeKey(ids: number[], player: number): string {
-    return `${ids.join(",")}:${player}`;
+  private getTouchBucket(player: number): MergedTouchEntry[] {
+    let bucket = this.mergedTouches.get(player);
+    if (!bucket) {
+      bucket = [];
+      this.mergedTouches.set(player, bucket);
+    }
+    return bucket;
+  }
+
+  private getJudgeBucket(player: number): MergedJudgeEntry[] {
+    let bucket = this.mergedJudges.get(player);
+    if (!bucket) {
+      bucket = [];
+      this.mergedJudges.set(player, bucket);
+    }
+    return bucket;
+  }
+
+  private findTouchEntry(entries: MergedTouchEntry[], ids: number[]): MergedTouchEntry | undefined {
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i]!;
+      if (this.sameIds(entry.ids, ids)) return entry;
+    }
+    return undefined;
+  }
+
+  private findJudgeEntry(entries: MergedJudgeEntry[], ids: number[]): MergedJudgeEntry | undefined {
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i]!;
+      if (this.sameIds(entry.ids, ids)) return entry;
+    }
+    return undefined;
+  }
+
+  private sameIds(left: number[], right: number[]): boolean {
+    if (left === right) return true;
+    if (left.length !== right.length) return false;
+    for (let i = 0; i < left.length; i++) {
+      if (left[i] !== right[i]) return false;
+    }
+    return true;
   }
 }

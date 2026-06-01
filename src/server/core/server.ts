@@ -40,6 +40,7 @@ import {
 } from "./configValues.js";
 import { startConfigFileWatcher, type ConfigWatcher } from "./configWatcher.js";
 import { NOOP } from "../../common/utils.js";
+import { isHighPriorityServerCommand } from "../network/serverCommandTransport.js";
 
 /** 启动服务器选项 */
 export type StartServerOptions = { host?: string; port?: number; config?: Partial<ServerConfig>; configPath?: string; watchConfig?: boolean };
@@ -88,13 +89,10 @@ function loadConfig(configPath: string): ServerConfig {
  * 定义了服务器命令的编码/解码方式，以及高优先级消息的判断逻辑。
  * 高优先级消息会跳过批量发送延迟，立即发送，确保关键交互的实时性。
  */
-/** 高优先级消息类型：心跳响应、认证响应、状态变更、房主变更、用户加入 */
-const HIGH_PRIORITY_TYPES = new Set(["Pong", "Authenticate", "ChangeState", "ChangeHost", "OnJoinRoom", "Message"]);
-
 const codec: StreamCodec<ServerCommand, ClientCommand> = {
   encodeSend: (payload) => encodePacket(payload, encodeServerCommand),
   decodeRecv: (payload) => decodePacket(payload, decodeClientCommand),
-  isHighPriority: (cmd) => HIGH_PRIORITY_TYPES.has(cmd.type)
+  isHighPriority: isHighPriorityServerCommand
 };
 
 function formatListenHostPort(host: string, port: number): string {

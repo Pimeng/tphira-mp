@@ -7,6 +7,7 @@ import { NOOP } from "../../common/utils.js";
 import type { ServerState } from "../core/state.js";
 import type { ServerCommand } from "../../common/commands.js";
 import type { Room } from "../game/room.js";
+import { prepareServerCommand } from "./serverCommandTransport.js";
 
 const DEFAULT_PHIRA_API_ENDPOINT = "https://phira.5wyxi.com";
 
@@ -62,10 +63,12 @@ export async function broadcastRoomAll(state: ServerState, roomId: RoomId, cmd: 
   const room = state.rooms.get(roomId);
   if (!room) return;
   const ids = room.allParticipantIds();
+  const prepared = prepareServerCommand(cmd);
   const tasks: Promise<void>[] = [];
   for (const id of ids) {
     const u = state.users.get(id);
-    if (u) tasks.push(u.trySend(cmd));
+    const session = u?.session;
+    if (session) tasks.push(session.trySendPrepared(prepared));
   }
   if (tasks.length > 0) await Promise.all(tasks).catch(NOOP);
 }

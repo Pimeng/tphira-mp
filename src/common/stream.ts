@@ -217,19 +217,20 @@ export class Stream<S, R> {
 
     const body = this.codec.encodeSend(payload);
     const header = encodeLengthPrefixU32(body.length);
+    await this.sendFrame(Buffer.concat([header, body]), this.codec.isHighPriority?.(payload) === true);
+  }
+
+  async sendFrame(frame: Buffer, highPriority = false): Promise<void> {
+    if (this.closed) throw new Error("net-connection-closed");
 
     // 高优先级消息：立即 flush 并发送，不进入批量队列
     // 先 flush 已有的低优先级批量，保证消息顺序
-    if (this.codec.isHighPriority?.(payload)) {
+    if (highPriority) {
       await this.flushSendBatch();
-      // 直接拼接 header + body 一次性写入，省去中间 frame 分配
-      const frame = Buffer.concat([header, body]);
       this.sendBatch.push(frame);
       await this.flushSendBatch();
       return;
     }
-
-    const frame = Buffer.concat([header, body]);
 
     // 低优先级消息：添加到批量发送队列
     this.sendBatch.push(frame);
