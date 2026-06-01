@@ -44,6 +44,7 @@ label-monitor-suffix = (monitor)
 replay-recorder-name = Replay Recorder
 
 chat-welcome = Hello "{ $userName }"! Welcome to { $serverName }!
+chat-welcome-version = Server is running version { $version }
 chat-hitokoto = { $quote } — { $from }
 chat-hitokoto-from-unknown = Unknown
 chat-hitokoto-unavailable = Failed to fetch quote

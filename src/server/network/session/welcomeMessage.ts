@@ -34,6 +34,8 @@ export async function sendWelcomeExtras(opts: {
     let message = "\n".repeat(30);
     message += lang.format("chat-welcome", { userName: user.name, serverName: state.serverName }) + "\n";
     message += "=".repeat(73) + "\n";
+    message += lang.format("chat-welcome-version", { version: state.version }) + "\n";
+    message += "=".repeat(73) + "\n";
     message += lang.format("chat-roomlist-title") + "\n";
     message += getAvailableRoomsText(state, lang) + "\n";
     message += "=".repeat(73) + "\n";

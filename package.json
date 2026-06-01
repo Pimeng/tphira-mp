@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "dev:server": "tsx src/server/main.ts",
+    "dev": "tsx src/server/main.ts",
     "start": "node dist/server/main.js",
     "bundle:server": "node tools/bundle-server.mjs",
     "package:sea": "node tools/package-sea.mjs",

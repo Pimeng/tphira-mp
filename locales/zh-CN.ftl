@@ -44,6 +44,7 @@ label-monitor-suffix = （观战者）
 replay-recorder-name = 回放录制器
 
 chat-welcome = "{ $userName }"你好！欢迎来到 { $serverName } 服务器！
+chat-welcome-version = 服务器当前版本： { $version } 
 chat-hitokoto = { $quote } —— { $from }
 chat-hitokoto-from-unknown = 佚名
 chat-hitokoto-unavailable = 一言获取失败

@@ -24,6 +24,7 @@ import { Language } from "../utils/l10n.js";
 import { ReplayRecorder } from "../replay/replayRecorder.js";
 import { defaultReplayBaseDir } from "../replay/replayStorage.js";
 import type { WebSocketService } from "../network/websocketService.js";
+import { readAppVersion } from "./version.js";
 
 /** 管理员数据文件结构 */
 type AdminDataFile = { version: 1; bannedUsers: number[]; bannedRoomUsers: Record<string, number[]> };
@@ -70,6 +71,8 @@ export class ServerState {
   replayEnabled: boolean;
   /** 是否允许创建新房间 */
   roomCreationEnabled: boolean;
+  /** 服务器版本 */
+  version: string;
 
   /** 分享站配置（用于回放自动上传到第三方平台） */
   get shareStation(): ShareStationConfig | undefined {
@@ -151,6 +154,7 @@ export class ServerState {
     this.configPath = configPath;
     this.replayEnabled = Boolean(config.replay_enabled);
     this.roomCreationEnabled = true;
+    this.version = readAppVersion();
     const replayBaseDir = config.replay_base_dir ?? defaultReplayBaseDir();
     this.replayRecorder = new ReplayRecorder(replayBaseDir, logger);
   }

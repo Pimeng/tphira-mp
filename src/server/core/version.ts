@@ -29,4 +29,3 @@ export function readAppVersion(): string {
 
   return "unknown";
 }
-
