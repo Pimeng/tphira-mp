@@ -136,7 +136,14 @@ export class ServerState {
   readonly autoUploadConfigs = new Map<number, AutoUploadConfig>();
   /** 已上传回放元数据（userId -> chartId -> UploadedReplayMeta[]），用于去重 */
   readonly uploadedReplayMeta = new Map<number, Map<number, Array<UploadedReplayMeta>>>();
-
+  /** 内存清理定时器句柄 */
+  private cleanupTimer: NodeJS.Timeout | null = null;
+  /** 清理周期（毫秒） */
+  private static readonly CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
+  /** 上传元数据保留天数 */
+  private static readonly UPLOAD_META_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+  /** 离线用户配置保留时间（毫秒） */
+  private static readonly OFFLINE_CONFIG_RETENTION_MS = 1 * 60 * 60 * 1000;
   /**
    * 创建服务器状态实例
    * @param config - 初始配置
@@ -256,6 +263,68 @@ export class ServerState {
   cleanupUserData(userId: number): void {
     this.autoUploadConfigs.delete(userId);
     this.uploadedReplayMeta.delete(userId);
+  }
+
+  /**
+   * 启动周期性内存清理任务
+   * 每小时清理过期数据：上传元数据、离线用户配置、过期 CLI 审批会话
+   */
+  startCleanup(): void {
+    if (this.cleanupTimer) return;
+    this.cleanupTimer = setInterval(() => this.runCleanup(), ServerState.CLEANUP_INTERVAL_MS);
+    if (this.cleanupTimer.unref) this.cleanupTimer.unref();
+  }
+
+  /**
+   * 停止周期性内存清理任务
+   */
+  stopCleanup(): void {
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer);
+      this.cleanupTimer = null;
+    }
+  }
+
+  private runCleanup(): void {
+    const now = Date.now();
+
+    // 清理 7 天前的上传回放元数据
+    const cutoffUpload = now - ServerState.UPLOAD_META_RETENTION_MS;
+    for (const [userId, chartMap] of this.uploadedReplayMeta) {
+      for (const [chartId, metas] of chartMap) {
+        const filtered = metas.filter((m) => m.timestamp >= cutoffUpload);
+        if (filtered.length === 0) {
+          chartMap.delete(chartId);
+        } else if (filtered.length !== metas.length) {
+          chartMap.set(chartId, filtered);
+        }
+      }
+      if (chartMap.size === 0) {
+        this.uploadedReplayMeta.delete(userId);
+      }
+    }
+
+    // 清理离线超过 1 小时的用户自动上传配置
+    const cutoffConfig = now - ServerState.OFFLINE_CONFIG_RETENTION_MS;
+    for (const [userId] of this.autoUploadConfigs) {
+      if (!this.users.has(userId)) {
+        this.autoUploadConfigs.delete(userId);
+      }
+    }
+
+    // 清理已过期的 CLI 审批会话
+    for (const [key, session] of this.cliApprovalSessions) {
+      if (now > session.expiresAt || session.status === "denied") {
+        this.cliApprovalSessions.delete(key);
+      }
+    }
+
+    // 清理过期的临时管理员 token
+    for (const [token, data] of this.tempAdminTokens) {
+      if (data.banned || now > data.expiresAt) {
+        this.tempAdminTokens.delete(token);
+      }
+    }
   }
 
   /**

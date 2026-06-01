@@ -18,6 +18,9 @@ type ReplayParticipant = {
   name?: string;
 };
 
+/** 每玩家单局录制帧数上限, 超出后停止追加防止内存无限增长 */
+const MAX_FRAMES_PER_INFLIGHT = 15_000;
+
 type InFlight = {
   roomKey: string;
   userId: number;
@@ -30,6 +33,10 @@ type InFlight = {
   closed: boolean;
   touchFrames: TouchFrame[];
   judgeEvents: JudgeEvent[];
+  /** 计数器: 超过 MAX_FRAMES_PER_INFLIGHT 后静默丢弃 */
+  _touchCount: number;
+  _judgeCount: number;
+  _overflowWarned: boolean;
 };
 
 type ReplayFileInfo = {
@@ -100,7 +107,10 @@ export class ReplayRecorder {
         path,
         closed: false,
         touchFrames: [],
-        judgeEvents: []
+        judgeEvents: [],
+        _touchCount: 0,
+        _judgeCount: 0,
+        _overflowWarned: false
       });
       keys.add(key);
       this.log("DEBUG", `Recording started for userId=${userId}`);
@@ -150,17 +160,35 @@ export class ReplayRecorder {
   }
 
   appendTouches(roomId: RoomId, userId: number, frames: TouchFrame[]): void {
-    this.log("DEBUG", `appendTouches: roomId=${roomIdToString(roomId)}, userId=${userId}, frames=${frames.length}`);
     const it = this.get(roomId, userId);
     if (!it) return;
-    for (let i = 0; i < frames.length; i++) it.touchFrames.push(frames[i]!);
+    const remaining = MAX_FRAMES_PER_INFLIGHT - it._touchCount;
+    if (remaining <= 0) {
+      if (!it._overflowWarned) {
+        this.log("WARN", `TouchFrame overflow for userId=${userId}, dropping frames`);
+        it._overflowWarned = true;
+      }
+      return;
+    }
+    const toAdd = Math.min(frames.length, remaining);
+    for (let i = 0; i < toAdd; i++) it.touchFrames.push(frames[i]!);
+    it._touchCount += toAdd;
   }
 
   appendJudges(roomId: RoomId, userId: number, judges: JudgeEvent[]): void {
-    this.log("DEBUG", `appendJudges: roomId=${roomIdToString(roomId)}, userId=${userId}, judges=${judges.length}`);
     const it = this.get(roomId, userId);
     if (!it) return;
-    for (let i = 0; i < judges.length; i++) it.judgeEvents.push(judges[i]!);
+    const remaining = MAX_FRAMES_PER_INFLIGHT - it._judgeCount;
+    if (remaining <= 0) {
+      if (!it._overflowWarned) {
+        this.log("WARN", `JudgeEvent overflow for userId=${userId}, dropping judges`);
+        it._overflowWarned = true;
+      }
+      return;
+    }
+    const toAdd = Math.min(judges.length, remaining);
+    for (let i = 0; i < toAdd; i++) it.judgeEvents.push(judges[i]!);
+    it._judgeCount += toAdd;
   }
 
   listRoomFiles(roomId: RoomId): ReplayFileInfo[] {

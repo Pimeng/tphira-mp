@@ -12,8 +12,14 @@ type RateLimiterOptions = {
   windowSizeMs?: number;
 };
 
+const RING_BUFFER_SIZE = 32;
+
 type IpStats = {
+  /** @deprecated 保留以兼容旧类型, 新代码使用 ringBuffer */
   timestamps: number[];
+  /** Ring buffer write cursor (0..RING_BUFFER_SIZE-1) */
+  ringCursor: number;
+  ringBuffer: (number | undefined)[];
   blacklistedUntil: number;
   lastAccess: number;
 };
@@ -53,7 +59,7 @@ export class RateLimiter {
 
     let stats = this.ipStats.get(ip);
     if (!stats) {
-      stats = { timestamps: [], blacklistedUntil: 0, lastAccess: now };
+      stats = { timestamps: [], ringCursor: 0, ringBuffer: new Array<(number | undefined)>(RING_BUFFER_SIZE), blacklistedUntil: 0, lastAccess: now };
       this.ipStats.set(ip, stats);
     }
     stats.lastAccess = now;
@@ -67,20 +73,24 @@ export class RateLimiter {
       stats.blacklistedUntil = 0;
     }
 
-    // 记录当前日志时间戳
-    stats.timestamps.push(now);
+    // 写入环形缓冲区（零分配）
+    stats.ringBuffer[stats.ringCursor] = now;
+    stats.ringCursor = (stats.ringCursor + 1) % RING_BUFFER_SIZE;
 
-    // 清理过期的时间戳（超过窗口时间的）
+    // 计算窗口内的日志数量
     const windowStart = now - this.windowSize;
-    stats.timestamps = stats.timestamps.filter((ts) => ts > windowStart);
+    let logsInWindow = 0;
+    for (let i = 0; i < RING_BUFFER_SIZE; i++) {
+      const ts = stats.ringBuffer[i];
+      if (ts !== undefined && ts > windowStart) logsInWindow++;
+    }
 
     // 检查是否超过阈值
-    const logsInWindow = stats.timestamps.length;
     if (logsInWindow > this.threshold) {
-      // 触发限流：将该IP加入黑名单
       stats.blacklistedUntil = now + this.blacklistDuration;
-      // 清理时间戳释放内存
-      stats.timestamps = [];
+      // 清零环形缓冲区释放跟踪
+      stats.ringBuffer.fill(undefined);
+      stats.ringCursor = 0;
       return false;
     }
 
@@ -125,7 +135,8 @@ export class RateLimiter {
     const stats = this.ipStats.get(ip);
     if (stats) {
       stats.blacklistedUntil = 0;
-      stats.timestamps = [];
+      stats.ringBuffer.fill(undefined);
+      stats.ringCursor = 0;
     }
   }
 
@@ -146,8 +157,12 @@ export class RateLimiter {
     let maxRate = 0;
 
     for (const stats of this.ipStats.values()) {
-      const recentLogs = stats.timestamps.filter((ts) => ts > windowStart);
-      const rate = (recentLogs.length / this.windowSize) * 1000;
+      let recentLogs = 0;
+      for (let i = 0; i < RING_BUFFER_SIZE; i++) {
+        const ts = stats.ringBuffer[i];
+        if (ts !== undefined && ts > windowStart) recentLogs++;
+      }
+      const rate = (recentLogs / this.windowSize) * 1000;
       if (rate > maxRate) maxRate = rate;
     }
 

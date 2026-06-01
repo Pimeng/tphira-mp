@@ -50,8 +50,11 @@ function formatLocalTimestamp(d: Date): string {
 
 function formatMeta(meta?: Record<string, unknown>): string {
   if (!meta) return "";
-  for (const _ in meta) { try { return ` ${JSON.stringify(meta)}`; } catch (error) { const reason = error instanceof Error ? error.message : String(error); return ` [meta-unserializable:${reason}]`; } }
-  return "";
+  try {
+    return ` ${JSON.stringify(meta)}`;
+  } catch (_) {
+    return "";
+  }
 }
 
 function parseLevel(input: string | undefined, fallback: LogLevel): LogLevel {
@@ -89,6 +92,14 @@ export class Logger {
 
   private currentDateKey: string | null = null;
   private stream: WriteStream | null = null;
+
+  /** 批量缓冲写入: 减少 write() 系统调用次数 */
+  private readonly logBuffer: string[] = [];
+  private logBufferTimer: NodeJS.Timeout | null = null;
+  private static readonly LOG_BUFFER_MAX_SIZE = 1000;
+  private static readonly LOG_BUFFER_FLUSH_MS = 100;
+  /** 高负载降级阈值: buffer 超过此值后丢弃 DEBUG 日志 */
+  private static readonly LOG_BUFFER_DEGRADE_SIZE = 5000;
 
   constructor(options: LoggerOptions = {}) {
     this.logsDir = options.logsDir ?? "logs";
@@ -164,24 +175,54 @@ export class Logger {
   }
 
   close(): void {
+    this.flushLogBuffer();
     this.stream?.end();
     this.stream = null;
     this.currentDateKey = null;
   }
 
+  private scheduleLogBufferFlush(): void {
+    if (this.logBuffer.length >= Logger.LOG_BUFFER_MAX_SIZE) {
+      this.flushLogBuffer();
+      return;
+    }
+    if (!this.logBufferTimer) {
+      this.logBufferTimer = setTimeout(() => {
+        this.logBufferTimer = null;
+        this.flushLogBuffer();
+      }, Logger.LOG_BUFFER_FLUSH_MS);
+      // 确保定时器不会阻止进程退出
+      if (this.logBufferTimer.unref) this.logBufferTimer.unref();
+    }
+  }
+
+  private flushLogBuffer(): void {
+    if (this.logBufferTimer) {
+      clearTimeout(this.logBufferTimer);
+      this.logBufferTimer = null;
+    }
+    if (this.logBuffer.length === 0 || !this.stream) return;
+    const combined = this.logBuffer.join("");
+    this.logBuffer.length = 0;
+    this.stream.write(combined);
+  }
+
   private write(level: LogLevel, message: string, meta?: Record<string, unknown>, context?: LogContext & { isConnectionLog?: boolean }): void {
-    // onLog 作为旁路监听不受 minLevel 过滤
-    if (this.onLog) {
-      const now = new Date();
-      this.onLog(level, message, now, context);
-      if (level === "INFO" && this.onInfoLog) {
-        this.onInfoLog(message, now, context);
+    if (LEVEL_WEIGHT[level] < LEVEL_WEIGHT[this.minLevel]) {
+      // Skip file and console, but still invoke onLog for side-channel listeners
+      if (this.onLog) {
+        const now = new Date();
+        this.onLog(level, message, now, context);
       }
+      return;
     }
 
-    if (LEVEL_WEIGHT[level] < LEVEL_WEIGHT[this.minLevel]) return;
-
     const now = new Date();
+
+    // onLog 回调在 minLevel 检查之后执行，避免无效的 Date 构造
+    if (this.onLog) {
+      this.onLog(level, message, now, context);
+    }
 
     // 检查是否应该跳过连接日志（限流）
     const isConnectionLog = context?.isConnectionLog === true;
@@ -203,7 +244,13 @@ export class Logger {
       this.testAccountIds.has(context.userId) &&
       this.minLevel !== "DEBUG";
     if (!skipFile) {
-      this.stream?.write(fileLine);
+      // 高负载降级: buffer 过大时丢弃 DEBUG 日志
+      if (this.logBuffer.length > Logger.LOG_BUFFER_DEGRADE_SIZE && level === "DEBUG") {
+        // 跳过写入, 但 console 输出不受影响
+      } else {
+        this.logBuffer.push(fileLine);
+        this.scheduleLogBufferFlush();
+      }
     }
 
     if (LEVEL_WEIGHT[level] >= LEVEL_WEIGHT[this.consoleMinLevel]) {
@@ -219,6 +266,7 @@ export class Logger {
   }
 
   private rotate(dateKey: string): void {
+    this.flushLogBuffer();
     const oldStream = this.stream;
     if (oldStream) {
       // 优雅关闭旧流，确保已缓冲的数据被写入

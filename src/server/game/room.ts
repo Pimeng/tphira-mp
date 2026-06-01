@@ -62,10 +62,16 @@ export class Room {
   private _cachedMonitorIds: number[] | null = null;
   private _cachedAllParticipantIds: number[] | null = null;
 
+  /** clientState 缓存：版本号机制，成员或状态变更时递增 */
+  private _stateVersion = 0;
+  private _cachedInfoMap: Map<number, ReturnType<User["toInfo"]>> | null = null;
+
   private invalidateIdCache(): void {
     this._cachedUserIds = null;
     this._cachedMonitorIds = null;
     this._cachedAllParticipantIds = null;
+    this._cachedInfoMap = null;
+    this._stateVersion++;
   }
 
   /** 只读用户 ID 集合 */
@@ -137,16 +143,20 @@ export class Room {
   }
 
   clientState(user: User, usersById: (id: number) => User | undefined): ClientRoomState {
-    const users = this._clientStateUsers;
-    users.clear();
-    for (const id of this.allParticipantIds()) {
-      const u = usersById(id);
-      if (u) users.set(id, u);
-    }
+    // 增量更新 infoMap 缓存：仅在版本过期时重建
+    if (!this._cachedInfoMap) {
+      const users = this._clientStateUsers;
+      users.clear();
+      for (const id of this.allParticipantIds()) {
+        const u = usersById(id);
+        if (u) users.set(id, u);
+      }
 
-    const infoMap = this._clientStateInfoMap;
-    infoMap.clear();
-    for (const [id, u] of users) infoMap.set(id, u.toInfo());
+      const infoMap = this._clientStateInfoMap;
+      infoMap.clear();
+      for (const [id, u] of users) infoMap.set(id, u.toInfo());
+      this._cachedInfoMap = new Map(infoMap);
+    }
 
     const isReady = this.state.type === "WaitForReady" ? this.state.started.has(user.id) : false;
 
@@ -158,7 +168,7 @@ export class Room {
       cycle: this.isCycle(),
       is_host: this.hostId === user.id,
       is_ready: isReady,
-      users: infoMap
+      users: this._cachedInfoMap
     };
   }
 

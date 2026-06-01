@@ -85,6 +85,14 @@ export function startWebSocketService(opts: { httpServer: http.Server; state: Se
     }
   };
 
+  // 管理员客户端索引, 避免广播时遍历所有客户端
+  const adminClients = new Set<WebSocket>();
+
+  // Admin 更新防抖定时器
+  let adminUpdateTimer: NodeJS.Timeout | null = null;
+  let pendingAdminUpdate = false;
+  const ADMIN_DEBOUNCE_MS = 100;
+
   // 处理 HTTP 升级请求
   httpServer.on("upgrade", (request, socket, head) => {
     const url = new URL(request.url ?? "/", "http://localhost");
@@ -186,6 +194,7 @@ export function startWebSocketService(opts: { httpServer: http.Server; state: Se
           client.isAdmin = true;
           client.adminToken = msg.token;
           client.lastAdminSnapshot = null;
+          adminClients.add(ws);
 
           sendResponse(ws, { type: "admin_subscribed" });
 
@@ -199,6 +208,7 @@ export function startWebSocketService(opts: { httpServer: http.Server; state: Se
           client.isAdmin = false;
           client.adminToken = null;
           client.lastAdminSnapshot = null;
+          adminClients.delete(ws);
           sendResponse(ws, { type: "admin_unsubscribed" });
           return;
         }
@@ -216,6 +226,7 @@ export function startWebSocketService(opts: { httpServer: http.Server; state: Se
       // 清理 admin snapshot 释放内存
       client.lastAdminSnapshot = null;
       client.adminToken = null;
+      adminClients.delete(ws);
       clients.delete(ws);
       state.logger.log("DEBUG", tl(state.serverLang, "log-websocket-disconnected", { total: String(clients.size) }));
     });
@@ -302,6 +313,7 @@ export function startWebSocketService(opts: { httpServer: http.Server; state: Se
         c.lastAdminSnapshot = null;
         c.adminToken = null;
       }
+      adminClients.delete(ws);
       clients.delete(ws);
     }
   }, 30000); // 30秒心跳
@@ -344,13 +356,23 @@ export function startWebSocketService(opts: { httpServer: http.Server; state: Se
   };
 
   const broadcastAdminUpdate = async (): Promise<void> => {
-    const roomsData = buildAdminRoomsData(state);
-    const roomsSnapshot = JSON.stringify(roomsData);
-    for (const [ws, client] of clients) {
-      if (client.isAdmin) {
-        sendAdminUpdate(ws, client, roomsData, roomsSnapshot, false);
+    // 无管理员订阅时跳过昂贵的 buildAdminRoomsData
+    if (adminClients.size === 0) return;
+    // 防抖：100ms 内合并多次变更
+    pendingAdminUpdate = true;
+    if (adminUpdateTimer) return;
+    adminUpdateTimer = setTimeout(() => {
+      adminUpdateTimer = null;
+      if (!pendingAdminUpdate) return;
+      pendingAdminUpdate = false;
+      const roomsData = buildAdminRoomsData(state);
+      const roomsSnapshot = JSON.stringify(roomsData);
+      for (const [ws, client] of clients) {
+        if (client.isAdmin) {
+          sendAdminUpdate(ws, client, roomsData, roomsSnapshot, false);
+        }
       }
-    }
+    }, ADMIN_DEBOUNCE_MS);
   };
 
   return {
@@ -361,8 +383,10 @@ export function startWebSocketService(opts: { httpServer: http.Server; state: Se
     broadcastAdminUpdate,
     close: async () => {
       clearInterval(heartbeatInterval);
+      if (adminUpdateTimer) { clearTimeout(adminUpdateTimer); adminUpdateTimer = null; }
       for (const [ws] of clients) ws.close();
       clients.clear();
+      adminClients.clear();
       roomSubscribers.clear();
       wss.close();
     }

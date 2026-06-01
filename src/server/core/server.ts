@@ -181,6 +181,7 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
 
   state = new ServerState(mergedCfg, logger, serverName, adminDataPath, configPath);
   await state.loadAdminData();
+  state.startCleanup();
   const replayCleanup = startReplayCleanup({ ttlDays: 4, logger });
 
   const version = readAppVersion();
@@ -425,6 +426,7 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
           logger.warn(`Replay recorder closeAll failed: ${err instanceof Error ? err.message : String(err)}`);
         });
         replayCleanup.stop();
+        state.stopCleanup();
         logger.close();
       }
     }

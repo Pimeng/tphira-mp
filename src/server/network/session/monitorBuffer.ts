@@ -23,6 +23,13 @@ type MonitorTargets = {
 type MergedTouchEntry = { ids: number[]; player: number; frames: TouchFrame[] };
 type MergedJudgeEntry = { ids: number[]; player: number; judges: JudgeEvent[] };
 
+/** 动态 flush 阈值 */
+const MAX_BUFFER_SIZE_SLOW = 50;
+const MAX_BUFFER_SIZE_FAST = 200;
+const FLUSH_INTERVAL_SLOW = 50;
+const FLUSH_INTERVAL_FAST = 20;
+const FLUSH_INTERVAL_URGENT = 10;
+
 /**
  * 观战数据缓冲器
  *
@@ -36,22 +43,25 @@ export class MonitorBuffer {
   private readonly opts: MonitorBufferOptions;
   private mergedTouches = new Map<number, MergedTouchEntry[]>();
   private mergedJudges = new Map<number, MergedJudgeEntry[]>();
+  /** 缓存归一化后的 monitor ID 数组, key 为 room 引用 (Room 对象引用稳定) */
+  private cachedMonitorIds = new WeakMap<Room, { ids: number[]; version: number }>();
+  private monitorIdVersion = 0;
 
   constructor(opts: MonitorBufferOptions) {
     this.opts = opts;
   }
 
   /** 推入一批 touches 帧 */
-  bufferTouches(room: Room, monitorIds: Iterable<number>, player: number, frames: TouchFrame[]): void {
-    const ids = this.normalizeMonitorIds(monitorIds);
+  bufferTouches(room: Room, _monitorIds: Iterable<number>, player: number, frames: TouchFrame[]): void {
+    const ids = this.getCachedMonitorIds(room);
     if (ids.length === 0) return;
     this.touchBuffer.push({ targets: { room, ids }, player, frames });
     this.scheduleFlush();
   }
 
   /** 推入一批 judges 事件 */
-  bufferJudges(room: Room, monitorIds: Iterable<number>, player: number, judges: JudgeEvent[]): void {
-    const ids = this.normalizeMonitorIds(monitorIds);
+  bufferJudges(room: Room, _monitorIds: Iterable<number>, player: number, judges: JudgeEvent[]): void {
+    const ids = this.getCachedMonitorIds(room);
     if (ids.length === 0) return;
     this.judgeBuffer.push({ targets: { room, ids }, player, judges });
     this.scheduleFlush();
@@ -69,7 +79,8 @@ export class MonitorBuffer {
         if (existing) {
           for (let i = 0; i < item.frames.length; i++) existing.frames.push(item.frames[i]!);
         } else {
-          bucket.push({ ids, player: item.player, frames: item.frames.slice() });
+          // 优化：直接复用原始 frames 数组, 不再 .slice() 拷贝
+          bucket.push({ ids, player: item.player, frames: item.frames });
         }
       }
       for (const entries of this.mergedTouches.values()) {
@@ -90,7 +101,7 @@ export class MonitorBuffer {
         if (existing) {
           for (let i = 0; i < item.judges.length; i++) existing.judges.push(item.judges[i]!);
         } else {
-          bucket.push({ ids, player: item.player, judges: item.judges.slice() });
+          bucket.push({ ids, player: item.player, judges: item.judges });
         }
       }
       for (const entries of this.mergedJudges.values()) {
@@ -113,31 +124,43 @@ export class MonitorBuffer {
 
   private scheduleFlush(): void {
     if (!this.flushTimer) {
+      const bufferSize = this.touchBuffer.length + this.judgeBuffer.length;
+      let interval: number;
+      if (bufferSize > MAX_BUFFER_SIZE_FAST) {
+        interval = FLUSH_INTERVAL_URGENT;
+      } else if (bufferSize > MAX_BUFFER_SIZE_SLOW) {
+        interval = FLUSH_INTERVAL_FAST;
+      } else {
+        interval = FLUSH_INTERVAL_SLOW;
+      }
       this.flushTimer = setTimeout(() => {
         this.flushTimer = null;
         this.flush();
-      }, this.opts.flushIntervalMs);
+      }, interval);
     }
   }
 
-  private normalizeMonitorIds(ids: Iterable<number>): number[] {
-    if (ids instanceof Set) return [...ids];
-    const arr = Array.isArray(ids) ? ids as number[] : [...ids];
-    if (arr.length <= 1) return arr;
-    // Fast path: already sorted and unique
-    let isSortedUnique = true;
-    for (let i = 1; i < arr.length; i++) {
-      if (arr[i]! <= arr[i - 1]!) {
-        isSortedUnique = false;
-        break;
+  /** 从 Room 获取缓存的 monitor ID 数组, 避免每次重建和排序 */
+  private getCachedMonitorIds(room: Room): number[] {
+    const cached = this.cachedMonitorIds.get(room);
+    const currentIds = room.monitorIds();
+    if (cached) {
+      // 快速版本检查：monitor 数量变化意味着需要更新
+      if (cached.ids.length === currentIds.length && cached.version === this.monitorIdVersion) {
+        return cached.ids;
       }
     }
-    if (isSortedUnique) return arr;
-    return [...new Set(arr)].sort((a, b) => a - b);
+    // 缓存 miss 或版本过期, 重建
+    const ids = currentIds.length === 0 ? currentIds : [...currentIds];
+    this.monitorIdVersion++;
+    this.cachedMonitorIds.set(room, { ids, version: this.monitorIdVersion });
+    return ids;
   }
 
   private liveMonitorIds(targets: MonitorTargets): number[] {
     const { ids, room } = targets;
+    // 快速路径：monitor 数量未变, 直接返回缓存数组
+    if (ids.length === room.monitors.size) return ids;
     let filtered: number[] | null = null;
     for (let i = 0; i < ids.length; i++) {
       const id = ids[i]!;

@@ -21,7 +21,7 @@ import type { ServerState } from "../core/state.js";
 import type { Chart, RecordData } from "../core/types.js";
 import { User } from "../game/user.js";
 import { tl, type Language } from "../utils/l10n.js";
-import { chartCache } from "../utils/cache.js";
+import { chartCache, recordCache } from "../utils/cache.js";
 import { logRoomInfo, logRoomMark, logRoomWarn } from "../utils/logUtils.js";
 import { MonitorBuffer } from "./session/monitorBuffer.js";
 import {
@@ -485,20 +485,27 @@ export class Session {
     if (stream) stream.close();
 
     const user = this.user;
+    if (!user) {
+      await this.state.mutex.runExclusive(async () => {
+        this.state.sessions.delete(this.id);
+      });
+      this.state.logger.log("DEBUG", tl(this.state.serverLang, "log-disconnect", { id: this.id, who: "" }), undefined, { isConnectionLog: true });
+      return;
+    }
+
     let detachedUserSession = false;
     await this.state.mutex.runExclusive(async () => {
       this.state.sessions.delete(this.id);
-      if (!user) return;
       if (user.session === this) {
         user.setSession(null);
         detachedUserSession = true;
       }
     });
 
-    const who = user ? tl(this.state.serverLang, "log-disconnect-user", { user: user.name }) : "";
-    this.state.logger.log("DEBUG", tl(this.state.serverLang, "log-disconnect", { id: this.id, who }), undefined, { userId: user?.id, isConnectionLog: true });
+    const who = tl(this.state.serverLang, "log-disconnect-user", { user: user.name });
+    this.state.logger.log("DEBUG", tl(this.state.serverLang, "log-disconnect", { id: this.id, who }), undefined, { userId: user.id, isConnectionLog: true });
 
-    if (user && detachedUserSession && !this.preserveRoomOnLost && user.session === null) await this.dangleUser(user);
+    if (detachedUserSession && !this.preserveRoomOnLost && user.session === null) await this.dangleUser(user);
   }
 
   async adminDisconnect(opts: { preserveRoom: boolean }): Promise<void> {
@@ -767,11 +774,12 @@ export class Session {
   }
 
   private async fetchChart(user: User, id: number): Promise<Chart> {
-    // 先尝试从缓存获取
-    const cached = await chartCache.get(id);
+    // 热路径优化：优先使用同步缓存读取，避免 microtask 开销
+    let cached = chartCache.getSync(id);
+    if (cached) return cached;
+    cached = await chartCache.get(id);
     if (cached) return cached;
 
-    // 缓存未命中，从远程获取并写回缓存
     const chart = await fetchPhiraChart({
       endpoint: this.getPhiraApiEndpoint(),
       id,
@@ -783,11 +791,16 @@ export class Session {
   }
 
   private async fetchRecord(user: User, id: number): Promise<RecordData> {
-    return fetchPhiraRecord({
+    const cached = await recordCache.get(id);
+    if (cached) return cached;
+
+    const record = await fetchPhiraRecord({
       endpoint: this.getPhiraApiEndpoint(),
       id,
       proxy: this.state.config.outbound_proxy,
       errorFactory: () => new Error(user.lang.format("record-fetch-failed"))
     });
+    await recordCache.set(id, record);
+    return record;
   }
 }

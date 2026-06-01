@@ -86,6 +86,10 @@ export class Cache<K extends string | number, V> {
   private saveTimer: NodeJS.Timeout | null = null;
   private pendingSave = false;
   private readonly fileName: string;
+  /** In-flight promise 去重：并发请求同一 key 时共享同一个 Promise */
+  private readonly inFlight = new Map<K, Promise<V>>();
+  /** LRU 采样大小 */
+  private static readonly LRU_SAMPLE_SIZE = 5;
 
   constructor(options: CacheOptions<K>) {
     this.fileName = options.fileName;
@@ -237,14 +241,25 @@ export class Cache<K extends string | number, V> {
     }
 
     await this.ensureInitialized();
+    return this.getFromMemory(key);
+  }
 
+  /**
+   * 同步获取缓存值（仅内存模式，不触发 microtask）
+   * Redis 模式下返回 null（调用方需 fallback 到 get()）
+   */
+  getSync(key: K): V | null {
+    if (this.useRedis) return null;
+    return this.getFromMemory(key);
+  }
+
+  private getFromMemory(key: K): V | null {
     const entry = this.memoryCache.get(key);
     if (!entry) {
       this._stats.misses++;
       return null;
     }
 
-    // 检查是否过期
     if (this.ttl && Date.now() - entry.cachedAt > this.ttl) {
       this.memoryCache.delete(key);
       this._approxSize--;
@@ -252,10 +267,14 @@ export class Cache<K extends string | number, V> {
       return null;
     }
 
-    // 更新最后访问时间（LRU）
     entry.lastAccessedAt = Date.now();
     this._stats.hits++;
     return entry.value;
+  }
+
+  /** 获取当前内存缓存中的所有 key（用于 LRU 采样） */
+  private memoryCacheKeys(): K[] {
+    return [...this.memoryCache.keys()];
   }
 
   async set(key: K, value: V): Promise<void> {
@@ -286,16 +305,26 @@ export class Cache<K extends string | number, V> {
       this._approxSize++;
     }
 
-    // LRU 淘汰：移除最久未访问的
-    if (this.memoryCache.size > this.maxMemorySize) {
+    // LRU 淘汰：随机采样 N 个条目，淘汰其中最久未访问的（O(1) 近似 LRU）
+    if (this.memoryCache.size > this.maxMemorySize && this.memoryCache.size > 0) {
+      const keys = this.memoryCacheKeys();
+      const sampleSize = Math.min(Cache.LRU_SAMPLE_SIZE, keys.length);
       let oldestKey: K | undefined;
       let oldestTime = Infinity;
-      for (const [k, entry] of this.memoryCache.entries()) {
-        if (entry.lastAccessedAt < oldestTime) {
+
+      // Fisher-Yates 随机采样前 sampleSize 个
+      for (let i = 0; i < sampleSize; i++) {
+        const j = i + Math.floor(Math.random() * (keys.length - i));
+        const key = keys[j]!;
+        keys[j] = keys[i]!;
+        keys[i] = key;
+        const entry = this.memoryCache.get(key);
+        if (entry && entry.lastAccessedAt < oldestTime) {
           oldestTime = entry.lastAccessedAt;
-          oldestKey = k;
+          oldestKey = key;
         }
       }
+
       if (oldestKey !== undefined) {
         this.memoryCache.delete(oldestKey);
         this._approxSize--;
@@ -307,14 +336,28 @@ export class Cache<K extends string | number, V> {
 
   /**
    * 获取缓存值，如果不存在则通过 factory 生成并写入缓存
+   * 自动去重：并发请求同一 key 时共享同一个 factory Promise
    */
   async getOrSet(key: K, factory: () => V | Promise<V>): Promise<V> {
     const cached = await this.get(key);
     if (cached !== null) return cached;
 
-    const value = await factory();
-    await this.set(key, value);
-    return value;
+    // in-flight 去重：同一 key 的并发请求共享同一个 Promise
+    const existing = this.inFlight.get(key);
+    if (existing) return existing;
+
+    const promise = (async () => {
+      try {
+        const value = await factory();
+        await this.set(key, value);
+        return value;
+      } finally {
+        this.inFlight.delete(key);
+      }
+    })();
+
+    this.inFlight.set(key, promise);
+    return promise;
   }
 
   async has(key: K): Promise<boolean> {
