@@ -116,10 +116,23 @@ export class BinaryReader {
     }
   }
 
+  /**
+   * 在 number 域解码 LEB128 无符号整数，避免 BigInt 堆分配。
+   *
+   * 热路径：每个入站数组/字符串/Map 的长度前缀都经过这里。使用「累乘因子」而非
+   * 位移，规避 32 位符号位陷阱；超过 MAX_SAFE_INTEGER 时抛出与原实现一致的错误。
+   */
   readUlebNumber(): number {
-    const v = this.readUlebBigInt();
-    if (v > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error("binary-length-too-large");
-    return Number(v);
+    let result = 0;
+    let mul = 1;
+    while (true) {
+      const byte = this.readU8();
+      result += (byte & 0x7f) * mul;
+      if ((byte & 0x80) === 0) break;
+      mul *= 128;
+    }
+    if (result > Number.MAX_SAFE_INTEGER) throw new Error("binary-length-too-large");
+    return result;
   }
 
   readString(): string {
@@ -306,6 +319,21 @@ export class BinaryWriter {
    * 适用于编码长度等通常较小的数值。
    */
   writeUleb(v: number | bigint): void {
+    // number 快路径：避免 BigInt 堆分配（热路径：数组/字符串长度前缀、触摸点数组长度）
+    if (typeof v === "number" && v >= 0 && v <= 0xffffffff) {
+      this.ensure(5);
+      const buf = this.buf;
+      let x = v >>> 0;
+      let p = this.pos;
+      while (x >= 0x80) {
+        buf[p++] = (x & 0x7f) | 0x80;
+        x >>>= 7;
+      }
+      buf[p++] = x;
+      this.pos = p;
+      return;
+    }
+    // 慢路径：bigint 或超 32 位的 number
     let x = typeof v === "bigint" ? v : BigInt(v);
     while (true) {
       let byte = Number(x & 0x7fn);
@@ -318,9 +346,12 @@ export class BinaryWriter {
 
   /** 写入 UTF-8 字符串（先写 LEB128 长度，再写内容） */
   writeString(s: string): void {
-    const buf = Buffer.from(s, "utf8");
-    this.writeUleb(buf.length);
-    this.writeBuffer(buf);
+    // 直接写入内部 buffer，省去中间 Buffer.from 的分配与拷贝
+    const n = Buffer.byteLength(s, "utf8");
+    this.writeUleb(n);
+    this.ensure(n);
+    this.buf.write(s, this.pos, "utf8");
+    this.pos += n;
   }
 
   /**
@@ -329,10 +360,12 @@ export class BinaryWriter {
    * @throws 当字符串超过 maxLen 时抛出 "binary-string-too-long"
    */
   writeVarchar(maxLen: number, s: string): void {
-    const buf = Buffer.from(s, "utf8");
-    if (buf.length > maxLen) throw new Error("binary-string-too-long");
-    this.writeUleb(buf.length);
-    this.writeBuffer(buf);
+    const n = Buffer.byteLength(s, "utf8");
+    if (n > maxLen) throw new Error("binary-string-too-long");
+    this.writeUleb(n);
+    this.ensure(n);
+    this.buf.write(s, this.pos, "utf8");
+    this.pos += n;
   }
 
   /** 写入 Option<T>（null 编码为 false，非 null 编码为 true + 值） */

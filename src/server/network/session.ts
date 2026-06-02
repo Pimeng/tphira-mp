@@ -124,7 +124,7 @@ async function processDangleTimeout(timeout: DangleTimeout): Promise<void> {
       for (const id of room2.monitorIds()) {
         const u = state.users.get(id);
         const session = u?.session;
-        if (session) void session.trySendPrepared(prepared).catch(NOOP);
+        if (session) session.trySendPreparedFast(prepared);
       }
     },
     pickRandomUserId: (ids: number[]) => pickRandom(ids),
@@ -321,6 +321,18 @@ export class Session {
       this.state.logger.log("DEBUG", `[${this.id}] Send failed: ${msg}`, undefined, { userId: this.user?.id });
       await this.markLost();
     }
+  }
+
+  /**
+   * 同步、无 Promise 的 fire-and-forget 发送（实时游戏数据广播热路径）
+   *
+   * 直接把预编码帧同步入队到底层 Stream 批量队列，不返回 Promise、不分配微任务，
+   * 用于「一条命令分发给 N 个观战者」的扇出场景以消除每接收者的 Promise 开销。
+   * 投递仍走与 trySendPrepared 相同的批量 flush 机制；连接断开/socket 错误由
+   * Stream 与 Session 的 socket 事件监听统一处理，这里无需 try/catch 与 markLost。
+   */
+  trySendPreparedFast(prepared: PreparedServerCommand): void {
+    this.stream?.enqueueFrame(prepared.frame, prepared.highPriority);
   }
 
   async onCommand(cmd: ClientCommand): Promise<void> {
@@ -707,7 +719,7 @@ export class Session {
     for (const id of ids) {
       const u = this.state.users.get(id);
       const session = u?.session;
-      if (session) void session.trySendPrepared(prepared).catch(NOOP);
+      if (session) session.trySendPreparedFast(prepared);
     }
   }
 

@@ -249,6 +249,31 @@ export class Stream<S, R> {
     }
   }
 
+  /**
+   * 同步入队帧（fire-and-forget，无 Promise 分配）
+   *
+   * 用于实时游戏数据（Touches/Judges）等不需要等待发送完成、且追求最低开销的
+   * 广播路径。与 `sendFrame` 不同，本方法不返回 Promise——避免在「一条命令分发给
+   * N 个观战者」的扇出热路径上，为每个接收者都分配 Promise 与微任务。
+   *
+   * 帧仍进入同一批量队列并复用既有的 flush 机制（含发送超时与顺序保证），
+   * 因此投递语义与 `sendFrame` 完全一致；区别仅在于调用方不再 await。
+   * 连接已关闭时静默丢弃（fire-and-forget 语义）。
+   */
+  enqueueFrame(frame: Buffer, highPriority = false): void {
+    if (this.closed) return;
+    this.sendBatch.push(frame);
+    if (highPriority || this.sendBatch.length >= MAX_BATCH_SIZE) {
+      void this.flushSendBatch().catch(NOOP);
+      return;
+    }
+    if (!this.sendBatchTimer) {
+      this.sendBatchTimer = setTimeout(() => {
+        void this.flushSendBatch().catch(NOOP);
+      }, BATCH_SEND_DELAY_MS);
+    }
+  }
+
   async flushSendBatch(): Promise<void> {
     if (this.sendBatchTimer) {
       clearTimeout(this.sendBatchTimer);
