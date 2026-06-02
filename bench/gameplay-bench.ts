@@ -273,7 +273,12 @@ async function run(): Promise<void> {
   let messagesFailed = 0;
   const errorSummary = new Map<string, number>();
 
-  const endTime = startTime + args.duration * 1000;
+  // 发送窗口从「setup 完成后」开始计时，而非整个进程启动时（startTime）。
+  // 否则在弱网/丢包场景（netem weak/mobile/bad）下，串行的连接/认证/建房/加入/
+  // 选谱/ready 往返被网络延迟与重传放大，setup 耗时可能超过整个 duration，
+  // 导致 endTime 在发送阶段开始前就已过期，每个 sender 立即 return → 0 消息发送。
+  const sendPhaseStart = Date.now();
+  const endTime = sendPhaseStart + args.duration * 1000;
   const senders: NodeJS.Timeout[] = [];
 
   const allSenders = rooms
@@ -345,6 +350,7 @@ async function run(): Promise<void> {
 
   // 清理定时器
   for (const t of senders) clearInterval(t);
+  const sendPhaseEnd = Date.now();
 
   console.log("Leaving rooms and closing connections...");
   await Promise.all(
@@ -364,7 +370,9 @@ async function run(): Promise<void> {
     : undefined;
 
   const actualDurationSec = (endedAt - startTime) / 1000;
-  const messagesPerSecond = actualDurationSec > 0 ? messagesSent / actualDurationSec : 0;
+  // 吞吐基于实际发送窗口（setup 完成后），不被慢速 setup 稀释
+  const sendDurationSec = (sendPhaseEnd - sendPhaseStart) / 1000;
+  const messagesPerSecond = sendDurationSec > 0 ? messagesSent / sendDurationSec : 0;
 
   const sortedLatencies = [...sendLatencies].sort((a, b) => a - b);
   const p95Index = Math.floor(sortedLatencies.length * 0.95);
