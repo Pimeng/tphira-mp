@@ -14,8 +14,26 @@ permissions:
   contents: read
 
 jobs:
-  # 阶段 1：快速单元测试（纯逻辑，无服务端启动）
-  test-unit:
+  # 类型检查 + 构建：vitest 走 esbuild 不做类型检查，类型错误只能靠 tsc 捕获。
+  # 与测试并行运行，互不阻塞。
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+
+    - name: 准备 Node.js 和依赖
+      uses: ./.github/actions/setup-node-pnpm
+
+    - name: 类型检查（含测试代码）
+      run: pnpm run typecheck
+
+    - name: 构建产物
+      run: pnpm run build
+
+  # 测试套件：直接跑真实全量测试（含起服务端+客户端的集成用例）。
+  # perf（零断言手动脚本）与 memory-leak（需 --expose-gc）已由 vitest.config.ts 全局排除。
+  test:
     runs-on: ubuntu-latest
     steps:
     - name: 检出代码
@@ -33,71 +51,19 @@ jobs:
           vitest-cache-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
           vitest-cache-${{ runner.os }}-
 
-    - name: 运行单元测试
-      run: >
-        pnpm vitest run
-        --exclude 'test/game/**'
-        --exclude 'test/network/protocol*'
-        --exclude 'test/network/websocket*'
-        --exclude 'test/network/client-reconnect*'
-        --exclude 'test/network/stream-priority*'
-        --exclude 'test/network/outbound-proxy*'
-        --exclude 'test/network/phira-api-endpoint*'
-        --exclude 'test/config/config*'
-        --exclude 'test/config/http-config*'
+    - name: 运行测试
+      run: pnpm test
 
-    - name: 上传单元测试结果
+    - name: 上传测试结果
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: test-results-unit
+        name: test-results
         path: test-results/
         if-no-files-found: ignore
 
-  # 阶段 2：集成测试（需服务端启动）
-  test-integration:
-    needs: [test-unit]
-    runs-on: ubuntu-latest
-    steps:
-    - name: 检出代码
-      uses: actions/checkout@v4
-
-    - name: 准备 Node.js 和依赖
-      uses: ./.github/actions/setup-node-pnpm
-
-    - name: 缓存 vitest 编译缓存
-      uses: actions/cache@v4
-      with:
-        path: node_modules/.vitest
-        key: vitest-cache-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
-        restore-keys: |
-          vitest-cache-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
-          vitest-cache-${{ runner.os }}-
-
-    - name: 运行集成测试
-      run: >
-        pnpm vitest run
-        test/game
-        test/network/protocol
-        test/network/websocket
-        test/network/client-reconnect
-        test/network/stream-priority
-        test/network/outbound-proxy
-        test/network/phira-api-endpoint
-        test/config/config
-        test/config/http-config
-
-    - name: 上传集成测试结果
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: test-results-integration
-        path: test-results/
-        if-no-files-found: ignore
-
-  # 阶段 3：内存泄漏回归测试
+  # 内存泄漏回归测试（需 --expose-gc，专用串行配置，最慢）。与其他 job 并行运行。
   memory-leak:
-    needs: [test-unit, test-integration]
     runs-on: ubuntu-latest
     steps:
     - name: 检出代码
@@ -108,5 +74,3 @@ jobs:
 
     - name: 运行内存泄漏测试
       run: pnpm test:memory
-      env:
-        NODE_OPTIONS: --expose-gc

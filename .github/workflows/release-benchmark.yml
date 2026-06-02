@@ -263,9 +263,6 @@ jobs:
         run: |
           ./node_modules/.bin/tsx bench/generate-performance-report.ts || echo "Warning: report generation failed."
 
-      - name: Package results
-        run: tar -czf benchmark-results.tar.gz bench-results/ performance-report.md || true
-
       - name: Upload final benchmark results
         uses: actions/upload-artifact@v4
         with:
@@ -273,7 +270,20 @@ jobs:
           path: |
             bench-results/
             performance-report.md
-            benchmark-results.tar.gz
+          if-no-files-found: ignore
+
+      # 仅 release 需要单文件压缩包作为 Release 附件；与上面可浏览的散文件分开，
+      # 避免同一 artifact 内既有散文件又有内容相同的 tarball（重复打包）。
+      - name: Package release archive
+        if: github.event_name == 'release'
+        run: tar -czf benchmark-results.tar.gz bench-results/ performance-report.md || true
+
+      - name: Upload release archive
+        if: github.event_name == 'release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-archive
+          path: benchmark-results.tar.gz
           if-no-files-found: ignore
 
       - name: Write Job Summary
@@ -358,10 +368,10 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Download benchmark artifact
+      - name: Download benchmark archive
         uses: actions/download-artifact@v4
         with:
-          name: benchmark-results
+          name: benchmark-archive
 
       - name: Upload to release assets
         uses: softprops/action-gh-release@v2

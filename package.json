@@ -2,13 +2,14 @@
   "name": "tphira-mp",
   "author": "Pimeng",
   "license": "AGPL-3.0",
-  "version": "1.10.1",
+  "version": "1.10.2",
   "type": "module",
   "engines": {
     "node": ">=24"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
     "dev": "tsx src/server/main.ts",
     "start": "node dist/server/main.js",
     "bundle:server": "node tools/bundle-server.mjs",
