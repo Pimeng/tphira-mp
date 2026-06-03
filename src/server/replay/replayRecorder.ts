@@ -74,7 +74,7 @@ export class ReplayRecorder {
     const roomKey = roomIdToString(roomId);
     const chartId = typeof chart === "number" ? chart : chart.id;
     const chartName = typeof chart === "number" ? "" : chart.name;
-    const userIdsText = users.map((it) => typeof it === "number" ? String(it) : String(it.id)).join(",");
+    const userIdsText = users.map((it) => (typeof it === "number" ? String(it) : String(it.id))).join(",");
     this.log("DEBUG", `startRoom: roomKey=${roomKey}, chartId=${chartId}, userIds=[${userIdsText}]`);
     const existing = this.keysByRoom.get(roomKey);
     if (existing && existing.size > 0) {
@@ -132,7 +132,10 @@ export class ReplayRecorder {
     for (const key of keys) {
       const it = this.inflightByKey.get(key);
       if (!it) continue;
-      this.log("DEBUG", `endRoom stats: roomKey=${roomKey}, userId=${it.userId}, recordId=${it.recordId}, touchFrames=${it.touchFrames.length}, judgeEvents=${it.judgeEvents.length}`);
+      this.log(
+        "DEBUG",
+        `endRoom stats: roomKey=${roomKey}, userId=${it.userId}, recordId=${it.recordId}, touchFrames=${it.touchFrames.length}, judgeEvents=${it.judgeEvents.length}`
+      );
       this.inflightByKey.delete(key);
       tasks.push(this.closeInFlight(it).then(() => this.fileInfo(it)));
     }

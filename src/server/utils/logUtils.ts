@@ -68,5 +68,3 @@ export function logRoomWarn(
 ): void {
   logRoom(logger, "WARN", lang, roomId, key, params, context);
 }
-
-

@@ -121,14 +121,17 @@ export class ServerState {
   readonly tempAdminTokens = new Map<string, { ip: string; expiresAt: number; banned: boolean }>();
 
   /** CLI 提权批准会话表（sessionKey -> 批准状态） */
-  readonly cliApprovalSessions = new Map<string, {
-    ip: string;
-    expiresAt: number;
-    status: "pending" | "approved" | "denied";
-    token?: string;
-    tokenExpiresAt?: number;
-    requestedAt: number;
-  }>();
+  readonly cliApprovalSessions = new Map<
+    string,
+    {
+      ip: string;
+      expiresAt: number;
+      status: "pending" | "approved" | "denied";
+      token?: string;
+      tokenExpiresAt?: number;
+      requestedAt: number;
+    }
+  >();
 
   // ========== 自动上传配置 ==========
 

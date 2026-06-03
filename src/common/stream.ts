@@ -98,7 +98,7 @@ export class Stream<S, R> {
     this.onError = onError;
   }
 
-/**
+  /**
    * 创建新的 Stream 实例
    *
    * 完成协议版本协商：
@@ -127,65 +127,71 @@ export class Stream<S, R> {
     opts.socket.setKeepAlive(true, 60000);
 
     // 协议版本协商（带超时保护，防止恶意连接挂起）
-    const { version, initialBuffer } = await new Promise<{ version: number; initialBuffer: Buffer }>((resolve, reject) => {
-      let timeoutTimer: NodeJS.Timeout | null = null;
-      const cleanup = (): void => {
-        if (timeoutTimer) {
-          clearTimeout(timeoutTimer);
-          timeoutTimer = null;
-        }
-        opts.socket.off("data", onData);
-        opts.socket.off("error", onError);
-        opts.socket.off("close", onClose);
-      };
+    const { version, initialBuffer } = await new Promise<{ version: number; initialBuffer: Buffer }>(
+      (resolve, reject) => {
+        let timeoutTimer: NodeJS.Timeout | null = null;
+        const cleanup = (): void => {
+          if (timeoutTimer) {
+            clearTimeout(timeoutTimer);
+            timeoutTimer = null;
+          }
+          opts.socket.off("data", onData);
+          opts.socket.off("error", onError);
+          opts.socket.off("close", onClose);
+        };
 
-      const onData = (buf: Buffer) => {
-        cleanup();
-        if (buf.length === 0) {
+        const onData = (buf: Buffer) => {
+          cleanup();
+          if (buf.length === 0) {
+            reject(new Error("net-connection-closed"));
+            return;
+          }
+          const v = buf[0];
+          const rest = buf.subarray(1);
+          resolve({ version: v, initialBuffer: rest });
+        };
+
+        const onError = (err: Error) => {
+          cleanup();
+          reject(err);
+        };
+
+        const onClose = () => {
+          cleanup();
           reject(new Error("net-connection-closed"));
+        };
+
+        if (opts.versionToSend !== undefined) {
+          const v = opts.versionToSend & 0xff;
+          opts.socket.write(Buffer.from([v]), (err) => {
+            if (err) {
+              cleanup();
+              reject(err);
+            } else {
+              resolve({ version: v, initialBuffer: Buffer.alloc(0) });
+            }
+          });
           return;
         }
-        const v = buf[0];
-        const rest = buf.subarray(1);
-        resolve({ version: v, initialBuffer: rest });
-      };
 
-      const onError = (err: Error) => {
-        cleanup();
-        reject(err);
-      };
+        opts.socket.on("data", onData);
+        opts.socket.once("error", onError);
+        opts.socket.once("close", onClose);
 
-      const onClose = () => {
-        cleanup();
-        reject(new Error("net-connection-closed"));
-      };
-
-      if (opts.versionToSend !== undefined) {
-        const v = opts.versionToSend & 0xff;
-        opts.socket.write(Buffer.from([v]), (err) => {
-          if (err) {
-            cleanup();
-            reject(err);
-          } else {
-            resolve({ version: v, initialBuffer: Buffer.alloc(0) });
-          }
-        });
-        return;
+        // 设置协商超时
+        timeoutTimer = setTimeout(() => {
+          cleanup();
+          opts.socket.destroy();
+          reject(new Error("net-handshake-timeout"));
+        }, Stream.HANDSHAKE_TIMEOUT_MS);
       }
+    );
 
-      opts.socket.on("data", onData);
-      opts.socket.once("error", onError);
-      opts.socket.once("close", onClose);
-
-      // 设置协商超时
-      timeoutTimer = setTimeout(() => {
-        cleanup();
-        opts.socket.destroy();
-        reject(new Error("net-handshake-timeout"));
-      }, Stream.HANDSHAKE_TIMEOUT_MS);
-    });
-
-    if (opts.versionToSend === undefined && opts.expectedVersion !== undefined && version !== (opts.expectedVersion & 0xff)) {
+    if (
+      opts.versionToSend === undefined &&
+      opts.expectedVersion !== undefined &&
+      version !== (opts.expectedVersion & 0xff)
+    ) {
       opts.socket.destroy();
       throw new Error(`net-unsupported-protocol-version:${version}`);
     }

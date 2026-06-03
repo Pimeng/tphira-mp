@@ -82,7 +82,11 @@ async function main(): Promise<void> {
    * @param errorKey - 解析失败时的本地化错误消息键
    * @returns 解析后的值，若 raw 为 undefined 则返回 undefined
    */
-  const requireParse = <T>(raw: string | undefined, parser: (v: unknown) => T | undefined, errorKey: string): T | undefined => {
+  const requireParse = <T>(
+    raw: string | undefined,
+    parser: (v: unknown) => T | undefined,
+    errorKey: string
+  ): T | undefined => {
     if (raw === undefined) return undefined;
     const out = parser(raw);
     if (out === undefined) throw new Error(tl(lang, errorKey));

@@ -43,7 +43,13 @@ import { NOOP } from "../../common/utils.js";
 import { isHighPriorityServerCommand } from "../network/serverCommandTransport.js";
 
 /** 启动服务器选项 */
-export type StartServerOptions = { host?: string; port?: number; config?: Partial<ServerConfig>; configPath?: string; watchConfig?: boolean };
+export type StartServerOptions = {
+  host?: string;
+  port?: number;
+  config?: Partial<ServerConfig>;
+  configPath?: string;
+  watchConfig?: boolean;
+};
 
 /** 运行中的服务器实例 */
 export type RunningServer = {
@@ -226,10 +232,14 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
       }
     }
 
-    logger.debug(tl(state.serverLang, "log-new-connection", {
-      id,
-      remote: `${remoteIp}:${remotePort}`
-    }), undefined, { ip: remoteIp, isConnectionLog: true });
+    logger.debug(
+      tl(state.serverLang, "log-new-connection", {
+        id,
+        remote: `${remoteIp}:${remotePort}`
+      }),
+      undefined,
+      { ip: remoteIp, isConnectionLog: true }
+    );
 
     // 创建新会话
     const session = new Session({ id, socket, state, remoteIp });
@@ -246,13 +256,19 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
           await session.onCommand(cmd);
         },
         onError: (phase, err) => {
-          logger.warn(`[${id}] Stream ${phase} error: ${err.message}`, undefined, { ip: remoteIp, userId: session.user?.id });
+          logger.warn(`[${id}] Stream ${phase} error: ${err.message}`, undefined, {
+            ip: remoteIp,
+            userId: session.user?.id
+          });
         }
       });
 
       session.bindStream(stream);
       state.sessions.set(id, session);
-      logger.debug(tl(state.serverLang, "log-handshake-ok", { id, version: String(stream.version) }), undefined, { ip: remoteIp, isConnectionLog: true });
+      logger.debug(tl(state.serverLang, "log-handshake-ok", { id, version: String(stream.version) }), undefined, {
+        ip: remoteIp,
+        isConnectionLog: true
+      });
     } catch (e) {
       // 握手失败：解析错误原因并记录日志，然后断开连接
       const msg = e instanceof Error ? e.message : String(e);
@@ -265,7 +281,10 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
           return msg;
         }
       })();
-      logger.warn(tl(state.serverLang, "log-handshake-failed", { id, reason }), undefined, { ip: remoteIp, isConnectionLog: true });
+      logger.warn(tl(state.serverLang, "log-handshake-failed", { id, reason }), undefined, {
+        ip: remoteIp,
+        isConnectionLog: true
+      });
       socket.destroy();
       activeSockets.delete(socket);
     }
@@ -325,7 +344,10 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
     });
 
     // 根据配置启动 HTTP/WebSocket 服务
-    httpService = mergedCfg.http_service === true ? await startHttpService({ state, host: listenHost, port: mergedCfg.http_port ?? 12347 }) : null;
+    httpService =
+      mergedCfg.http_service === true
+        ? await startHttpService({ state, host: listenHost, port: mergedCfg.http_port ?? 12347 })
+        : null;
 
     // 设置 WebSocket 服务引用，建立服务器内部与 HTTP 服务的连接
     if (httpService) {
@@ -358,19 +380,24 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
   // 输出服务器启动信息
   const addr = server.address() as net.AddressInfo;
   logger.mark(tl(state.serverLang, "log-server-version", { version }));
-  logger.mark(tl(state.serverLang, "log-runtime-env", {
-    platform: `${process.platform}_${process.arch}`,
-    node: formatNodeVersion(process.version)
-  }));
+  logger.mark(
+    tl(state.serverLang, "log-runtime-env", {
+      platform: `${process.platform}_${process.arch}`,
+      node: formatNodeVersion(process.version)
+    })
+  );
   logger.mark(tl(state.serverLang, "log-server-listen", { addr: formatListenHostPort(addr.address, addr.port) }));
   if (httpService) {
     const httpAddr = httpService.address();
-    logger.mark(tl(state.serverLang, "log-http-listen", { addr: formatListenHostPort(httpAddr.address, httpAddr.port) }));
+    logger.mark(
+      tl(state.serverLang, "log-http-listen", { addr: formatListenHostPort(httpAddr.address, httpAddr.port) })
+    );
   }
   logger.mark(tl(state.serverLang, "log-server-name", { name: serverName }));
 
   // 启动 CLI 控制台（用于服务器管理命令）
-  const broadcastRoomAll = (roomId: RoomId, cmd: ServerCommand): Promise<void> => broadcastRoomAllImpl(state, roomId, cmd);
+  const broadcastRoomAll = (roomId: RoomId, cmd: ServerCommand): Promise<void> =>
+    broadcastRoomAllImpl(state, roomId, cmd);
   const stopCli = startCli({ state, logger, broadcastRoomAll, pickRandomUserId });
 
   // 返回运行中的服务器实例
@@ -417,7 +444,11 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
           logger.warn(`Server close timed out or failed: ${err instanceof Error ? err.message : String(err)}`);
           // 强制销毁所有活跃连接
           for (const socket of activeSockets) {
-            try { socket.destroy(); } catch { /* ignore */ }
+            try {
+              socket.destroy();
+            } catch {
+              /* ignore */
+            }
           }
         });
         logger.mark(tl(state.serverLang, "log-server-stopped"));

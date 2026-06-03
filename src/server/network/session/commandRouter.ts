@@ -72,10 +72,7 @@ type CommandContext = {
  *
  * @returns 需要回复给客户端的命令,或 null 表示无需回复
  */
-export async function processClientCommand(
-  ctx: CommandContext,
-  cmd: ClientCommand
-): Promise<ServerCommand | null> {
+export async function processClientCommand(ctx: CommandContext, cmd: ClientCommand): Promise<ServerCommand | null> {
   const { state, user } = ctx;
 
   switch (cmd.type) {
@@ -87,10 +84,18 @@ export async function processClientCommand(
         type: "Chat",
         result: await ctx.errToStr(async () => {
           const room = ctx.requireRoom(user);
-          logRoomInfo(state.logger, state.serverLang, room.id, "log-user-chat", { user: user.name }, { userId: user.id });
+          logRoomInfo(
+            state.logger,
+            state.serverLang,
+            room.id,
+            "log-user-chat",
+            { user: user.name },
+            { userId: user.id }
+          );
           // 限制聊天消息长度，防止恶意客户端发送超大消息
           const MAX_CHAT_LENGTH = 500;
-          const rawContent = state.config.chat_enabled === false ? tl(state.serverLang, "chat-disabled-by-server") : cmd.message;
+          const rawContent =
+            state.config.chat_enabled === false ? tl(state.serverLang, "chat-disabled-by-server") : cmd.message;
           const content = rawContent.length > MAX_CHAT_LENGTH ? rawContent.slice(0, MAX_CHAT_LENGTH) : rawContent;
           await room.sendAs((c) => ctx.broadcastRoom(room, c), user, content, state.serverLang);
           return EMPTY_RECORD;
@@ -108,7 +113,11 @@ export async function processClientCommand(
       if (state.logger.isLevelEnabled("DEBUG")) {
         state.logger.log(
           "DEBUG",
-          tl(state.serverLang, "log-user-touches", { user: user.name, room: room.id, count: String(cmd.frames.length) }),
+          tl(state.serverLang, "log-user-touches", {
+            user: user.name,
+            room: room.id,
+            count: String(cmd.frames.length)
+          }),
           { frames: cmd.frames },
           { userId: user.id }
         );
@@ -163,7 +172,14 @@ export async function processClientCommand(
         result: await ctx.errToStr(async () => {
           const room = ctx.requireRoom(user);
           const suffix = user.monitor ? tl(state.serverLang, "label-monitor-suffix") : "";
-          logRoomMark(state.logger, state.serverLang, room.id, "log-room-left", { user: user.name, suffix }, { userId: user.id });
+          logRoomMark(
+            state.logger,
+            state.serverLang,
+            room.id,
+            "log-room-left",
+            { user: user.name, suffix },
+            { userId: user.id }
+          );
           const shouldDrop = await room.onUserLeave({
             user,
             ...ctx.makeRoomCallbacks(room),
@@ -188,7 +204,14 @@ export async function processClientCommand(
           const room = ctx.requireRoom(user);
           room.checkHost(user);
           room.locked = cmd.lock;
-          logRoomMark(state.logger, state.serverLang, room.id, "log-room-lock", { user: user.name, lock: cmd.lock ? "true" : "false" }, { userId: user.id });
+          logRoomMark(
+            state.logger,
+            state.serverLang,
+            room.id,
+            "log-room-lock",
+            { user: user.name, lock: cmd.lock ? "true" : "false" },
+            { userId: user.id }
+          );
           await ctx.broadcastRoomMessage(room, { type: "LockRoom", lock: cmd.lock });
           return EMPTY_RECORD;
         })
@@ -201,7 +224,14 @@ export async function processClientCommand(
           const room = ctx.requireRoom(user);
           room.checkHost(user);
           room.cycle = cmd.cycle;
-          logRoomMark(state.logger, state.serverLang, room.id, "log-room-cycle", { user: user.name, cycle: cmd.cycle ? "true" : "false" }, { userId: user.id });
+          logRoomMark(
+            state.logger,
+            state.serverLang,
+            room.id,
+            "log-room-cycle",
+            { user: user.name, cycle: cmd.cycle ? "true" : "false" },
+            { userId: user.id }
+          );
           await ctx.broadcastRoomMessage(room, { type: "CycleRoom", cycle: cmd.cycle });
           return EMPTY_RECORD;
         })
@@ -224,7 +254,12 @@ export async function processClientCommand(
             { userId: user.id }
           );
           // 并行发送 Message 广播和状态变更，不相互等待
-          const msgPromise = ctx.broadcastRoomMessage(room, { type: "SelectChart", user: user.id, name: chart.name, id: chart.id });
+          const msgPromise = ctx.broadcastRoomMessage(room, {
+            type: "SelectChart",
+            user: user.id,
+            name: chart.name,
+            id: chart.id
+          });
           const statePromise = room.onStateChange((c) => ctx.broadcastRoom(room, c));
           void room.notifyWebSocket(state);
           await Promise.all([msgPromise, statePromise]);
@@ -239,7 +274,14 @@ export async function processClientCommand(
           const room = ctx.requireRoom(user);
           room.validateStart(user);
           room.resetGameTime((id) => state.users.get(id));
-          logRoomMark(state.logger, state.serverLang, room.id, "log-room-request-start", { user: user.name }, { userId: user.id });
+          logRoomMark(
+            state.logger,
+            state.serverLang,
+            room.id,
+            "log-room-request-start",
+            { user: user.name },
+            { userId: user.id }
+          );
           const msgPromise = ctx.broadcastRoomMessage(room, { type: "GameStart", user: user.id });
           room.state = { type: "WaitForReady", started: new Set([user.id]) };
           const statePromise = room.onStateChange((c) => ctx.broadcastRoom(room, c));
@@ -259,7 +301,14 @@ export async function processClientCommand(
           if (room.state.type === "WaitForReady") {
             if (room.state.started.has(user.id)) throw new Error(user.lang.format("room-already-ready"));
             room.state.started.add(user.id);
-            logRoomInfo(state.logger, state.serverLang, room.id, "log-room-ready", { user: user.name }, { userId: user.id });
+            logRoomInfo(
+              state.logger,
+              state.serverLang,
+              room.id,
+              "log-room-ready",
+              { user: user.name },
+              { userId: user.id }
+            );
             const msgPromise = ctx.broadcastRoomMessage(room, { type: "Ready", user: user.id });
             void room.notifyWebSocket(state);
             await msgPromise;
@@ -278,14 +327,28 @@ export async function processClientCommand(
           if (room.state.type === "WaitForReady") {
             if (!room.state.started.delete(user.id)) throw new Error(user.lang.format("room-not-ready"));
             if (room.hostId === user.id) {
-              logRoomMark(state.logger, state.serverLang, room.id, "log-room-cancel-game", { user: user.name }, { userId: user.id });
+              logRoomMark(
+                state.logger,
+                state.serverLang,
+                room.id,
+                "log-room-cancel-game",
+                { user: user.name },
+                { userId: user.id }
+              );
               const msgPromise = ctx.broadcastRoomMessage(room, { type: "CancelGame", user: user.id });
               room.state = { type: "SelectChart" };
               const statePromise = room.onStateChange((c) => ctx.broadcastRoom(room, c));
               void room.notifyWebSocket(state);
               await Promise.all([msgPromise, statePromise]);
             } else {
-              logRoomInfo(state.logger, state.serverLang, room.id, "log-room-cancel-ready", { user: user.name }, { userId: user.id });
+              logRoomInfo(
+                state.logger,
+                state.serverLang,
+                room.id,
+                "log-room-cancel-ready",
+                { user: user.name },
+                { userId: user.id }
+              );
               const msgPromise = ctx.broadcastRoomMessage(room, { type: "CancelReady", user: user.id });
               void room.notifyWebSocket(state);
               await msgPromise;
@@ -321,7 +384,8 @@ export async function processClientCommand(
             if (room.state.aborted.has(user.id)) throw new Error(user.lang.format("room-game-aborted"));
             if (room.state.results.has(user.id)) throw new Error(user.lang.format("record-already-uploaded"));
             room.state.results.set(user.id, record);
-            if (state.replayEnabled && room.replayEligible) state.replayRecorder.setRecordId(room.id, user.id, record.id);
+            if (state.replayEnabled && room.replayEligible)
+              state.replayRecorder.setRecordId(room.id, user.id, record.id);
             void room.notifyWebSocket(state);
             await msgPromise;
             await ctx.checkRoomAllReady(room);
@@ -339,7 +403,14 @@ export async function processClientCommand(
             if (room.state.results.has(user.id)) throw new Error(user.lang.format("record-already-uploaded"));
             if (room.state.aborted.has(user.id)) throw new Error(user.lang.format("room-game-aborted"));
             room.state.aborted.add(user.id);
-            logRoomMark(state.logger, state.serverLang, room.id, "log-room-abort", { user: user.name }, { userId: user.id });
+            logRoomMark(
+              state.logger,
+              state.serverLang,
+              room.id,
+              "log-room-abort",
+              { user: user.name },
+              { userId: user.id }
+            );
             const msgPromise = ctx.broadcastRoomMessage(room, { type: "Abort", user: user.id });
             void room.notifyWebSocket(state);
             await msgPromise;

@@ -306,7 +306,11 @@ export function startWebSocketService(opts: { httpServer: http.Server; state: Se
     }
     // 批量清理断开的连接，避免遍历时修改 Map
     for (const ws of toRemove) {
-      try { ws.terminate(); } catch { /* ignore */ }
+      try {
+        ws.terminate();
+      } catch {
+        /* ignore */
+      }
       const c = clients.get(ws);
       if (c) {
         removeRoomSubscriber(c.roomId, ws);
@@ -383,7 +387,10 @@ export function startWebSocketService(opts: { httpServer: http.Server; state: Se
     broadcastAdminUpdate,
     close: async () => {
       clearInterval(heartbeatInterval);
-      if (adminUpdateTimer) { clearTimeout(adminUpdateTimer); adminUpdateTimer = null; }
+      if (adminUpdateTimer) {
+        clearTimeout(adminUpdateTimer);
+        adminUpdateTimer = null;
+      }
       for (const [ws] of clients) ws.close();
       clients.clear();
       adminClients.clear();

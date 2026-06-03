@@ -78,7 +78,11 @@ export async function tryHandleAdminConfigRoutes(ctx: RequestContext): Promise<b
       try {
         await rename(tmpPath, configPath);
       } catch {
-        try { await unlink(configPath); } catch { /* 文件可能不存在 */ }
+        try {
+          await unlink(configPath);
+        } catch {
+          /* 文件可能不存在 */
+        }
         await rename(tmpPath, configPath);
       }
       state.logger.info(`Replay config persisted: REPLAY_ENABLED=${enabled}`);

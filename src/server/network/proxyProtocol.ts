@@ -3,12 +3,12 @@ import type net from "node:net";
 /**
  * HAProxy PROXY Protocol 解析器
  * 支持 PROXY Protocol v1 和 v2
- * 
+ *
  * PROXY Protocol v1 格式：
  * PROXY TCP4 192.168.0.1 192.168.0.11 56324 443\r\n
  * PROXY TCP6 ::1 ::1 56324 443\r\n
  * PROXY UNKNOWN\r\n
- * 
+ *
  * PROXY Protocol v2 格式：
  * 二进制格式，以 \x0D\x0A\x0D\x0A\x00\x0D\x0A\x51\x55\x49\x54\x0A 开头
  */

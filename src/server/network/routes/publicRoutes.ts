@@ -45,7 +45,11 @@ export async function tryHandlePublicRoutes(ctx: RequestContext): Promise<boolea
       total += players.length;
 
       const stateStr =
-        room.state.type === "Playing" ? "playing" : room.state.type === "WaitForReady" ? "waiting_for_ready" : "select_chart";
+        room.state.type === "Playing"
+          ? "playing"
+          : room.state.type === "WaitForReady"
+            ? "waiting_for_ready"
+            : "select_chart";
 
       const chart = room.chart ? { name: room.chart.name, id: String(room.chart.id) } : null;
 

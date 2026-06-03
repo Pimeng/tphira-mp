@@ -20,7 +20,11 @@ export function makePrinter(): Printer {
 }
 
 /** 解析正整数参数；非法时调用 printError 并返回 null。 */
-export function parseUserIdArg(arg: string | undefined, lang: Language, printError: (m: string) => void): number | null {
+export function parseUserIdArg(
+  arg: string | undefined,
+  lang: Language,
+  printError: (m: string) => void
+): number | null {
   const id = Number(arg);
   if (!Number.isInteger(id)) {
     printError(tl(lang, "cli-bad-user-id"));
@@ -30,7 +34,11 @@ export function parseUserIdArg(arg: string | undefined, lang: Language, printErr
 }
 
 /** 解析房间 ID 参数；非法时调用 printError 并返回 null。 */
-export function parseRoomIdArg(arg: string | undefined, lang: Language, printError: (m: string) => void): RoomId | null {
+export function parseRoomIdArg(
+  arg: string | undefined,
+  lang: Language,
+  printError: (m: string) => void
+): RoomId | null {
   if (!arg) {
     printError(tl(lang, "cli-bad-room-id"));
     return null;
@@ -44,7 +52,14 @@ export function parseRoomIdArg(arg: string | undefined, lang: Language, printErr
 }
 
 /** 解析 1..max 整数；非法时调用 printError 并返回 null。 */
-export function parseBoundedIntArg(arg: string | undefined, min: number, max: number, errorKey: string, lang: Language, printError: (m: string) => void): number | null {
+export function parseBoundedIntArg(
+  arg: string | undefined,
+  min: number,
+  max: number,
+  errorKey: string,
+  lang: Language,
+  printError: (m: string) => void
+): number | null {
   const n = Number(arg);
   if (!Number.isInteger(n) || n < min || n > max) {
     printError(tl(lang, errorKey));
@@ -64,7 +79,12 @@ export function parseToggleArg(arg: string | undefined): Toggle | null {
 }
 
 /** 校验消息长度（默认 200）；超长时打印错误并返回 null。 */
-export function validateChatMessage(message: string, lang: Language, printError: (m: string) => void, maxLen = 200): string | null {
+export function validateChatMessage(
+  message: string,
+  lang: Language,
+  printError: (m: string) => void,
+  maxLen = 200
+): string | null {
   if (message.length === 0) {
     printError(tl(lang, "cli-message-empty"));
     return null;

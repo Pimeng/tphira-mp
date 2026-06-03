@@ -18,7 +18,9 @@ export async function tryHandleAdminContestRoutes(ctx: RequestContext): Promise<
     const body = await read();
     const raw = (body ?? {}) as { enabled?: unknown; whitelist?: unknown };
     const enabled = raw.enabled === undefined ? true : Boolean(raw.enabled);
-    const whitelistArr = Array.isArray(raw.whitelist) ? raw.whitelist.map((it) => Number(it)).filter((n) => Number.isInteger(n)) : null;
+    const whitelistArr = Array.isArray(raw.whitelist)
+      ? raw.whitelist.map((it) => Number(it)).filter((n) => Number.isInteger(n))
+      : null;
 
     const ok = await state.mutex.runExclusive(async () => {
       const room = state.rooms.get(rid);
@@ -45,7 +47,9 @@ export async function tryHandleAdminContestRoutes(ctx: RequestContext): Promise<
     if (!rid) return true;
     const body = await read();
     const raw = (body ?? {}) as { userIds?: unknown };
-    const userIds = Array.isArray(raw.userIds) ? raw.userIds.map((it) => Number(it)).filter((n) => Number.isInteger(n)) : null;
+    const userIds = Array.isArray(raw.userIds)
+      ? raw.userIds.map((it) => Number(it)).filter((n) => Number.isInteger(n))
+      : null;
     if (!userIds) {
       write(400, { ok: false, error: "bad-user-ids" });
       return true;
@@ -93,9 +97,15 @@ export async function tryHandleAdminContestRoutes(ctx: RequestContext): Promise<
     const sep = state.serverLang.lang === "zh-CN" ? "、" : ", ";
     const usersText = users.join(sep);
     const monitorsText = monitors.join(sep);
-    const monitorsSuffix = monitors.length > 0 ? tl(state.serverLang, "log-room-game-start-monitors", { monitors: monitorsText }) : "";
+    const monitorsSuffix =
+      monitors.length > 0 ? tl(state.serverLang, "log-room-game-start-monitors", { monitors: monitorsText }) : "";
     logRoomInfo(state.logger, state.serverLang, room.id, "log-room-game-start", { users: usersText, monitorsSuffix });
-    await room.send((c) => broadcastRoomAll(state, room.id, c), { type: "StartPlaying" }, (id) => state.users.get(id), state.serverLang);
+    await room.send(
+      (c) => broadcastRoomAll(state, room.id, c),
+      { type: "StartPlaying" },
+      (id) => state.users.get(id),
+      state.serverLang
+    );
     room.resetGameTime((id) => state.users.get(id));
     if (state.replayEnabled && room.replayEligible) {
       const replayUsers = room.userIds().map((id) => ({ id, name: state.users.get(id)?.name ?? String(id) }));

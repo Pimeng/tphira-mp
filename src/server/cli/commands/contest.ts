@@ -3,7 +3,14 @@ import { parseRoomIdArg } from "../cliHelpers.js";
 import type { CommandCtx } from "./types.js";
 
 export async function handleContest(ctx: CommandCtx, args: string[]): Promise<void> {
-  const { state, logger, broadcastRoomAll, getLang, t, printer: { printError, printSuccess } } = ctx;
+  const {
+    state,
+    logger,
+    broadcastRoomAll,
+    getLang,
+    t,
+    printer: { printError, printSuccess }
+  } = ctx;
   if (args.length < 2) {
     printError(t("cli-usage-contest"));
     return;
@@ -15,7 +22,10 @@ export async function handleContest(ctx: CommandCtx, args: string[]): Promise<vo
   const subCmd = args[1]?.toLowerCase();
 
   if (subCmd === "enable") {
-    const userIds = args.slice(2).map((id) => Number(id)).filter((n) => Number.isInteger(n));
+    const userIds = args
+      .slice(2)
+      .map((id) => Number(id))
+      .filter((n) => Number.isInteger(n));
     const ok = await state.mutex.runExclusive(async () => {
       const room = state.rooms.get(rid);
       if (!room) return false;
@@ -51,7 +61,10 @@ export async function handleContest(ctx: CommandCtx, args: string[]): Promise<vo
   }
 
   if (subCmd === "whitelist") {
-    const userIds = args.slice(2).map((id) => Number(id)).filter((n) => Number.isInteger(n));
+    const userIds = args
+      .slice(2)
+      .map((id) => Number(id))
+      .filter((n) => Number.isInteger(n));
     if (userIds.length === 0) {
       printError(t("cli-contest-no-user-id"));
       return;
@@ -102,7 +115,12 @@ export async function handleContest(ctx: CommandCtx, args: string[]): Promise<vo
     const monitorsText = monitors.join(sep);
     const monitorsSuffix = monitors.length > 0 ? t("log-room-game-start-monitors", { monitors: monitorsText }) : "";
     logRoomInfo(logger, getLang(), room.id, "log-room-game-start", { users: usersText, monitorsSuffix });
-    await room.send((c) => broadcastRoomAll(room.id, c), { type: "StartPlaying" }, (id) => state.users.get(id), getLang());
+    await room.send(
+      (c) => broadcastRoomAll(room.id, c),
+      { type: "StartPlaying" },
+      (id) => state.users.get(id),
+      getLang()
+    );
     room.resetGameTime((id) => state.users.get(id));
     if (state.replayEnabled && room.replayEligible) {
       const replayUsers = room.userIds().map((id) => ({ id, name: state.users.get(id)?.name ?? String(id) }));

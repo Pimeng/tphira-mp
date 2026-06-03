@@ -20,7 +20,8 @@ export async function tryHandleAdminUserRoutes(ctx: RequestContext): Promise<boo
     const userId = Number(mUser[1]);
     const out = await state.mutex.runExclusive(async () => {
       const u = state.users.get(userId);
-      if (!u) return { ok: false, error: "user-not-found", message: ctx.t("cli-user-not-found", { id: String(userId) }) };
+      if (!u)
+        return { ok: false, error: "user-not-found", message: ctx.t("cli-user-not-found", { id: String(userId) }) };
       return {
         ok: true,
         user: {
@@ -102,7 +103,11 @@ export async function tryHandleAdminUserRoutes(ctx: RequestContext): Promise<boo
     await read();
     const target = await state.mutex.runExclusive(async () => state.users.get(userId)?.session ?? null);
     if (!target) {
-      write(404, { ok: false, error: "user-not-connected", message: ctx.t("cli-user-not-connected", { id: String(userId) }) });
+      write(404, {
+        ok: false,
+        error: "user-not-connected",
+        message: ctx.t("cli-user-not-connected", { id: String(userId) })
+      });
       return true;
     }
     const u = target.user;

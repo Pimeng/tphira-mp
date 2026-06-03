@@ -8,20 +8,9 @@ import { tl } from "../utils/l10n.js";
 import { makePrinter } from "./cliHelpers.js";
 import type { CommandCtx } from "./commands/types.js";
 import type { RoomId } from "../../common/roomId.js";
-import {
-  handleDisband,
-  handleListRooms,
-  handleMaxUsers,
-  handleRoomSay
-} from "./commands/rooms.js";
+import { handleDisband, handleListRooms, handleMaxUsers, handleRoomSay } from "./commands/rooms.js";
 import { handleKick, handleListUsers, handleUserInfo } from "./commands/users.js";
-import {
-  handleBan,
-  handleBanList,
-  handleBanRoom,
-  handleUnban,
-  handleUnbanRoom
-} from "./commands/bans.js";
+import { handleBan, handleBanList, handleBanRoom, handleUnban, handleUnbanRoom } from "./commands/bans.js";
 import { handleBroadcast } from "./commands/broadcast.js";
 import { handleReplay, handleRoomCreation } from "./commands/toggles.js";
 import { handleContest } from "./commands/contest.js";

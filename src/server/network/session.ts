@@ -11,7 +11,13 @@
 import type net from "node:net";
 import { err, ok, type StringResult } from "../../common/binary.js";
 import { NOOP } from "../../common/utils.js";
-import type { ClientCommand, ClientRoomState, JoinRoomResponse, ServerCommand, UserInfo } from "../../common/commands.js";
+import type {
+  ClientCommand,
+  ClientRoomState,
+  JoinRoomResponse,
+  ServerCommand,
+  UserInfo
+} from "../../common/commands.js";
 import { HEARTBEAT_DISCONNECT_TIMEOUT_MS } from "../../common/commands.js";
 import type { Stream } from "../../common/stream.js";
 import type { Room } from "../game/room.js";
@@ -101,7 +107,14 @@ async function processDangleTimeout(timeout: DangleTimeout): Promise<void> {
     return;
   }
 
-  logRoomWarn(state.logger, state.serverLang, room.id, "log-user-dangle-timeout-remove", { user: user.name }, { userId: user.id });
+  logRoomWarn(
+    state.logger,
+    state.serverLang,
+    room.id,
+    "log-user-dangle-timeout-remove",
+    { user: user.name },
+    { userId: user.id }
+  );
   await state.mutex.runExclusive(async () => {
     state.users.delete(user.id);
   });
@@ -129,7 +142,7 @@ async function processDangleTimeout(timeout: DangleTimeout): Promise<void> {
     pickRandomUserId: (ids: number[]) => pickRandom(ids),
     lang: state.serverLang,
     logger: state.logger,
-    wsService: state.wsService,
+    wsService: state.wsService
   });
 
   if (shouldDrop) {
@@ -225,7 +238,7 @@ export class Session {
   /** 命令路由上下文缓存（避免每条命令都创建新对象） */
   private readonly commandCtx: Parameters<typeof processClientCommand>[0];
 
-/**
+  /**
    * 创建新会话实例
    * @param opts - 会话选项
    */
@@ -250,12 +263,18 @@ export class Session {
 
     const self = this;
     this.commandCtx = {
-      get state() { return self.state; },
-      get user() { return self.user!; },
+      get state() {
+        return self.state;
+      },
+      get user() {
+        return self.user!;
+      },
       errToStr: (fn) => this.errToStr(fn),
       requireRoom: (u) => this.requireRoom(u),
       broadcastRoom: (room, c) => this.broadcastRoom(room, c, false) as Promise<void>,
-      broadcastRoomFast: (room, c) => { this.broadcastRoom(room, c, true); },
+      broadcastRoomFast: (room, c) => {
+        this.broadcastRoom(room, c, true);
+      },
       broadcastRoomMessage: (room, msg) => this.broadcastRoomMessage(room, msg),
       monitorBuffer: this.monitorBuffer,
       processCreateRoom: (u, id) => this.processCreateRoom(u, id),
@@ -275,7 +294,11 @@ export class Session {
   checkHeartbeat(now: number): void {
     if (this.lost) return;
     if (now - this.lastRecv > HEARTBEAT_DISCONNECT_TIMEOUT_MS) {
-      this.state.logger.warn(tl(this.state.serverLang, "log-heartbeat-timeout-disconnect", { id: this.id }), { session: this.id }, { userId: this.user?.id });
+      this.state.logger.warn(
+        tl(this.state.serverLang, "log-heartbeat-timeout-disconnect", { id: this.id }),
+        { session: this.id },
+        { userId: this.user?.id }
+      );
       void this.markLost();
     }
   }
@@ -402,31 +425,41 @@ export class Session {
 
       this.user = user;
       if (staleSession) void staleSession.adminDisconnect({ preserveRoom: true });
-      
+
       // Check if user is banned - 优化：不需要mutex，直接读取Set
       const isBanned = this.state.bannedUsers.has(user.id);
       if (isBanned && user.room) {
         await this.handleUserLeaveRoom(user, user.room);
       }
-      
-      const roomState: ClientRoomState | null = user.room ? user.room.clientState(user, (id) => this.state.users.get(id)) : null;
+
+      const roomState: ClientRoomState | null = user.room
+        ? user.room.clientState(user, (id) => this.state.users.get(id))
+        : null;
       await this.trySend({ type: "Authenticate", result: ok([user.toInfo(), roomState]) });
-      
+
       this.waitingForAuthenticate = false;
 
       const monitorSuffix = user.monitor ? tl(this.state.serverLang, "label-monitor-suffix") : "";
-      this.state.logger.debug(tl(this.state.serverLang, "log-auth-ok", {
-        id: this.id,
-        user: user.name,
-        monitorSuffix,
-        version: String(this.protocolVersion ?? "?")
-      }), undefined, { userId: user.id, isConnectionLog: true });
+      this.state.logger.debug(
+        tl(this.state.serverLang, "log-auth-ok", {
+          id: this.id,
+          user: user.name,
+          monitorSuffix,
+          version: String(this.protocolVersion ?? "?")
+        }),
+        undefined,
+        { userId: user.id, isConnectionLog: true }
+      );
 
-      this.state.logger.info(tl(this.state.serverLang, "log-player-join", {
-        user: user.name,
-        id: String(user.id),
-        monitorSuffix
-      }), undefined, { userId: user.id, isConnectionLog: true });
+      this.state.logger.info(
+        tl(this.state.serverLang, "log-player-join", {
+          user: user.name,
+          id: String(user.id),
+          monitorSuffix
+        }),
+        undefined,
+        { userId: user.id, isConnectionLog: true }
+      );
 
       void sendWelcomeExtras({
         user,
@@ -436,9 +469,13 @@ export class Session {
       }).catch(NOOP);
     } catch (e) {
       const localized = this.localizeError(this.state.serverLang, e instanceof Error ? e : new Error("auth-failed"));
-      this.state.logger.warn(tl(this.state.serverLang, "log-auth-failed", { id: this.id, reason: localized }), undefined, { ip: this.remoteIp, isConnectionLog: true });
+      this.state.logger.warn(
+        tl(this.state.serverLang, "log-auth-failed", { id: this.id, reason: localized }),
+        undefined,
+        { ip: this.remoteIp, isConnectionLog: true }
+      );
       await this.trySend({ type: "Authenticate", result: err(localized) });
-      
+
       this.panicked = true;
       await this.markLost();
     }
@@ -475,7 +512,7 @@ export class Session {
 
       for (const [userId, recordData] of results.entries()) {
         // 查找该用户的回放文件
-        const userFile = roomFiles.find(f => f.userId === userId);
+        const userFile = roomFiles.find((f) => f.userId === userId);
         if (userFile) {
           // 触发自动上传（延迟30秒由回调内部处理）
           this.state.autoUploadCallback(userId, chartId, userFile.timestamp, recordData.id);
@@ -512,7 +549,9 @@ export class Session {
       await this.state.mutex.runExclusive(async () => {
         this.state.sessions.delete(this.id);
       });
-      this.state.logger.debug(tl(this.state.serverLang, "log-disconnect", { id: this.id, who: "" }), undefined, { isConnectionLog: true });
+      this.state.logger.debug(tl(this.state.serverLang, "log-disconnect", { id: this.id, who: "" }), undefined, {
+        isConnectionLog: true
+      });
       return;
     }
 
@@ -526,7 +565,10 @@ export class Session {
     });
 
     const who = tl(this.state.serverLang, "log-disconnect-user", { user: user.name });
-    this.state.logger.debug(tl(this.state.serverLang, "log-disconnect", { id: this.id, who }), undefined, { userId: user.id, isConnectionLog: true });
+    this.state.logger.debug(tl(this.state.serverLang, "log-disconnect", { id: this.id, who }), undefined, {
+      userId: user.id,
+      isConnectionLog: true
+    });
 
     if (detachedUserSession && !this.preserveRoomOnLost && user.session === null) await this.dangleUser(user);
   }
@@ -539,7 +581,14 @@ export class Session {
   private async dangleUser(user: User): Promise<void> {
     const room = user.room;
     if (room && room.state.type === "Playing") {
-      logRoomWarn(this.state.logger, this.state.serverLang, room.id, "log-user-disconnect-playing", { user: user.name }, { userId: user.id });
+      logRoomWarn(
+        this.state.logger,
+        this.state.serverLang,
+        room.id,
+        "log-user-disconnect-playing",
+        { user: user.name },
+        { userId: user.id }
+      );
       await this.state.mutex.runExclusive(async () => {
         this.state.users.delete(user.id);
       });
@@ -553,7 +602,9 @@ export class Session {
     // 优化：直接读取Set，不需要mutex
     const isBanned = this.state.bannedUsers.has(user.id);
     if (isBanned) {
-      this.state.logger.info(tl(this.state.serverLang, "log-user-dangle", { user: user.name }), undefined, { userId: user.id });
+      this.state.logger.info(tl(this.state.serverLang, "log-user-dangle", { user: user.name }), undefined, {
+        userId: user.id
+      });
       await this.state.mutex.runExclusive(async () => {
         this.state.users.delete(user.id);
       });
@@ -565,7 +616,9 @@ export class Session {
       return;
     }
 
-    this.state.logger.info(tl(this.state.serverLang, "log-user-dangle", { user: user.name }), undefined, { userId: user.id });
+    this.state.logger.info(tl(this.state.serverLang, "log-user-dangle", { user: user.name }), undefined, {
+      userId: user.id
+    });
     const token = user.markDangle();
     dangleTimeouts.set(user.id, { user, token, deadline: Date.now() + 10_000, state: this.state });
     startDangleSweepIfNeeded();
@@ -574,7 +627,9 @@ export class Session {
   private async handleUserLeaveRoom(user: User, room: Room): Promise<void> {
     const shouldDrop = await room.onUserLeave({ user, ...this.makeRoomCallbacks(room) });
     if (shouldDrop) {
-      logRoomInfo(this.state.logger, this.state.serverLang, room.id, "log-room-recycled", undefined, { userId: user.id });
+      logRoomInfo(this.state.logger, this.state.serverLang, room.id, "log-room-recycled", undefined, {
+        userId: user.id
+      });
       await this.state.mutex.runExclusive(async () => {
         this.state.rooms.delete(room.id);
       });
@@ -586,7 +641,9 @@ export class Session {
   private errToStr<T>(fn: () => Promise<T>): Promise<StringResult<T>> {
     const user = this.user;
     const lang = user?.lang ?? this.state.serverLang;
-    return fn().then(ok).catch((e) => err(this.localizeError(lang, e)));
+    return fn()
+      .then(ok)
+      .catch((e) => err(this.localizeError(lang, e)));
   }
 
   private async processCreateRoom(user: User, id: string): Promise<Record<never, never>> {
@@ -605,7 +662,14 @@ export class Session {
     });
     const room = user.room!;
     refreshRoomLiveState(room, this.state.replayEnabled);
-    logRoomMark(this.state.logger, this.state.serverLang, room.id, "log-room-created", { user: user.name }, { userId: user.id });
+    logRoomMark(
+      this.state.logger,
+      this.state.serverLang,
+      room.id,
+      "log-room-created",
+      { user: user.name },
+      { userId: user.id }
+    );
     await this.broadcastRoomMessage(room, { type: "CreateRoom", user: user.id });
     this.sendFakeMonitorJoin(user, room);
     return {};
@@ -638,7 +702,14 @@ export class Session {
     refreshRoomLiveState(room, this.state.replayEnabled);
 
     const suffix = monitor ? tl(this.state.serverLang, "label-monitor-suffix") : "";
-    logRoomMark(this.state.logger, this.state.serverLang, room.id, "log-room-joined", { user: user.name, suffix }, { userId: user.id });
+    logRoomMark(
+      this.state.logger,
+      this.state.serverLang,
+      room.id,
+      "log-room-joined",
+      { user: user.name, suffix },
+      { userId: user.id }
+    );
     await this.broadcastRoom(room, { type: "OnJoinRoom", info: user.toInfo() });
     await this.broadcastRoomMessage(room, { type: "JoinRoom", user: user.id, name: user.name });
 
@@ -742,7 +813,7 @@ export class Session {
   /**
    * 简化 room.send 调用：自动使用 broadcastRoom 和 state.users.get
    */
-  private broadcastRoomMessage(room: Room, msg: Parameters<Room["send"]> [1]): Promise<void> {
+  private broadcastRoomMessage(room: Room, msg: Parameters<Room["send"]>[1]): Promise<void> {
     return room.send(
       (c) => this.broadcastRoom(room, c, false) as Promise<void>,
       msg,
@@ -796,7 +867,9 @@ export class Session {
     await this.state.mutex.runExclusive(async () => {
       this.state.rooms.delete(room.id);
     });
-    logRoomInfo(this.state.logger, this.state.serverLang, room.id, "log-room-recycled", undefined, { userId: this.user?.id });
+    logRoomInfo(this.state.logger, this.state.serverLang, room.id, "log-room-recycled", undefined, {
+      userId: this.user?.id
+    });
   }
 
   private async fetchChart(user: User, id: number): Promise<Chart> {

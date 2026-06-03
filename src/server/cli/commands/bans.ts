@@ -2,7 +2,12 @@ import { parseRoomIdArg, parseUserIdArg } from "../cliHelpers.js";
 import type { CommandCtx } from "./types.js";
 
 export async function handleBan(ctx: CommandCtx, args: string[]): Promise<void> {
-  const { state, getLang, t, printer: { printError, printSuccess } } = ctx;
+  const {
+    state,
+    getLang,
+    t,
+    printer: { printError, printSuccess }
+  } = ctx;
   if (args.length === 0) {
     printError(t("cli-usage-ban"));
     return;
@@ -20,7 +25,12 @@ export async function handleBan(ctx: CommandCtx, args: string[]): Promise<void> 
 }
 
 export async function handleUnban(ctx: CommandCtx, args: string[]): Promise<void> {
-  const { state, getLang, t, printer: { printError, printSuccess } } = ctx;
+  const {
+    state,
+    getLang,
+    t,
+    printer: { printError, printSuccess }
+  } = ctx;
   if (args.length === 0) {
     printError(t("cli-usage-unban"));
     return;
@@ -38,7 +48,11 @@ export async function handleUnban(ctx: CommandCtx, args: string[]): Promise<void
 }
 
 export async function handleBanList(ctx: CommandCtx): Promise<void> {
-  const { state, t, printer: { print, printInfo } } = ctx;
+  const {
+    state,
+    t,
+    printer: { print, printInfo }
+  } = ctx;
   const banned = await state.mutex.runExclusive(async () => {
     return [...state.bannedUsers];
   });
@@ -55,7 +69,12 @@ export async function handleBanList(ctx: CommandCtx): Promise<void> {
 }
 
 export async function handleBanRoom(ctx: CommandCtx, args: string[]): Promise<void> {
-  const { state, getLang, t, printer: { printError, printSuccess } } = ctx;
+  const {
+    state,
+    getLang,
+    t,
+    printer: { printError, printSuccess }
+  } = ctx;
   if (args.length < 2) {
     printError(t("cli-usage-banroom"));
     return;
@@ -78,7 +97,12 @@ export async function handleBanRoom(ctx: CommandCtx, args: string[]): Promise<vo
 }
 
 export async function handleUnbanRoom(ctx: CommandCtx, args: string[]): Promise<void> {
-  const { state, getLang, t, printer: { printError, printSuccess } } = ctx;
+  const {
+    state,
+    getLang,
+    t,
+    printer: { printError, printSuccess }
+  } = ctx;
   if (args.length < 2) {
     printError(t("cli-usage-unbanroom"));
     return;

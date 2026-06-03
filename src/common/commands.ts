@@ -46,10 +46,7 @@ export type Message =
   | { type: "LockRoom"; lock: boolean }
   | { type: "CycleRoom"; cycle: boolean };
 
-export type RoomState =
-  | { type: "SelectChart"; id: number | null }
-  | { type: "WaitingForReady" }
-  | { type: "Playing" };
+export type RoomState = { type: "SelectChart"; id: number | null } | { type: "WaitingForReady" } | { type: "Playing" };
 
 export type UserInfo = {
   id: number;
@@ -620,4 +617,3 @@ export function decodeServerCommand(r: BinaryReader): ServerCommand {
       throw new Error("proto-servercommand-tag-invalid");
   }
 }
-

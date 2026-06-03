@@ -54,7 +54,10 @@ export function parseStringListValue(value: unknown): string[] | undefined {
   }
   if (typeof value === "string") {
     if (!value.trim()) return undefined;
-    const items = value.split(/[,\s;]+/g).map((it) => it.trim()).filter((it) => it.length > 0);
+    const items = value
+      .split(/[,\s;]+/g)
+      .map((it) => it.trim())
+      .filter((it) => it.length > 0);
     return items.length > 0 ? items : undefined;
   }
   return undefined;
@@ -237,7 +240,10 @@ export function changedConfigKeys(prev: ServerConfig, next: ServerConfig): strin
 /**
  * 把 next 中所有 startupOnly 字段还原为 prev 的值；返回需要重启才能生效的字段名列表。
  */
-export function keepStartupOnlyConfig(prev: ServerConfig, next: ServerConfig): { config: ServerConfig; restartRequiredKeys: string[] } {
+export function keepStartupOnlyConfig(
+  prev: ServerConfig,
+  next: ServerConfig
+): { config: ServerConfig; restartRequiredKeys: string[] } {
   const config: ServerConfig = { ...next };
   const restartRequiredKeys: string[] = [];
   for (const field of CONFIG_FIELDS) {

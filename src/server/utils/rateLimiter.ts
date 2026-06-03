@@ -59,7 +59,13 @@ export class RateLimiter {
 
     let stats = this.ipStats.get(ip);
     if (!stats) {
-      stats = { timestamps: [], ringCursor: 0, ringBuffer: new Array<(number | undefined)>(RING_BUFFER_SIZE), blacklistedUntil: 0, lastAccess: now };
+      stats = {
+        timestamps: [],
+        ringCursor: 0,
+        ringBuffer: new Array<number | undefined>(RING_BUFFER_SIZE),
+        blacklistedUntil: 0,
+        lastAccess: now
+      };
       this.ipStats.set(ip, stats);
     }
     stats.lastAccess = now;

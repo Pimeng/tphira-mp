@@ -41,15 +41,23 @@ export function cleanupExpiringMaps(...maps: ReadonlyArray<Map<string, { expires
 /**
  * 调用 Phira API 验证 token 并取出 user ID。失败时返回 null。
  */
-export async function verifyUserTokenViaApi(state: ServerState, token: string, timeoutMs = 60000): Promise<number | null> {
+export async function verifyUserTokenViaApi(
+  state: ServerState,
+  token: string,
+  timeoutMs = 60000
+): Promise<number | null> {
   const endpoint = state.config.phira_api_endpoint || DEFAULT_PHIRA_API_ENDPOINT;
   try {
-    const resp = await fetchWithRetry(`${endpoint}/me`, {
-      headers: { Authorization: `Bearer ${token}` },
-      proxy: state.config.outbound_proxy
-    }, timeoutMs);
+    const resp = await fetchWithRetry(
+      `${endpoint}/me`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        proxy: state.config.outbound_proxy
+      },
+      timeoutMs
+    );
     if (!resp.ok) return null;
-    const data = await resp.json() as { id: number };
+    const data = (await resp.json()) as { id: number };
     return Number.isInteger(data.id) ? data.id : null;
   } catch {
     return null;
@@ -110,31 +118,35 @@ export async function abortPlayingUserAndCheckReady(opts: {
  *
  * `fields` 中每个值若为 Buffer 则作为文件上传（需要 filename），否则作为文本字段。
  */
-export function encodeMultipartFormData(fields: Array<{
-  name: string;
-  value: string | Buffer;
-  filename?: string;
-  contentType?: string;
-}>): { body: Buffer; contentType: string } {
+export function encodeMultipartFormData(
+  fields: Array<{
+    name: string;
+    value: string | Buffer;
+    filename?: string;
+    contentType?: string;
+  }>
+): { body: Buffer; contentType: string } {
   const boundary = `----FormBoundary${Date.now()}${Math.random().toString(36).slice(2, 10)}`;
   const chunks: Buffer[] = [];
   for (const field of fields) {
     if (Buffer.isBuffer(field.value)) {
-      chunks.push(Buffer.from(
-        `--${boundary}\r\n` +
-        `Content-Disposition: form-data; name="${field.name}"; filename="${field.filename ?? ""}"\r\n` +
-        `Content-Type: ${field.contentType ?? "application/octet-stream"}\r\n\r\n`,
-        "utf-8"
-      ));
+      chunks.push(
+        Buffer.from(
+          `--${boundary}\r\n` +
+            `Content-Disposition: form-data; name="${field.name}"; filename="${field.filename ?? ""}"\r\n` +
+            `Content-Type: ${field.contentType ?? "application/octet-stream"}\r\n\r\n`,
+          "utf-8"
+        )
+      );
       chunks.push(field.value);
       chunks.push(Buffer.from("\r\n", "utf-8"));
     } else {
-      chunks.push(Buffer.from(
-        `--${boundary}\r\n` +
-        `Content-Disposition: form-data; name="${field.name}"\r\n\r\n` +
-        `${field.value}\r\n`,
-        "utf-8"
-      ));
+      chunks.push(
+        Buffer.from(
+          `--${boundary}\r\n` + `Content-Disposition: form-data; name="${field.name}"\r\n\r\n` + `${field.value}\r\n`,
+          "utf-8"
+        )
+      );
     }
   }
   chunks.push(Buffer.from(`--${boundary}--\r\n`, "utf-8"));

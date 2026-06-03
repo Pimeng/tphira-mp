@@ -126,7 +126,9 @@ export async function listReplaysForUser(baseDir: string, userId: number): Promi
   const userDir = join(baseDir, String(userId));
   let charts: string[];
   try {
-    charts = await readdir(userDir, { withFileTypes: true }).then((ents) => ents.filter((e) => e.isDirectory()).map((e) => e.name));
+    charts = await readdir(userDir, { withFileTypes: true }).then((ents) =>
+      ents.filter((e) => e.isDirectory()).map((e) => e.name)
+    );
   } catch {
     return out;
   }
@@ -136,7 +138,9 @@ export async function listReplaysForUser(baseDir: string, userId: number): Promi
     const chartDir = join(userDir, chartName);
     let files: string[];
     try {
-      files = await readdir(chartDir, { withFileTypes: true }).then((ents) => ents.filter((e) => e.isFile()).map((e) => e.name));
+      files = await readdir(chartDir, { withFileTypes: true }).then((ents) =>
+        ents.filter((e) => e.isFile()).map((e) => e.name)
+      );
     } catch {
       continue;
     }
@@ -155,7 +159,12 @@ export async function listReplaysForUser(baseDir: string, userId: number): Promi
   return out;
 }
 
-export async function deleteReplayForUser(baseDir: string, userId: number, chartId: number, timestamp: number): Promise<boolean> {
+export async function deleteReplayForUser(
+  baseDir: string,
+  userId: number,
+  chartId: number,
+  timestamp: number
+): Promise<boolean> {
   const filePath = replayFilePath(baseDir, userId, chartId, timestamp);
   headerCache.delete(filePath); // 清除文件头缓存
   try {
@@ -178,7 +187,9 @@ export async function cleanupExpiredReplays(baseDir: string, nowMs: number, ttlD
   const ttlMs = ttlDays * 24 * 60 * 60 * 1000;
   let users: string[];
   try {
-    users = await readdir(baseDir, { withFileTypes: true }).then((ents) => ents.filter((e) => e.isDirectory()).map((e) => e.name));
+    users = await readdir(baseDir, { withFileTypes: true }).then((ents) =>
+      ents.filter((e) => e.isDirectory()).map((e) => e.name)
+    );
   } catch {
     return;
   }
@@ -189,7 +200,9 @@ export async function cleanupExpiredReplays(baseDir: string, nowMs: number, ttlD
     const userDir = join(baseDir, userName);
     let charts: string[];
     try {
-      charts = await readdir(userDir, { withFileTypes: true }).then((ents) => ents.filter((e) => e.isDirectory()).map((e) => e.name));
+      charts = await readdir(userDir, { withFileTypes: true }).then((ents) =>
+        ents.filter((e) => e.isDirectory()).map((e) => e.name)
+      );
     } catch {
       continue;
     }
@@ -200,7 +213,9 @@ export async function cleanupExpiredReplays(baseDir: string, nowMs: number, ttlD
       const chartDir = join(userDir, chartName);
       let files: string[];
       try {
-        files = await readdir(chartDir, { withFileTypes: true }).then((ents) => ents.filter((e) => e.isFile()).map((e) => e.name));
+        files = await readdir(chartDir, { withFileTypes: true }).then((ents) =>
+          ents.filter((e) => e.isFile()).map((e) => e.name)
+        );
       } catch {
         continue;
       }
@@ -237,7 +252,8 @@ export async function patchReplayRecordId(filePath: string, recordId: number): P
   try {
     const head = Buffer.allocUnsafe(4);
     const read = await handle.read(head, 0, 4, 0);
-    const hasMagicPHIR = read.bytesRead === 4 && head[0] === 0x50 && head[1] === 0x48 && head[2] === 0x49 && head[3] === 0x52;
+    const hasMagicPHIR =
+      read.bytesRead === 4 && head[0] === 0x50 && head[1] === 0x48 && head[2] === 0x49 && head[3] === 0x52;
     const magicU16 = read.bytesRead >= 2 ? head.readUInt16LE(0) : null;
     const hasMagicPM = magicU16 === 0x504d || magicU16 === 0x4d50;
     const buf = Buffer.allocUnsafe(4);

@@ -7,9 +7,4 @@ export {
   writeJson
 } from "./httpServerUtils.js";
 
-export {
-  fetchWithRetry,
-  fetchWithTimeout,
-  type FetchWithProxyInit,
-  type OutboundProxyValue
-} from "./httpClient.js";
+export { fetchWithRetry, fetchWithTimeout, type FetchWithProxyInit, type OutboundProxyValue } from "./httpClient.js";

@@ -54,7 +54,7 @@ export function getAppPaths(): AppPaths {
         localesDir: join(rootDir, "locales"),
         logsDir: join(rootDir, "logs"),
         adminDataPath: join(rootDir, "admin_data.json"),
-      dataDir: join(rootDir, "data")
+        dataDir: join(rootDir, "data")
       };
       return cached;
     }
@@ -73,4 +73,3 @@ export function getAppPaths(): AppPaths {
 
   return cached;
 }
-

@@ -116,11 +116,7 @@ export async function fetchPhiraChart(
   opts: PhiraApiOptions & { id: number; errorFactory: () => Error }
 ): Promise<Chart> {
   const { endpoint, id, proxy, timeoutMs, errorFactory } = opts;
-  const r = await fetchWithRetry(
-    `${endpoint}/chart/${id}`,
-    { proxy },
-    timeoutMs ?? FETCH_TIMEOUT_MS
-  );
+  const r = await fetchWithRetry(`${endpoint}/chart/${id}`, { proxy }, timeoutMs ?? FETCH_TIMEOUT_MS);
   if (!r.ok) throw errorFactory();
   const res = (await r.json()) as Chart;
   return { id: res.id, name: res.name };
@@ -143,11 +139,7 @@ export async function fetchPhiraRecord(
   if (cached) return cached;
 
   const { endpoint, proxy, timeoutMs, errorFactory } = opts;
-  const r = await fetchWithRetry(
-    `${endpoint}/record/${id}`,
-    { proxy },
-    timeoutMs ?? FETCH_TIMEOUT_MS
-  );
+  const r = await fetchWithRetry(`${endpoint}/record/${id}`, { proxy }, timeoutMs ?? FETCH_TIMEOUT_MS);
   if (!r.ok) throw errorFactory();
   const data = (await r.json()) as RecordData;
   await recordCache.set(id, data);

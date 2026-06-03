@@ -12,8 +12,6 @@ const LEVEL_WEIGHT: Record<LogLevel, number> = {
   ERROR: 40
 };
 
-
-
 type LoggerOptions = {
   logsDir?: string;
   minLevel?: LogLevel;
@@ -321,4 +319,3 @@ export class Logger {
     return `${c}${line}\x1b[0m`;
   }
 }
-

@@ -66,7 +66,9 @@ export async function startHttpService(opts: { state: ServerState; host: string;
 
   const server = http.createServer((req, res) => {
     void (async () => {
-      const lang = req.headers["accept-language"] ? new Language(String(req.headers["accept-language"])) : state.serverLang;
+      const lang = req.headers["accept-language"]
+        ? new Language(String(req.headers["accept-language"]))
+        : state.serverLang;
       const url = new URL(req.url ?? "/", "http://localhost");
       const clientIp = getClientIp(req, state.config.real_ip_header || "X-Forwarded-For");
 
@@ -90,7 +92,8 @@ export async function startHttpService(opts: { state: ServerState; host: string;
         services,
         write: (status, body) => writeJson(res, status, body),
         read: () => readJson(req),
-        cleanupExpired: () => cleanupExpiringMaps(state.tempAdminTokens, services.otpSessions, state.cliApprovalSessions),
+        cleanupExpired: () =>
+          cleanupExpiringMaps(state.tempAdminTokens, services.otpSessions, state.cliApprovalSessions),
         verifyUserToken: (token) => verifyUserTokenViaApi(state, token),
         requireAdmin: () => checkAdminAuth(ctx),
         t: (key, args) => tl(lang, key, args)

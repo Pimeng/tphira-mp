@@ -1,0 +1,21 @@
+# Build outputs
+dist/
+dist-bundle/
+dist-sea/
+release/
+
+# Dependencies & lockfiles
+node_modules/
+pnpm-lock.yaml
+package-lock.json
+
+# Runtime / generated data
+logs/
+data/
+bench-results/
+
+# Localization resources (Fluent .ftl + JSON, not Prettier-managed)
+locales/
+
+# Misc
+*.min.js

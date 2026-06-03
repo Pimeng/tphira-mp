@@ -107,7 +107,9 @@ export async function tryHandleAdminRoomRoutes(ctx: RequestContext): Promise<boo
     }
 
     room.addLog(message, Date.now());
-    void broadcastRoomAll(state, rid, { type: "Message", message: { type: "Chat", user: 0, content: message } }).catch(NOOP);
+    void broadcastRoomAll(state, rid, { type: "Message", message: { type: "Chat", user: 0, content: message } }).catch(
+      NOOP
+    );
     logRoomInfo(state.logger, state.serverLang, rid, "log-admin-room-message", { message });
     write(200, { ok: true });
     return true;

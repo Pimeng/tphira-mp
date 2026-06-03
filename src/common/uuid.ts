@@ -40,4 +40,3 @@ export function u64PairToUuid(pair: U64Pair): string {
 export function newUuid(): string {
   return uuidV4();
 }
-

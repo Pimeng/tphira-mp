@@ -17,7 +17,12 @@ function findApprovalSsid(ctx: CommandCtx, input: string): string | "ambiguous" 
 }
 
 export async function handleApprove(ctx: CommandCtx, args: string[]): Promise<void> {
-  const { state, logger, t, printer: { printError, printSuccess } } = ctx;
+  const {
+    state,
+    logger,
+    t,
+    printer: { printError, printSuccess }
+  } = ctx;
   if (args.length === 0) {
     printError(t("cli-usage-approve"));
     return;
@@ -58,12 +63,19 @@ export async function handleApprove(ctx: CommandCtx, args: string[]): Promise<vo
   session.token = token;
   session.tokenExpiresAt = tokenExpiresAt;
 
-  logger.info(`[OTP CLI Approve] 会话 ${result.slice(0, 8)} 已批准，签发临时TOKEN ${token.slice(0, 8)}... (IP: ${session.ip})`);
+  logger.info(
+    `[OTP CLI Approve] 会话 ${result.slice(0, 8)} 已批准，签发临时TOKEN ${token.slice(0, 8)}... (IP: ${session.ip})`
+  );
   printSuccess(t("cli-approve-success", { ssid: result.slice(0, 8), ip: session.ip }));
 }
 
 export async function handleDeny(ctx: CommandCtx, args: string[]): Promise<void> {
-  const { state, logger, t, printer: { printError, printSuccess } } = ctx;
+  const {
+    state,
+    logger,
+    t,
+    printer: { printError, printSuccess }
+  } = ctx;
   if (args.length === 0) {
     printError(t("cli-usage-deny"));
     return;
@@ -96,7 +108,11 @@ export async function handleDeny(ctx: CommandCtx, args: string[]): Promise<void>
 }
 
 export async function handlePending(ctx: CommandCtx): Promise<void> {
-  const { state, t, printer: { print, printInfo } } = ctx;
+  const {
+    state,
+    t,
+    printer: { print, printInfo }
+  } = ctx;
   const now = Date.now();
   // 顺便清理过期项
   for (const [ssid, sess] of state.cliApprovalSessions) {

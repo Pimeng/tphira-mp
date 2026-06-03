@@ -10,7 +10,11 @@ function stateLabel(ctx: CommandCtx, type: string): string {
 }
 
 export async function handleListRooms(ctx: CommandCtx): Promise<void> {
-  const { state, t, printer: { print, printInfo } } = ctx;
+  const {
+    state,
+    t,
+    printer: { print, printInfo }
+  } = ctx;
   const rooms = await state.mutex.runExclusive(async () => {
     return [...state.rooms.entries()].map(([rid, room]) => ({
       roomid: roomIdToString(rid),
@@ -33,23 +37,30 @@ export async function handleListRooms(ctx: CommandCtx): Promise<void> {
   print("");
   print(t("cli-rooms-total", { count: rooms.length }));
   for (const r of rooms) {
-    print(t("cli-room-line", {
-      id: r.roomid,
-      state: r.state,
-      users: r.users,
-      maxUsers: r.maxUsers,
-      monitors: r.monitors,
-      chart: r.chart,
-      locked: r.locked,
-      cycle: r.cycle,
-      contest: r.contest
-    }));
+    print(
+      t("cli-room-line", {
+        id: r.roomid,
+        state: r.state,
+        users: r.users,
+        maxUsers: r.maxUsers,
+        monitors: r.monitors,
+        chart: r.chart,
+        locked: r.locked,
+        cycle: r.cycle,
+        contest: r.contest
+      })
+    );
   }
   print("");
 }
 
 export async function handleMaxUsers(ctx: CommandCtx, args: string[]): Promise<void> {
-  const { state, getLang, t, printer: { printError, printSuccess } } = ctx;
+  const {
+    state,
+    getLang,
+    t,
+    printer: { printError, printSuccess }
+  } = ctx;
   if (args.length < 2) {
     printError(t("cli-usage-maxusers"));
     return;
@@ -77,7 +88,13 @@ export async function handleMaxUsers(ctx: CommandCtx, args: string[]): Promise<v
 }
 
 export async function handleDisband(ctx: CommandCtx, args: string[]): Promise<void> {
-  const { state, logger, getLang, t, printer: { printError, printSuccess } } = ctx;
+  const {
+    state,
+    logger,
+    getLang,
+    t,
+    printer: { printError, printSuccess }
+  } = ctx;
   if (args.length === 0) {
     printError(t("cli-usage-disband"));
     return;
@@ -96,7 +113,10 @@ export async function handleDisband(ctx: CommandCtx, args: string[]): Promise<vo
   const tasks: Promise<void>[] = [];
   for (const id of allIds) {
     const u = state.users.get(id);
-    if (u) tasks.push(u.trySend({ type: "Message", message: { type: "Chat", user: 0, content: t("room-disbanded-by-admin") } }));
+    if (u)
+      tasks.push(
+        u.trySend({ type: "Message", message: { type: "Chat", user: 0, content: t("room-disbanded-by-admin") } })
+      );
   }
   await Promise.allSettled(tasks);
 
@@ -113,7 +133,14 @@ export async function handleDisband(ctx: CommandCtx, args: string[]): Promise<vo
 }
 
 export async function handleRoomSay(ctx: CommandCtx, args: string[]): Promise<void> {
-  const { state, logger, broadcastRoomAll, getLang, t, printer: { printError, printSuccess } } = ctx;
+  const {
+    state,
+    logger,
+    broadcastRoomAll,
+    getLang,
+    t,
+    printer: { printError, printSuccess }
+  } = ctx;
   if (args.length < 2) {
     printError(t("cli-usage-roomsay"));
     return;

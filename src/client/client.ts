@@ -26,9 +26,19 @@ type Pending<T> = {
 
 /** 服务端会以同名 type 回包的 RPC 命令；用作回调表的 key */
 type RpcReplyType =
-  | "Authenticate" | "Chat" | "CreateRoom" | "JoinRoom" | "LeaveRoom"
-  | "LockRoom" | "CycleRoom" | "SelectChart" | "RequestStart"
-  | "Ready" | "CancelReady" | "Played" | "Abort";
+  | "Authenticate"
+  | "Chat"
+  | "CreateRoom"
+  | "JoinRoom"
+  | "LeaveRoom"
+  | "LockRoom"
+  | "CycleRoom"
+  | "SelectChart"
+  | "RequestStart"
+  | "Ready"
+  | "CancelReady"
+  | "Played"
+  | "Abort";
 
 export type LivePlayer = {
   touch_frames: TouchFrame[];
@@ -466,7 +476,8 @@ export class Client {
         if (this.roomValue) {
           if (cmd.message.type === "LockRoom") this.roomValue.locked = cmd.message.lock;
           if (cmd.message.type === "CycleRoom") this.roomValue.cycle = cmd.message.cycle;
-          if (cmd.message.type === "LeaveRoom" && this.meValue && cmd.message.user === this.meValue.id) this.roomValue = null;
+          if (cmd.message.type === "LeaveRoom" && this.meValue && cmd.message.user === this.meValue.id)
+            this.roomValue = null;
         }
         return;
       case "ChangeState":

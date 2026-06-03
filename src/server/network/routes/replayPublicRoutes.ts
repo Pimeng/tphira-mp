@@ -3,7 +3,12 @@ import { createReadStream } from "node:fs";
 import { stat, readFile, rm } from "node:fs/promises";
 import { newUuid } from "../../../common/uuid.js";
 import { fetchWithRetry } from "../../../common/http.js";
-import { deleteReplayForUser, listReplaysForUser, readReplayHeader, replayFilePath } from "../../replay/replayStorage.js";
+import {
+  deleteReplayForUser,
+  listReplaysForUser,
+  readReplayHeader,
+  replayFilePath
+} from "../../replay/replayStorage.js";
 import { uploadToShareStation, setReplayVisibility } from "../../utils/shareStation.js";
 import { cleanupExpiringMaps } from "../httpHelpers.js";
 import type { RequestContext } from "./types.js";
@@ -26,13 +31,19 @@ export async function tryHandleReplayPublicRoutes(ctx: RequestContext): Promise<
     cleanupExpiringMaps(replaySessions);
 
     const phiraApiEndpoint = state.config.phira_api_endpoint || "https://phira.5wyxi.com";
-    const me = await fetchWithRetry(`${phiraApiEndpoint}/me`, {
-      headers: { Authorization: `Bearer ${token}` },
-      proxy: state.config.outbound_proxy
-    }, 8000).then(async (r) => {
-      if (!r.ok) throw new Error("auth-failed");
-      return (await r.json()) as { id: number };
-    }).catch(() => null);
+    const me = await fetchWithRetry(
+      `${phiraApiEndpoint}/me`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        proxy: state.config.outbound_proxy
+      },
+      8000
+    )
+      .then(async (r) => {
+        if (!r.ok) throw new Error("auth-failed");
+        return (await r.json()) as { id: number };
+      })
+      .catch(() => null);
 
     if (!me || !Number.isInteger(me.id)) {
       write(401, { ok: false, error: "unauthorized", message: ctx.t("auth-unauthorized") });
@@ -161,7 +172,8 @@ export async function tryHandleReplayPublicRoutes(ctx: RequestContext): Promise<
 
   if (req.method === "POST" && url.pathname === "/replay/delete") {
     const body = await read();
-    const sessionToken = typeof (body as any)?.sessionToken === "string" ? String((body as any)?.sessionToken).trim() : "";
+    const sessionToken =
+      typeof (body as any)?.sessionToken === "string" ? String((body as any)?.sessionToken).trim() : "";
     const chartId = Number((body as any)?.chartId ?? "");
     const timestamp = Number((body as any)?.timestamp ?? "");
     if (!sessionToken || !Number.isInteger(chartId) || !Number.isInteger(timestamp) || chartId < 0 || timestamp <= 0) {
@@ -306,7 +318,9 @@ export async function tryHandleReplayPublicRoutes(ctx: RequestContext): Promise<
       try {
         await rm(filePath);
       } catch (err) {
-        state.logger.warn(`Failed to delete local replay file after manual upload for user ${userId}: ${err instanceof Error ? err.message : String(err)}`);
+        state.logger.warn(
+          `Failed to delete local replay file after manual upload for user ${userId}: ${err instanceof Error ? err.message : String(err)}`
+        );
       }
     }
 
@@ -376,7 +390,7 @@ export async function tryHandleReplayPublicRoutes(ctx: RequestContext): Promise<
     }
 
     // 更新配置
-    if (typeof show === 'boolean') {
+    if (typeof show === "boolean") {
       config.show = show;
     }
 

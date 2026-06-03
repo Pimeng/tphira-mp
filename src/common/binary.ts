@@ -150,7 +150,10 @@ export class BinaryReader {
     return this.readBool() ? decode(this) : null;
   }
 
-  readResult<Ok, Err>(decodeOk: (r: BinaryReader) => Ok, decodeErr: (r: BinaryReader) => Err): { ok: true; value: Ok } | { ok: false; error: Err } {
+  readResult<Ok, Err>(
+    decodeOk: (r: BinaryReader) => Ok,
+    decodeErr: (r: BinaryReader) => Err
+  ): { ok: true; value: Ok } | { ok: false; error: Err } {
     if (this.readBool()) return { ok: true, value: decodeOk(this) };
     return { ok: false, error: decodeErr(this) };
   }
@@ -379,7 +382,11 @@ export class BinaryWriter {
   }
 
   /** 写入 Result<Ok, Err>（ok 编码为 true + value，err 编码为 false + error） */
-  writeResult<Ok, Err>(value: { ok: true; value: Ok } | { ok: false; error: Err }, encodeOk: (w: BinaryWriter, v: Ok) => void, encodeErr: (w: BinaryWriter, v: Err) => void): void {
+  writeResult<Ok, Err>(
+    value: { ok: true; value: Ok } | { ok: false; error: Err },
+    encodeOk: (w: BinaryWriter, v: Ok) => void,
+    encodeErr: (w: BinaryWriter, v: Err) => void
+  ): void {
     if (value.ok) {
       this.writeBool(true);
       encodeOk(this, value.value);
@@ -396,7 +403,11 @@ export class BinaryWriter {
   }
 
   /** 写入 Map（先写 LEB128 大小，再逐个编码键值对） */
-  writeMap<K, V>(map: Map<K, V>, encodeK: (w: BinaryWriter, v: K) => void, encodeV: (w: BinaryWriter, v: V) => void): void {
+  writeMap<K, V>(
+    map: Map<K, V>,
+    encodeK: (w: BinaryWriter, v: K) => void,
+    encodeV: (w: BinaryWriter, v: V) => void
+  ): void {
     this.writeUleb(map.size);
     for (const [k, v] of map) {
       encodeK(this, k);
@@ -458,7 +469,11 @@ export function err<T = never>(error: string): StringResult<T> {
 }
 
 /** 编码 StringResult（错误类型固定为 string） */
-export function encodeStringResult<T>(w: BinaryWriter, value: StringResult<T>, encodeOk: (w: BinaryWriter, v: T) => void): void {
+export function encodeStringResult<T>(
+  w: BinaryWriter,
+  value: StringResult<T>,
+  encodeOk: (w: BinaryWriter, v: T) => void
+): void {
   w.writeResult(value, encodeOk, (ww, s) => ww.writeString(s));
 }
 

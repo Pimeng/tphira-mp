@@ -4,7 +4,11 @@ import { parseUserIdArg } from "../cliHelpers.js";
 import type { CommandCtx } from "./types.js";
 
 export async function handleListUsers(ctx: CommandCtx): Promise<void> {
-  const { state, t, printer: { print, printInfo } } = ctx;
+  const {
+    state,
+    t,
+    printer: { print, printInfo }
+  } = ctx;
   const users = await state.mutex.runExclusive(async () => {
     return [...state.users.values()].map((u) => ({
       id: u.id,
@@ -24,20 +28,27 @@ export async function handleListUsers(ctx: CommandCtx): Promise<void> {
   print("");
   print(t("cli-users-total", { count: users.length }));
   for (const u of users) {
-    print(t("cli-user-line", {
-      id: u.id,
-      name: u.name,
-      status: u.connected ? t("cli-user-status-online") : t("cli-user-status-offline"),
-      role: u.monitor ? t("cli-user-role-monitor") : t("cli-user-role-player"),
-      room: u.room ?? t("cli-none"),
-      bannedTag: u.banned ? t("cli-user-banned-tag") : ""
-    }));
+    print(
+      t("cli-user-line", {
+        id: u.id,
+        name: u.name,
+        status: u.connected ? t("cli-user-status-online") : t("cli-user-status-offline"),
+        role: u.monitor ? t("cli-user-role-monitor") : t("cli-user-role-player"),
+        room: u.room ?? t("cli-none"),
+        bannedTag: u.banned ? t("cli-user-banned-tag") : ""
+      })
+    );
   }
   print("");
 }
 
 export async function handleUserInfo(ctx: CommandCtx, args: string[]): Promise<void> {
-  const { state, getLang, t, printer: { print, printError } } = ctx;
+  const {
+    state,
+    getLang,
+    t,
+    printer: { print, printError }
+  } = ctx;
   if (args.length === 0) {
     printError(t("cli-usage-user"));
     return;
@@ -69,7 +80,9 @@ export async function handleUserInfo(ctx: CommandCtx, args: string[]): Promise<v
   print(t("cli-user-info-header"));
   print(t("cli-user-info-id", { id: info.id }));
   print(t("cli-user-info-name", { name: info.name }));
-  print(t("cli-user-info-status", { status: info.connected ? t("cli-user-status-online") : t("cli-user-status-offline") }));
+  print(
+    t("cli-user-info-status", { status: info.connected ? t("cli-user-status-online") : t("cli-user-status-offline") })
+  );
   print(t("cli-user-info-role", { role: info.monitor ? t("cli-user-role-monitor") : t("cli-user-role-player") }));
   print(t("cli-user-info-room", { room: info.room ?? t("cli-none") }));
   print(t("cli-user-info-banned", { banned: info.banned ? t("cli-yes") : t("cli-no") }));
@@ -79,7 +92,12 @@ export async function handleUserInfo(ctx: CommandCtx, args: string[]): Promise<v
 }
 
 export async function handleKick(ctx: CommandCtx, args: string[]): Promise<void> {
-  const { state, getLang, t, printer: { printError, printSuccess } } = ctx;
+  const {
+    state,
+    getLang,
+    t,
+    printer: { printError, printSuccess }
+  } = ctx;
   if (args.length === 0) {
     printError(t("cli-usage-kick"));
     return;

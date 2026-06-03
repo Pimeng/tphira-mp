@@ -100,9 +100,13 @@ export class Room {
   }
 
   /** 只读用户 ID 集合 */
-  get users(): ReadonlySet<number> { return this._users; }
+  get users(): ReadonlySet<number> {
+    return this._users;
+  }
   /** 只读观战者 ID 集合 */
-  get monitors(): ReadonlySet<number> { return this._monitors; }
+  get monitors(): ReadonlySet<number> {
+    return this._monitors;
+  }
   /** 当前选中的谱面 */
   chart: Chart | null = null;
 
@@ -130,9 +134,8 @@ export class Room {
   private static readonly MAX_LOG_MESSAGE_LENGTH = 1000;
 
   addLog(message: string, timestamp: number): void {
-    const truncated = message.length > Room.MAX_LOG_MESSAGE_LENGTH
-      ? message.slice(0, Room.MAX_LOG_MESSAGE_LENGTH) + "..."
-      : message;
+    const truncated =
+      message.length > Room.MAX_LOG_MESSAGE_LENGTH ? message.slice(0, Room.MAX_LOG_MESSAGE_LENGTH) + "..." : message;
     this.recentLogs.push({ message: truncated, timestamp });
     if (this.recentLogs.length > Room.MAX_RECENT_LOGS) {
       this.recentLogs.shift();
@@ -204,10 +207,7 @@ export class Room {
   async notifyWebSocket(state: { wsService: WsBroadcaster | null }): Promise<void> {
     if (state.wsService) {
       // 并行发送，不等待完成
-      void Promise.allSettled([
-        state.wsService.broadcastRoomUpdate(this.id),
-        state.wsService.broadcastAdminUpdate()
-      ]);
+      void Promise.allSettled([state.wsService.broadcastRoomUpdate(this.id), state.wsService.broadcastAdminUpdate()]);
     }
   }
 
@@ -254,7 +254,11 @@ export class Room {
     await broadcast({ type: "Message", message: msg });
   }
 
-  private formatMessageForLog(msg: Message, lang: Language, usersById?: (id: number) => { name: string } | undefined): string | null {
+  private formatMessageForLog(
+    msg: Message,
+    lang: Language,
+    usersById?: (id: number) => { name: string } | undefined
+  ): string | null {
     const name = (id: number) => usersById?.(id)?.name ?? String(id);
 
     switch (msg.type) {
@@ -280,7 +284,12 @@ export class Room {
         return tl(lang, "log-msg-start-playing");
       case "Played": {
         const acc = (msg.accuracy * 100).toFixed(2);
-        return tl(lang, "log-msg-played", { user: name(msg.user), score: String(msg.score), acc, fc: msg.full_combo ? "true" : "false" });
+        return tl(lang, "log-msg-played", {
+          user: name(msg.user),
+          score: String(msg.score),
+          acc,
+          fc: msg.full_combo ? "true" : "false"
+        });
       }
       case "GameEnd":
         return tl(lang, "log-msg-game-end");
@@ -295,41 +304,46 @@ export class Room {
     }
   }
 
-  async sendAs(broadcast: (cmd: ServerCommand) => Promise<void>, user: User, content: string, lang?: Language): Promise<void> {
+  async sendAs(
+    broadcast: (cmd: ServerCommand) => Promise<void>,
+    user: User,
+    content: string,
+    lang?: Language
+  ): Promise<void> {
     await this.send(broadcast, { type: "Chat", user: user.id, content }, undefined, lang);
   }
 
   async onUserLeave(opts: RoomLifecycleOptions & { user: User }): Promise<boolean> {
-      const { user } = opts;
-      await this.send(opts.broadcast, { type: "LeaveRoom", user: user.id, name: user.name }, opts.usersById, opts.lang);
-      user.room = null;
+    const { user } = opts;
+    await this.send(opts.broadcast, { type: "LeaveRoom", user: user.id, name: user.name }, opts.usersById, opts.lang);
+    user.room = null;
 
-      if (user.monitor) this._monitors.delete(user.id);
-      else this._users.delete(user.id);
-      this.invalidateIdCache();
+    if (user.monitor) this._monitors.delete(user.id);
+    else this._users.delete(user.id);
+    this.invalidateIdCache();
 
-      if (this.hostId === user.id) {
-        const users = this.userIds();
-        if (users.length === 0) return true;
-        const newHost = opts.pickRandomUserId(users);
-        if (newHost === null) return true;
-        this.hostId = newHost;
-        if (opts.logger) logRoomInfo(opts.logger, opts.lang, this.id, "log-room-host-changed-offline", { old: String(user.id), next: String(newHost) });
-        await this.send(opts.broadcast, { type: "NewHost", user: newHost }, opts.usersById, opts.lang);
-        const newHostUser = opts.usersById(newHost);
-        if (newHostUser) await newHostUser.trySend({ type: "ChangeHost", is_host: true });
-      }
-
-      if (opts.wsService) {
-        void Promise.allSettled([
-          opts.wsService.broadcastRoomUpdate(this.id), 
-          opts.wsService.broadcastAdminUpdate()
-        ]);
-      }
-      await this.checkAllReady(opts);
-      return this._users.size === 0 && this._monitors.size === 0;
+    if (this.hostId === user.id) {
+      const users = this.userIds();
+      if (users.length === 0) return true;
+      const newHost = opts.pickRandomUserId(users);
+      if (newHost === null) return true;
+      this.hostId = newHost;
+      if (opts.logger)
+        logRoomInfo(opts.logger, opts.lang, this.id, "log-room-host-changed-offline", {
+          old: String(user.id),
+          next: String(newHost)
+        });
+      await this.send(opts.broadcast, { type: "NewHost", user: newHost }, opts.usersById, opts.lang);
+      const newHostUser = opts.usersById(newHost);
+      if (newHostUser) await newHostUser.trySend({ type: "ChangeHost", is_host: true });
     }
 
+    if (opts.wsService) {
+      void Promise.allSettled([opts.wsService.broadcastRoomUpdate(this.id), opts.wsService.broadcastAdminUpdate()]);
+    }
+    await this.checkAllReady(opts);
+    return this._users.size === 0 && this._monitors.size === 0;
+  }
 
   resetGameTime(usersById: (id: number) => User | undefined): void {
     for (const id of this.userIds()) {
@@ -339,143 +353,150 @@ export class Room {
   }
 
   async checkAllReady(opts: RoomLifecycleOptions & { user?: User }): Promise<void> {
-      if (this.state.type === "WaitForReady") {
-        const started = this.state.started;
-        const allIds = this.allParticipantIds();
-        const allReady = allIds.every((id) => started.has(id));
-        if (!allReady) return;
+    if (this.state.type === "WaitForReady") {
+      const started = this.state.started;
+      const allIds = this.allParticipantIds();
+      const allReady = allIds.every((id) => started.has(id));
+      if (!allReady) return;
 
-        if (this.contest?.manualStart) return;
+      if (this.contest?.manualStart) return;
 
-        if (opts.onEnterPlaying) await opts.onEnterPlaying(this);
+      if (opts.onEnterPlaying) await opts.onEnterPlaying(this);
 
-        const users = this.userIds();
-        const monitors = this.monitorIds();
-        const sep = opts.lang.lang === "zh-CN" ? "、" : ", ";
-        const usersText = users.join(sep);
-        const monitorsText = monitors.join(sep);
-        const monitorsSuffix = monitors.length > 0 ? tl(opts.lang, "log-room-game-start-monitors", { monitors: monitorsText }) : "";
-        if (opts.logger) logRoomInfo(opts.logger, opts.lang, this.id, "log-room-game-start", { users: usersText, monitorsSuffix });
-        await this.send(opts.broadcast, { type: "StartPlaying" }, opts.usersById, opts.lang);
-        this.resetGameTime(opts.usersById);
-        this.state = { type: "Playing", results: new Map(), aborted: new Set() };
-        await this.onStateChange(opts.broadcast);
-        void this.notifyWebSocket({ wsService: opts.wsService ?? null });
-        return;
-      }
+      const users = this.userIds();
+      const monitors = this.monitorIds();
+      const sep = opts.lang.lang === "zh-CN" ? "、" : ", ";
+      const usersText = users.join(sep);
+      const monitorsText = monitors.join(sep);
+      const monitorsSuffix =
+        monitors.length > 0 ? tl(opts.lang, "log-room-game-start-monitors", { monitors: monitorsText }) : "";
+      if (opts.logger)
+        logRoomInfo(opts.logger, opts.lang, this.id, "log-room-game-start", { users: usersText, monitorsSuffix });
+      await this.send(opts.broadcast, { type: "StartPlaying" }, opts.usersById, opts.lang);
+      this.resetGameTime(opts.usersById);
+      this.state = { type: "Playing", results: new Map(), aborted: new Set() };
+      await this.onStateChange(opts.broadcast);
+      void this.notifyWebSocket({ wsService: opts.wsService ?? null });
+      return;
+    }
 
-      if (this.state.type === "Playing") {
-        const results = this.state.results;
-        const aborted = this.state.aborted;
-        const playerIds = this.userIds();
-        const finished = playerIds.every((id) => results.has(id) || aborted.has(id));
-        if (!finished) return;
+    if (this.state.type === "Playing") {
+      const results = this.state.results;
+      const aborted = this.state.aborted;
+      const playerIds = this.userIds();
+      const finished = playerIds.every((id) => results.has(id) || aborted.has(id));
+      if (!finished) return;
 
-        if (results.size > 0) {
-          let bestScore = Number.NEGATIVE_INFINITY;
-          let bestAcc = Number.NEGATIVE_INFINITY;
-          let bestStd = Number.POSITIVE_INFINITY;
-          const bestScoreIds: number[] = [];
-          const bestAccIds: number[] = [];
-          const bestStdIds: number[] = [];
+      if (results.size > 0) {
+        let bestScore = Number.NEGATIVE_INFINITY;
+        let bestAcc = Number.NEGATIVE_INFINITY;
+        let bestStd = Number.POSITIVE_INFINITY;
+        const bestScoreIds: number[] = [];
+        const bestAccIds: number[] = [];
+        const bestStdIds: number[] = [];
 
-          for (const [id, r] of results) {
-            if (r.score > bestScore) {
-              bestScore = r.score;
-              bestScoreIds.length = 0;
-              bestScoreIds.push(id);
-            } else if (r.score === bestScore) {
-              bestScoreIds.push(id);
-            }
-
-            if (r.accuracy > bestAcc) {
-              bestAcc = r.accuracy;
-              bestAccIds.length = 0;
-              bestAccIds.push(id);
-            } else if (r.accuracy === bestAcc) {
-              bestAccIds.push(id);
-            }
-
-            if (r.std < bestStd) {
-              bestStd = r.std;
-              bestStdIds.length = 0;
-              bestStdIds.push(id);
-            } else if (r.std === bestStd) {
-              bestStdIds.push(id);
-            }
+        for (const [id, r] of results) {
+          if (r.score > bestScore) {
+            bestScore = r.score;
+            bestScoreIds.length = 0;
+            bestScoreIds.push(id);
+          } else if (r.score === bestScore) {
+            bestScoreIds.push(id);
           }
 
-          const bestScoreName = opts.usersById(bestScoreIds[0]!)?.name ?? String(bestScoreIds[0]!);
-          const bestAccName = opts.usersById(bestAccIds[0]!)?.name ?? String(bestAccIds[0]!);
-          const bestStdName = opts.usersById(bestStdIds[0]!)?.name ?? String(bestStdIds[0]!);
-          const bestStdMs = Math.round(bestStd * 1000);
+          if (r.accuracy > bestAcc) {
+            bestAcc = r.accuracy;
+            bestAccIds.length = 0;
+            bestAccIds.push(id);
+          } else if (r.accuracy === bestAcc) {
+            bestAccIds.push(id);
+          }
 
-          const scoreText = tl(opts.lang, "chat-game-summary-score", {
-            name: bestScoreName,
-            id: String(bestScoreIds[0]!),
-            score: String(bestScore)
-          });
-          const accText = tl(opts.lang, "chat-game-summary-acc", {
-            name: bestAccName,
-            id: String(bestAccIds[0]!),
-            acc: `${(bestAcc * 100).toFixed(2)}%`
-          });
-          const stdText = tl(opts.lang, "chat-game-summary-std", {
-            name: bestStdName,
-            id: String(bestStdIds[0]!),
-            std: String(bestStdMs)
-          });
-          const summary = tl(opts.lang, "chat-game-summary", { scoreText, accText, stdText });
-
-          await this.send(opts.broadcast, { type: "Chat", user: 0, content: summary }, undefined, opts.lang);
+          if (r.std < bestStd) {
+            bestStd = r.std;
+            bestStdIds.length = 0;
+            bestStdIds.push(id);
+          } else if (r.std === bestStd) {
+            bestStdIds.push(id);
+          }
         }
 
-        if (opts.logger) logRoomInfo(opts.logger, opts.lang, this.id, "log-room-game-end", {
+        const bestScoreName = opts.usersById(bestScoreIds[0]!)?.name ?? String(bestScoreIds[0]!);
+        const bestAccName = opts.usersById(bestAccIds[0]!)?.name ?? String(bestAccIds[0]!);
+        const bestStdName = opts.usersById(bestStdIds[0]!)?.name ?? String(bestStdIds[0]!);
+        const bestStdMs = Math.round(bestStd * 1000);
+
+        const scoreText = tl(opts.lang, "chat-game-summary-score", {
+          name: bestScoreName,
+          id: String(bestScoreIds[0]!),
+          score: String(bestScore)
+        });
+        const accText = tl(opts.lang, "chat-game-summary-acc", {
+          name: bestAccName,
+          id: String(bestAccIds[0]!),
+          acc: `${(bestAcc * 100).toFixed(2)}%`
+        });
+        const stdText = tl(opts.lang, "chat-game-summary-std", {
+          name: bestStdName,
+          id: String(bestStdIds[0]!),
+          std: String(bestStdMs)
+        });
+        const summary = tl(opts.lang, "chat-game-summary", { scoreText, accText, stdText });
+
+        await this.send(opts.broadcast, { type: "Chat", user: 0, content: summary }, undefined, opts.lang);
+      }
+
+      if (opts.logger)
+        logRoomInfo(opts.logger, opts.lang, this.id, "log-room-game-end", {
           uploaded: String(results.size),
           aborted: String(aborted.size)
         });
-        await this.send(opts.broadcast, { type: "GameEnd" }, opts.usersById, opts.lang);
-        if (opts.onGameEnd) await opts.onGameEnd(this);
-        this.state = { type: "SelectChart" };
+      await this.send(opts.broadcast, { type: "GameEnd" }, opts.usersById, opts.lang);
+      if (opts.onGameEnd) await opts.onGameEnd(this);
+      this.state = { type: "SelectChart" };
 
-        if (this.contest?.autoDisband && opts.disbandRoom) {
-          const chartText = this.chart ? `${this.chart.id}:${this.chart.name}` : "null";
-          const rows = [...results.entries()]
-            .map(([id, r]) => {
-              const name = opts.usersById(id)?.name ?? String(id);
-              return { id, name, score: r.score, acc: r.accuracy, fc: r.full_combo, std: r.std, std_score: r.std_score };
-            })
-            .sort((a, b) => b.score - a.score);
-          if (opts.logger) logRoomInfo(opts.logger, opts.lang, this.id, "log-contest-game-results", {
+      if (this.contest?.autoDisband && opts.disbandRoom) {
+        const chartText = this.chart ? `${this.chart.id}:${this.chart.name}` : "null";
+        const rows = [...results.entries()]
+          .map(([id, r]) => {
+            const name = opts.usersById(id)?.name ?? String(id);
+            return { id, name, score: r.score, acc: r.accuracy, fc: r.full_combo, std: r.std, std_score: r.std_score };
+          })
+          .sort((a, b) => b.score - a.score);
+        if (opts.logger)
+          logRoomInfo(opts.logger, opts.lang, this.id, "log-contest-game-results", {
             chart: chartText,
             results: JSON.stringify(rows),
             aborted: JSON.stringify([...aborted].sort((a, b) => a - b))
           });
-          await opts.disbandRoom(this);
-          return;
-        }
-
-        if (this.isCycle()) {
-          const users = this.userIds();
-          if (users.length > 1) {
-            const index = Math.max(0, users.indexOf(this.hostId));
-            const newHost = users[(index + 1) % users.length]!;
-            const oldHost = this.hostId;
-            this.hostId = newHost;
-            if (opts.logger) logRoomInfo(opts.logger, opts.lang, this.id, "log-room-host-changed-cycle", { old: String(oldHost), next: String(newHost) });
-            await this.send(opts.broadcast, { type: "NewHost", user: newHost }, opts.usersById, opts.lang);
-            const oldHostUser = opts.usersById(oldHost);
-            if (oldHostUser) await oldHostUser.trySend({ type: "ChangeHost", is_host: false });
-            const newHostUser = opts.usersById(newHost);
-            if (newHostUser) await newHostUser.trySend({ type: "ChangeHost", is_host: true });
-          }
-        }
-
-        await this.onStateChange(opts.broadcast);
-        void this.notifyWebSocket({ wsService: opts.wsService ?? null });
+        await opts.disbandRoom(this);
+        return;
       }
-    }
 
+      if (this.isCycle()) {
+        const users = this.userIds();
+        if (users.length > 1) {
+          const index = Math.max(0, users.indexOf(this.hostId));
+          const newHost = users[(index + 1) % users.length]!;
+          const oldHost = this.hostId;
+          this.hostId = newHost;
+          if (opts.logger)
+            logRoomInfo(opts.logger, opts.lang, this.id, "log-room-host-changed-cycle", {
+              old: String(oldHost),
+              next: String(newHost)
+            });
+          await this.send(opts.broadcast, { type: "NewHost", user: newHost }, opts.usersById, opts.lang);
+          const oldHostUser = opts.usersById(oldHost);
+          if (oldHostUser) await oldHostUser.trySend({ type: "ChangeHost", is_host: false });
+          const newHostUser = opts.usersById(newHost);
+          if (newHostUser) await newHostUser.trySend({ type: "ChangeHost", is_host: true });
+        }
+      }
+
+      await this.onStateChange(opts.broadcast);
+      void this.notifyWebSocket({ wsService: opts.wsService ?? null });
+    }
+  }
 
   validateJoin(user: User, monitor: boolean): void {
     if (this.contest && !this.contest.whitelist.has(user.id)) throw new Error(tl(user.lang, "room-not-whitelisted"));
@@ -502,5 +523,4 @@ export class Room {
     this.checkHost(user);
     if (this.state.type !== "SelectChart") throw new Error(tl(user.lang, "room-invalid-state"));
   }
-
 }

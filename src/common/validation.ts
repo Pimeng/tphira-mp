@@ -6,9 +6,7 @@
 import { parseRoomId, type RoomId } from "./roomId.js";
 
 /** 验证结果类型 */
-export type ValidationResult<T> =
-  | { valid: true; value: T }
-  | { valid: false; error: string };
+export type ValidationResult<T> = { valid: true; value: T } | { valid: false; error: string };
 
 // ========== 兼容 API（用于测试） ==========
 
@@ -101,9 +99,7 @@ export function validateMaxUsers(value: unknown): ValidationResult<number> {
 /** 验证用户 ID 数组 */
 export function validateUserIdArray(value: unknown): ValidationResult<number[]> {
   if (!Array.isArray(value)) return { valid: false, error: "bad-user-ids" };
-  const ids = value
-    .map((it) => (typeof it === "string" ? Number(it) : it))
-    .filter((it) => isValidInteger(it));
+  const ids = value.map((it) => (typeof it === "string" ? Number(it) : it)).filter((it) => isValidInteger(it));
   if (ids.length === 0) return { valid: false, error: "bad-user-ids" };
   return { valid: true, value: ids as number[] };
 }

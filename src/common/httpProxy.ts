@@ -19,9 +19,10 @@ export function parseProxy(proxy: string): ParsedProxy {
   if (!Number.isInteger(port) || port <= 0 || port > 65535) throw new Error("invalid proxy port");
   const username = url.username ? decodeURIComponent(url.username) : undefined;
   const password = url.password ? decodeURIComponent(url.password) : undefined;
-  const auth = username !== undefined || password !== undefined
-    ? Buffer.from(`${username ?? ""}:${password ?? ""}`).toString("base64")
-    : undefined;
+  const auth =
+    username !== undefined || password !== undefined
+      ? Buffer.from(`${username ?? ""}:${password ?? ""}`).toString("base64")
+      : undefined;
 
   switch (url.protocol) {
     case "http:":
@@ -41,9 +42,7 @@ export function parseProxy(proxy: string): ParsedProxy {
 async function connectSocket(host: string, port: number, signal: AbortSignal, secure: boolean): Promise<net.Socket> {
   if (signal.aborted) throw createAbortError();
   return await new Promise<net.Socket>((resolve, reject) => {
-    const socket = secure
-      ? tls.connect({ host, port, servername: host })
-      : net.connect({ host, port });
+    const socket = secure ? tls.connect({ host, port, servername: host }) : net.connect({ host, port });
 
     const onAbort = () => socket.destroy(createAbortError());
     const onError = (error: Error) => {
@@ -120,12 +119,14 @@ async function readUntilDoubleCrlf(socket: net.Socket, signal: AbortSignal): Pro
   });
 }
 
-export async function createHttpProxyTunnel(proxy: Extract<ParsedProxy, { type: "http" | "https" }>, targetHost: string, targetPort: number, signal: AbortSignal): Promise<net.Socket> {
+export async function createHttpProxyTunnel(
+  proxy: Extract<ParsedProxy, { type: "http" | "https" }>,
+  targetHost: string,
+  targetPort: number,
+  signal: AbortSignal
+): Promise<net.Socket> {
   const socket = await connectSocket(proxy.host, proxy.port, signal, proxy.type === "https");
-  const headers = [
-    `CONNECT ${targetHost}:${targetPort} HTTP/1.1`,
-    `Host: ${targetHost}:${targetPort}`
-  ];
+  const headers = [`CONNECT ${targetHost}:${targetPort} HTTP/1.1`, `Host: ${targetHost}:${targetPort}`];
   if (proxy.auth) headers.push(`Proxy-Authorization: Basic ${proxy.auth}`);
   headers.push("", "");
   socket.write(headers.join("\r\n"));
@@ -177,7 +178,12 @@ function ipv6Bytes(host: string): Buffer | null {
   return bytes;
 }
 
-export async function establishSocksTunnel(proxy: Extract<ParsedProxy, { type: "socks4" | "socks5" }>, targetHost: string, targetPort: number, signal: AbortSignal): Promise<net.Socket> {
+export async function establishSocksTunnel(
+  proxy: Extract<ParsedProxy, { type: "socks4" | "socks5" }>,
+  targetHost: string,
+  targetPort: number,
+  signal: AbortSignal
+): Promise<net.Socket> {
   const socket = await connectSocket(proxy.host, proxy.port, signal, false);
   try {
     if (proxy.type === "socks4") {
@@ -274,17 +280,14 @@ export async function establishSocksTunnel(proxy: Extract<ParsedProxy, { type: "
 
     const ipv4 = ipv4Bytes(targetHost);
     const ipv6 = ipv6Bytes(targetHost);
-    const hostBuf = ipv4
-      ? Buffer.from(ipv4)
-      : ipv6
-        ? ipv6
-        : Buffer.from(targetHost, "utf8");
+    const hostBuf = ipv4 ? Buffer.from(ipv4) : ipv6 ? ipv6 : Buffer.from(targetHost, "utf8");
     const atyp = ipv4 ? 0x01 : ipv6 ? 0x04 : 0x03;
     const portBuf = Buffer.alloc(2);
     portBuf.writeUInt16BE(targetPort, 0);
-    const req = atyp === 0x03
-      ? Buffer.concat([Buffer.from([0x05, 0x01, 0x00, atyp, hostBuf.length]), hostBuf, portBuf])
-      : Buffer.concat([Buffer.from([0x05, 0x01, 0x00, atyp]), hostBuf, portBuf]);
+    const req =
+      atyp === 0x03
+        ? Buffer.concat([Buffer.from([0x05, 0x01, 0x00, atyp, hostBuf.length]), hostBuf, portBuf])
+        : Buffer.concat([Buffer.from([0x05, 0x01, 0x00, atyp]), hostBuf, portBuf]);
     await writeAll(socket, req);
 
     const head = await new Promise<Buffer>((resolve, reject) => {
@@ -308,7 +311,7 @@ export async function establishSocksTunnel(proxy: Extract<ParsedProxy, { type: "
     });
     if (head[1] !== 0x00) throw new Error(`socks5 connect failed: ${head[1]}`);
     const atypResp = head[3];
-    const addrLen = atypResp === 0x01 ? 4 : atypResp === 0x04 ? 16 : head[4] ?? 0;
+    const addrLen = atypResp === 0x01 ? 4 : atypResp === 0x04 ? 16 : (head[4] ?? 0);
     const totalLen = 4 + (atypResp === 0x03 ? 1 : 0) + addrLen + 2;
     if (head.length > totalLen) socket.unshift(head.subarray(totalLen));
     else if (head.length < totalLen) {

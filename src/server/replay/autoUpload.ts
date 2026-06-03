@@ -55,7 +55,9 @@ export function createAutoUploadHandler(state: ServerState): AutoUploadHandlerWi
         try {
           fileBuffer = await readFile(filePath);
         } catch (err) {
-          state.logger.error(`Auto upload failed for user ${userId}: failed to read file - ${err instanceof Error ? err.message : String(err)}`);
+          state.logger.error(
+            `Auto upload failed for user ${userId}: failed to read file - ${err instanceof Error ? err.message : String(err)}`
+          );
           return;
         }
 
@@ -102,14 +104,18 @@ export function createAutoUploadHandler(state: ServerState): AutoUploadHandlerWi
           }
         }
 
-        state.logger.info(`Auto upload completed for user ${userId}, chart ${chartId}, scoreId: ${uploadResult.scoreId}`);
+        state.logger.info(
+          `Auto upload completed for user ${userId}, chart ${chartId}, scoreId: ${uploadResult.scoreId}`
+        );
 
         // 上传成功后删除本地文件（只保留元数据）
         try {
           await rm(filePath);
           state.logger.debug(`Local replay file deleted for user ${userId}, chart ${chartId}, timestamp ${timestamp}`);
         } catch (err) {
-          state.logger.warn(`Failed to delete local replay file for user ${userId}: ${err instanceof Error ? err.message : String(err)}`);
+          state.logger.warn(
+            `Failed to delete local replay file for user ${userId}: ${err instanceof Error ? err.message : String(err)}`
+          );
         }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);

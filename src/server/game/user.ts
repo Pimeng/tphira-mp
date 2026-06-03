@@ -120,4 +120,3 @@ export class User {
     return this.dangleToken === token;
   }
 }
-

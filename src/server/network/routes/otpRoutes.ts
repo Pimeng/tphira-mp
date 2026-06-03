@@ -12,7 +12,11 @@ export async function tryHandleOtpRoutes(ctx: RequestContext): Promise<boolean> 
   if (req.method === "POST" && url.pathname === "/admin/otp/request") {
     const adminToken = state.config.admin_token?.trim() || "";
     if (adminToken) {
-      write(403, { ok: false, error: "otp-disabled-when-token-configured", message: ctx.t("otp-disabled-when-token-configured") });
+      write(403, {
+        ok: false,
+        error: "otp-disabled-when-token-configured",
+        message: ctx.t("otp-disabled-when-token-configured")
+      });
       return true;
     }
 
@@ -141,7 +145,11 @@ export async function tryHandleOtpRoutes(ctx: RequestContext): Promise<boolean> 
       return true;
     }
     if (otpBannedSsids.has(ssid)) {
-      write(403, { ok: false, error: "ssid-banned-too-many-attempts", message: ctx.t("ssid-banned-too-many-attempts") });
+      write(403, {
+        ok: false,
+        error: "ssid-banned-too-many-attempts",
+        message: ctx.t("ssid-banned-too-many-attempts")
+      });
       return true;
     }
 

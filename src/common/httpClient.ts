@@ -30,7 +30,12 @@ function isHttpsUrl(url: URL): boolean {
   return url.protocol === "https:";
 }
 
-function normalizeHeaders(headersInit: RequestHeadersInit | undefined, body: Buffer | undefined, url: URL, useAbsoluteUrl: boolean): Record<string, string> {
+function normalizeHeaders(
+  headersInit: RequestHeadersInit | undefined,
+  body: Buffer | undefined,
+  url: URL,
+  useAbsoluteUrl: boolean
+): Record<string, string> {
   const headers = new Headers(headersInit);
   if (!headers.has("host")) headers.set("host", url.host);
   if (body && !headers.has("content-length")) headers.set("content-length", String(body.length));
@@ -54,7 +59,12 @@ function selectAgent(url: URL): http.Agent | false {
   return keepAliveAgent;
 }
 
-function toNodeRequestOptions(url: URL, method: string, headers: Record<string, string>, path: string): http.RequestOptions {
+function toNodeRequestOptions(
+  url: URL,
+  method: string,
+  headers: Record<string, string>,
+  path: string
+): http.RequestOptions {
   return {
     protocol: url.protocol,
     host: url.hostname,
@@ -108,7 +118,12 @@ async function fetchDirect(url: URL, init: FetchWithProxyInit, signal: AbortSign
   return await executeRequest(isHttpsUrl(url) ? https.request : http.request, options, body, signal);
 }
 
-async function fetchViaHttpProxy(url: URL, init: FetchWithProxyInit, signal: AbortSignal, proxy: Extract<ParsedProxy, { type: "http" | "https" }>): Promise<Response> {
+async function fetchViaHttpProxy(
+  url: URL,
+  init: FetchWithProxyInit,
+  signal: AbortSignal,
+  proxy: Extract<ParsedProxy, { type: "http" | "https" }>
+): Promise<Response> {
   const method = init.method ?? "GET";
   const body = await normalizeBody(init.body);
 
@@ -153,7 +168,12 @@ async function fetchViaHttpProxy(url: URL, init: FetchWithProxyInit, signal: Abo
   return await executeRequest(https.request, options, body, signal);
 }
 
-async function fetchViaSocksProxy(url: URL, init: FetchWithProxyInit, signal: AbortSignal, proxy: Extract<ParsedProxy, { type: "socks4" | "socks5" }>): Promise<Response> {
+async function fetchViaSocksProxy(
+  url: URL,
+  init: FetchWithProxyInit,
+  signal: AbortSignal,
+  proxy: Extract<ParsedProxy, { type: "socks4" | "socks5" }>
+): Promise<Response> {
   const method = init.method ?? "GET";
   const body = await normalizeBody(init.body);
   const targetPort = Number(url.port || (isHttpsUrl(url) ? 443 : 80));
@@ -189,7 +209,11 @@ async function fetchViaSocksProxy(url: URL, init: FetchWithProxyInit, signal: Ab
   return await executeRequest(isHttpsUrl(url) ? https.request : http.request, options, body, signal);
 }
 
-async function fetchWithConfiguredProxy(input: string | URL, init: FetchWithProxyInit, signal: AbortSignal): Promise<Response> {
+async function fetchWithConfiguredProxy(
+  input: string | URL,
+  init: FetchWithProxyInit,
+  signal: AbortSignal
+): Promise<Response> {
   const url = input instanceof URL ? input : new URL(String(input));
   if (init.proxy === false) return await fetchDirect(url, init, signal);
 

@@ -3,7 +3,11 @@ import { parseToggleArg } from "../cliHelpers.js";
 import type { CommandCtx } from "./types.js";
 
 export async function handleReplay(ctx: CommandCtx, args: string[]): Promise<void> {
-  const { state, t, printer: { printError, printInfo, printSuccess } } = ctx;
+  const {
+    state,
+    t,
+    printer: { printError, printInfo, printSuccess }
+  } = ctx;
   const toggle = parseToggleArg(args[0]);
   if (toggle === null) {
     printError(t("cli-usage-replay"));
@@ -31,14 +35,20 @@ export async function handleReplay(ctx: CommandCtx, args: string[]): Promise<voi
 }
 
 export async function handleRoomCreation(ctx: CommandCtx, args: string[]): Promise<void> {
-  const { state, t, printer: { printError, printInfo, printSuccess } } = ctx;
+  const {
+    state,
+    t,
+    printer: { printError, printInfo, printSuccess }
+  } = ctx;
   const toggle = parseToggleArg(args[0]);
   if (toggle === null) {
     printError(t("cli-usage-roomcreation"));
     return;
   }
   if (toggle === "status") {
-    printInfo(t("cli-room-creation-status", { state: state.roomCreationEnabled ? t("cli-state-on") : t("cli-state-off") }));
+    printInfo(
+      t("cli-room-creation-status", { state: state.roomCreationEnabled ? t("cli-state-on") : t("cli-state-off") })
+    );
     return;
   }
 

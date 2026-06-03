@@ -16,11 +16,7 @@ export function getClientIp(req: http.IncomingMessage, headerName: string = "X-F
  *
  * @param allowedOrigins - 允许的源列表；空数组时只允许同域（不设置 allow-origin）
  */
-export function applyCors(
-  res: http.ServerResponse,
-  req: http.IncomingMessage,
-  allowedOrigins: string[] = []
-): void {
+export function applyCors(res: http.ServerResponse, req: http.IncomingMessage, allowedOrigins: string[] = []): void {
   const origin = typeof req.headers.origin === "string" ? req.headers.origin : "";
   // 如果配置了允许的来源列表，且当前请求来源匹配，则设置具体的来源
   // 否则不设置 allow-origin（浏览器会阻止跨域访问）
@@ -32,9 +28,10 @@ export function applyCors(
     res.setHeader("vary", "Origin");
   }
 
-  const reqHeaders = typeof req.headers["access-control-request-headers"] === "string"
-    ? req.headers["access-control-request-headers"]
-    : "";
+  const reqHeaders =
+    typeof req.headers["access-control-request-headers"] === "string"
+      ? req.headers["access-control-request-headers"]
+      : "";
   res.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");
   res.setHeader("access-control-allow-headers", reqHeaders || "content-type,x-admin-token,authorization");
   res.setHeader("access-control-max-age", "600");
@@ -81,7 +78,6 @@ export async function readJson(req: http.IncomingMessage, maxBodySize = DEFAULT_
   return JSON.parse(raw) as unknown;
 }
 
-
 /**
  * 处理 OPTIONS 预检请求
  */
@@ -119,4 +115,3 @@ export function extractAdminToken(req: http.IncomingMessage, url: URL, allowToke
   }
   return "";
 }
-

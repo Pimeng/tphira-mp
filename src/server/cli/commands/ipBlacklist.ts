@@ -1,7 +1,11 @@
 import type { CommandCtx } from "./types.js";
 
 export async function handleIpBlacklist(ctx: CommandCtx, args: string[]): Promise<void> {
-  const { logger, t, printer: { print, printError, printInfo, printSuccess } } = ctx;
+  const {
+    logger,
+    t,
+    printer: { print, printError, printInfo, printSuccess }
+  } = ctx;
   if (args.length === 0) {
     printError(t("cli-usage-ipblacklist"));
     return;

@@ -2,7 +2,14 @@ import { validateChatMessage } from "../cliHelpers.js";
 import type { CommandCtx } from "./types.js";
 
 export async function handleBroadcast(ctx: CommandCtx, args: string[]): Promise<void> {
-  const { state, logger, broadcastRoomAll, getLang, t, printer: { printError, printSuccess } } = ctx;
+  const {
+    state,
+    logger,
+    broadcastRoomAll,
+    getLang,
+    t,
+    printer: { printError, printSuccess }
+  } = ctx;
   if (args.length === 0) {
     printError(t("cli-usage-broadcast"));
     return;
