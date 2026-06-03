@@ -42,6 +42,8 @@ export type ServerConfig = {
   real_ip_header?: string;
   /** 是否启用 HAProxy PROXY Protocol 支持 */
   haproxy_protocol?: boolean;
+  /** TCP 连接速率限制：每 10 秒窗口内允许的最大连接数（默认 30） */
+  connection_rate_limit?: number;
   /** 服务端语言，影响日志/CLI/HTTP 默认输出语言，支持 zh-CN、en-US；未设置则按 PHIRA_MP_LANG / LANG 协商 */
   lang?: string;
   /** Phira API 端点地址，默认 https://phira.5wyxi.com */

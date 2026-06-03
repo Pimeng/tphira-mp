@@ -2,7 +2,7 @@
   "name": "tphira-mp",
   "author": "Pimeng",
   "license": "AGPL-3.0",
-  "version": "1.10.2",
+  "version": "1.10.3",
   "type": "module",
   "engines": {
     "node": ">=24"

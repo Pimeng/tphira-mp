@@ -4,19 +4,23 @@ import type { RequestContext } from "./types.js";
 /** /room 列表缓存 TTL（毫秒） */
 const ROOM_LIST_CACHE_TTL_MS = 2000;
 
-let roomListCache: { data: unknown; expiresAt: number } | null = null;
+let roomListCache: { json: string; expiresAt: number } | null = null;
 
 /**
  * 处理公共路由：无需鉴权的查询接口
  * 返回 true 表示已处理。
  */
 export async function tryHandlePublicRoutes(ctx: RequestContext): Promise<boolean> {
-  const { req, url, state, write } = ctx;
+  const { req, res, url, state, write } = ctx;
 
   if (req.method === "GET" && url.pathname === "/room") {
     const now = Date.now();
     if (roomListCache && now < roomListCache.expiresAt) {
-      write(200, roomListCache.data);
+      res.statusCode = 200;
+      res.setHeader("content-type", "application/json; charset=utf-8");
+      res.setHeader("cache-control", "no-store");
+      res.setHeader("x-content-type-options", "nosniff");
+      res.end(roomListCache.json);
       return true;
     }
 
@@ -66,8 +70,13 @@ export async function tryHandlePublicRoutes(ctx: RequestContext): Promise<boolea
 
     rooms.sort((a, b) => a.roomid.localeCompare(b.roomid));
     const result = { rooms, total };
-    roomListCache = { data: result, expiresAt: now + ROOM_LIST_CACHE_TTL_MS };
-    write(200, result);
+    const json = JSON.stringify(result);
+    roomListCache = { json, expiresAt: now + ROOM_LIST_CACHE_TTL_MS };
+    res.statusCode = 200;
+    res.setHeader("content-type", "application/json; charset=utf-8");
+    res.setHeader("cache-control", "no-store");
+    res.setHeader("x-content-type-options", "nosniff");
+    res.end(json);
     return true;
   }
 

@@ -41,6 +41,7 @@ import {
 import { startConfigFileWatcher, type ConfigWatcher } from "./configWatcher.js";
 import { NOOP } from "../../common/utils.js";
 import { isHighPriorityServerCommand } from "../network/serverCommandTransport.js";
+import { ConnectionRateLimiter } from "../utils/connectionRateLimiter.js";
 
 /** 启动服务器选项 */
 export type StartServerOptions = {
@@ -206,12 +207,25 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
    */
   const activeSockets = new Set<net.Socket>();
 
+  const connectionLimiter = new ConnectionRateLimiter({
+    maxConnections: mergedCfg.connection_rate_limit ?? 30,
+    windowMs: 10_000,
+    banDurationMs: 30_000
+  });
+
   const server = net.createServer(async (socket) => {
     activeSockets.add(socket);
     socket.once("close", () => activeSockets.delete(socket));
     const id = newUuid();
     let remoteIp = socket.remoteAddress ?? "unknown";
     let remotePort = socket.remotePort ?? 0;
+
+    if (remoteIp && !connectionLimiter.check(remoteIp)) {
+      logger.debug(`Rate-limited connection from ${remoteIp}`);
+      socket.destroy();
+      activeSockets.delete(socket);
+      return;
+    }
 
     // 如果启用了 HAProxy PROXY Protocol，尝试解析真实客户端 IP
     // HAProxy PROXY Protocol 用于在反向代理后获取真实客户端地址
@@ -453,6 +467,7 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
         });
         logger.mark(tl(state.serverLang, "log-server-stopped"));
       } finally {
+        await state.flushAdminDataNow().catch(NOOP);
         await state.replayRecorder.closeAll().catch((err) => {
           logger.warn(`Replay recorder closeAll failed: ${err instanceof Error ? err.message : String(err)}`);
         });

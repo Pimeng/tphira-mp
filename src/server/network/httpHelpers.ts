@@ -78,7 +78,7 @@ export async function broadcastRoomAll(state: ServerState, roomId: RoomId, cmd: 
     const session = u?.session;
     if (session) tasks.push(session.trySendPrepared(prepared));
   }
-  if (tasks.length > 0) await Promise.all(tasks).catch(NOOP);
+  if (tasks.length > 0) await Promise.allSettled(tasks);
 }
 
 /**

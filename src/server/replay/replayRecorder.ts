@@ -20,6 +20,8 @@ type ReplayParticipant = {
 
 /** 每玩家单局录制帧数上限, 超出后停止追加防止内存无限增长 */
 const MAX_FRAMES_PER_INFLIGHT = 15_000;
+/** 并发文件写入上限，防止 endRoom 时大量文件同时写入导致磁盘 I/O 饱和 */
+const MAX_CONCURRENT_WRITES = 4;
 
 type InFlight = {
   roomKey: string;
@@ -128,7 +130,8 @@ export class ReplayRecorder {
       return;
     }
     this.keysByRoom.delete(roomKey);
-    const tasks: Promise<ReplayFileInfo>[] = [];
+
+    const tasks: Array<() => Promise<ReplayFileInfo>> = [];
     for (const key of keys) {
       const it = this.inflightByKey.get(key);
       if (!it) continue;
@@ -137,12 +140,34 @@ export class ReplayRecorder {
         `endRoom stats: roomKey=${roomKey}, userId=${it.userId}, recordId=${it.recordId}, touchFrames=${it.touchFrames.length}, judgeEvents=${it.judgeEvents.length}`
       );
       this.inflightByKey.delete(key);
-      tasks.push(this.closeInFlight(it).then(() => this.fileInfo(it)));
+      const inflight = it;
+      tasks.push(async () => {
+        await this.closeInFlight(inflight);
+        return this.fileInfo(inflight);
+      });
     }
-    const results = await Promise.allSettled(tasks);
-    const completed = results
-      .filter((it): it is PromiseFulfilledResult<ReplayFileInfo> => it.status === "fulfilled")
-      .map((it) => it.value);
+
+    const completed: ReplayFileInfo[] = [];
+    if (tasks.length > 0) {
+      // 并发受限执行：每个 slot 内串行，slot 间并行，最多 MAX_CONCURRENT_WRITES 个同时写入
+      const slots: Promise<void>[] = new Array(MAX_CONCURRENT_WRITES).fill(Promise.resolve());
+      const pending: Promise<void>[] = [];
+      for (let i = 0; i < tasks.length; i++) {
+        const slot = i % MAX_CONCURRENT_WRITES;
+        const p = slots[slot]!.then(tasks[i]!).then(
+          (info) => {
+            completed.push(info);
+          },
+          () => {
+            /* 单个文件写入失败不影响其他 */
+          }
+        );
+        slots[slot] = p.then(() => {});
+        pending.push(p);
+      }
+      await Promise.allSettled(pending);
+    }
+
     if (completed.length > 0) this.completedFilesByRoom.set(roomKey, completed);
     this.log("DEBUG", `endRoom completed: ${keys.size} recordings closed`);
   }

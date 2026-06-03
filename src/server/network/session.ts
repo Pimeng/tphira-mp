@@ -128,7 +128,7 @@ async function processDangleTimeout(timeout: DangleTimeout): Promise<void> {
       for (const id of room.allParticipantIds()) {
         const u = state.users.get(id);
         const session = u?.session;
-        if (session) await session.trySendPrepared(prepared).catch(NOOP);
+        if (session) session.trySendPreparedFast(prepared);
       }
     },
     broadcastToMonitors: (cmd: ServerCommand) => {
@@ -779,7 +779,7 @@ export class Session {
       const session = u?.session;
       if (session) tasks.push(session.trySendPrepared(prepared));
     }
-    if (tasks.length > 0) await Promise.all(tasks).catch(NOOP);
+    if (tasks.length > 0) await Promise.allSettled(tasks);
   }
 
   /**
@@ -863,7 +863,7 @@ export class Session {
       if (!u.room || u.room.id !== room.id) continue;
       leavePromises.push(room.onUserLeave({ user: u, ...baseOpts }));
     }
-    await Promise.all(leavePromises).catch(NOOP);
+    await Promise.allSettled(leavePromises);
     await this.state.mutex.runExclusive(async () => {
       this.state.rooms.delete(room.id);
     });

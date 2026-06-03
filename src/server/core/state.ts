@@ -145,6 +145,13 @@ export class ServerState {
   private static readonly CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
   /** 上传元数据保留天数 */
   private static readonly UPLOAD_META_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+
+  // ========== Admin 数据保存防抖 ==========
+
+  private adminSaveTimer: NodeJS.Timeout | null = null;
+  private adminSavePending = false;
+  private adminSavePromise: Promise<void> | null = null;
+  private static readonly ADMIN_SAVE_DEBOUNCE_MS = 500;
   /**
    * 创建服务器状态实例
    * @param config - 初始配置
@@ -284,6 +291,14 @@ export class ServerState {
       clearInterval(this.cleanupTimer);
       this.cleanupTimer = null;
     }
+    if (this.adminSaveTimer) {
+      clearTimeout(this.adminSaveTimer);
+      this.adminSaveTimer = null;
+      if (this.adminSavePending) {
+        this.adminSavePending = false;
+        this.adminSavePromise = null;
+      }
+    }
   }
 
   private runCleanup(): void {
@@ -329,13 +344,54 @@ export class ServerState {
   }
 
   /**
-   * 保存管理员数据到文件
+   * 保存管理员数据到文件（带防抖批处理）
    *
    * 使用写时复制（write-to-temp-then-rename）策略确保原子性写入，
    * 避免在写入过程中断电或崩溃导致数据损坏。
    * 如果重命名失败（例如 Windows 上的文件锁定），尝试删除后重试。
+   *
+   * 防抖：500ms 内的多次调用只触发一次文件写入，减少磁盘 I/O。
    */
   async saveAdminData(): Promise<void> {
+    this.adminSavePending = true;
+
+    if (this.adminSaveTimer) {
+      clearTimeout(this.adminSaveTimer);
+    }
+
+    if (!this.adminSavePromise) {
+      this.adminSavePromise = new Promise<void>((resolve) => {
+        this.adminSaveTimer = setTimeout(() => {
+          this.adminSaveTimer = null;
+          this.adminSavePending = false;
+          const promise = this.adminSavePromise;
+          this.adminSavePromise = null;
+          void this.flushAdminData().then(resolve, resolve);
+        }, ServerState.ADMIN_SAVE_DEBOUNCE_MS);
+      });
+    }
+
+    return this.adminSavePromise;
+  }
+
+  /**
+   * 强制立即写入管理员数据（忽略防抖，用于服务器关闭）
+   */
+  async flushAdminDataNow(): Promise<void> {
+    if (this.adminSaveTimer) {
+      clearTimeout(this.adminSaveTimer);
+      this.adminSaveTimer = null;
+      this.adminSavePending = false;
+      const promise = this.adminSavePromise;
+      this.adminSavePromise = null;
+      if (promise) {
+        // 已有等待者在监听，直接用实际写入覆盖
+      }
+    }
+    await this.flushAdminData();
+  }
+
+  private async flushAdminData(): Promise<void> {
     const data = await this.mutex.runExclusive(async () => this.snapshotAdminData());
     const dir = dirname(this.adminDataPath);
     await mkdir(dir, { recursive: true });
@@ -345,8 +401,6 @@ export class ServerState {
     try {
       await rename(tmp, this.adminDataPath);
     } catch {
-      // 在某些平台（如 Windows）上，如果目标文件被锁定，重命名会失败
-      // 此时尝试删除后重试
       try {
         await unlink(this.adminDataPath);
       } catch {
