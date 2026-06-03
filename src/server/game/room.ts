@@ -26,6 +26,31 @@ export type InternalRoomState =
   | { type: "WaitForReady"; started: Set<number> }
   | { type: "Playing"; results: Map<number, RecordData>; aborted: Set<number> };
 
+/** WebSocket 实时广播接口（房间状态 / 管理面板更新推送） */
+export type WsBroadcaster = {
+  broadcastRoomUpdate: (roomId: RoomId) => Promise<void>;
+  broadcastAdminUpdate: () => Promise<void>;
+};
+
+/**
+ * 房间生命周期回调集合
+ *
+ * `onUserLeave` 与 `checkAllReady` 共享同一组依赖注入（广播、用户查询、随机选主、
+ * 本地化、日志与状态钩子）。抽出为命名类型，避免两处冗长且极易写歪的内联声明。
+ */
+export type RoomLifecycleOptions = {
+  usersById: (id: number) => User | undefined;
+  broadcast: (cmd: ServerCommand) => Promise<void>;
+  broadcastToMonitors: (cmd: ServerCommand) => Promise<void> | void;
+  pickRandomUserId: (ids: number[]) => number | null;
+  lang: Language;
+  logger?: Logger;
+  disbandRoom?: (room: Room) => Promise<void>;
+  onEnterPlaying?: (room: Room) => Promise<void> | void;
+  onGameEnd?: (room: Room) => Promise<void> | void;
+  wsService?: WsBroadcaster | null;
+};
+
 /**
  * 游戏房间类
  *
@@ -176,7 +201,7 @@ export class Room {
     await broadcast({ type: "ChangeState", state: this.clientRoomState() });
   }
 
-  async notifyWebSocket(state: { wsService: { broadcastRoomUpdate: (roomId: RoomId) => Promise<void>; broadcastAdminUpdate: () => Promise<void> } | null }): Promise<void> {
+  async notifyWebSocket(state: { wsService: WsBroadcaster | null }): Promise<void> {
     if (state.wsService) {
       // 并行发送，不等待完成
       void Promise.allSettled([
@@ -274,19 +299,7 @@ export class Room {
     await this.send(broadcast, { type: "Chat", user: user.id, content }, undefined, lang);
   }
 
-  async onUserLeave(opts: {
-      user: User;
-      usersById: (id: number) => User | undefined;
-      broadcast: (cmd: ServerCommand) => Promise<void>;
-      broadcastToMonitors: (cmd: ServerCommand) => Promise<void> | void;
-      pickRandomUserId: (ids: number[]) => number | null;
-      lang: Language;
-      logger?: Logger;
-      disbandRoom?: (room: Room) => Promise<void>;
-      onEnterPlaying?: (room: Room) => Promise<void> | void;
-      onGameEnd?: (room: Room) => Promise<void> | void;
-      wsService?: { broadcastRoomUpdate: (roomId: RoomId) => Promise<void>; broadcastAdminUpdate: () => Promise<void> } | null;
-    }): Promise<boolean> {
+  async onUserLeave(opts: RoomLifecycleOptions & { user: User }): Promise<boolean> {
       const { user } = opts;
       await this.send(opts.broadcast, { type: "LeaveRoom", user: user.id, name: user.name }, opts.usersById, opts.lang);
       user.room = null;
@@ -325,19 +338,7 @@ export class Room {
     }
   }
 
-  async checkAllReady(opts: {
-      user?: User;
-      usersById: (id: number) => User | undefined;
-      broadcast: (cmd: ServerCommand) => Promise<void>;
-      broadcastToMonitors: (cmd: ServerCommand) => Promise<void> | void;
-      pickRandomUserId: (ids: number[]) => number | null;
-      lang: Language;
-      logger?: Logger;
-      disbandRoom?: (room: Room) => Promise<void>;
-      onEnterPlaying?: (room: Room) => Promise<void> | void;
-      onGameEnd?: (room: Room) => Promise<void> | void;
-      wsService?: { broadcastRoomUpdate: (roomId: RoomId) => Promise<void>; broadcastAdminUpdate: () => Promise<void> } | null;
-    }): Promise<void> {
+  async checkAllReady(opts: RoomLifecycleOptions & { user?: User }): Promise<void> {
       if (this.state.type === "WaitForReady") {
         const started = this.state.started;
         const allIds = this.allParticipantIds();

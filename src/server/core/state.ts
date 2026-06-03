@@ -142,8 +142,6 @@ export class ServerState {
   private static readonly CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
   /** 上传元数据保留天数 */
   private static readonly UPLOAD_META_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
-  /** 离线用户配置保留时间（毫秒） */
-  private static readonly OFFLINE_CONFIG_RETENTION_MS = 1 * 60 * 60 * 1000;
   /**
    * 创建服务器状态实例
    * @param config - 初始配置
@@ -304,8 +302,8 @@ export class ServerState {
       }
     }
 
-    // 清理离线超过 1 小时的用户自动上传配置
-    const cutoffConfig = now - ServerState.OFFLINE_CONFIG_RETENTION_MS;
+    // 清理已离线用户的自动上传配置（配置本身无时间戳，离线即回收；
+    // dangling 仅 10s，远短于本清理任务的小时级周期，不会误删在线/重连中的用户）
     for (const [userId] of this.autoUploadConfigs) {
       if (!this.users.has(userId)) {
         this.autoUploadConfigs.delete(userId);

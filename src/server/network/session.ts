@@ -10,6 +10,7 @@
  */
 import type net from "node:net";
 import { err, ok, type StringResult } from "../../common/binary.js";
+import { NOOP } from "../../common/utils.js";
 import type { ClientCommand, ClientRoomState, JoinRoomResponse, ServerCommand, UserInfo } from "../../common/commands.js";
 import { HEARTBEAT_DISCONNECT_TIMEOUT_MS } from "../../common/commands.js";
 import type { Stream } from "../../common/stream.js";
@@ -40,8 +41,6 @@ const MONITOR_FLUSH_INTERVAL_MS = 50;
 
 /** 心跳响应常量，避免每次新建对象 */
 const PONG = { type: "Pong" } as const;
-
-import { NOOP } from "../../common/utils.js";
 
 /** 活跃会话集合，供全局心跳定时器统一扫描 */
 const activeSessions = new Set<Session>();
@@ -93,8 +92,8 @@ async function processDangleTimeout(timeout: DangleTimeout): Promise<void> {
   const { user, token, state } = timeout;
   if (!user.isStillDangling(token)) return;
 
-  const room2 = user.room;
-  if (!room2) {
+  const room = user.room;
+  if (!room) {
     await state.mutex.runExclusive(async () => {
       state.users.delete(user.id);
     });
@@ -102,18 +101,18 @@ async function processDangleTimeout(timeout: DangleTimeout): Promise<void> {
     return;
   }
 
-  logRoomWarn(state.logger, state.serverLang, room2.id, "log-user-dangle-timeout-remove", { user: user.name }, { userId: user.id });
+  logRoomWarn(state.logger, state.serverLang, room.id, "log-user-dangle-timeout-remove", { user: user.name }, { userId: user.id });
   await state.mutex.runExclusive(async () => {
     state.users.delete(user.id);
   });
   state.cleanupUserData(user.id);
 
-  const shouldDrop = await room2.onUserLeave({
+  const shouldDrop = await room.onUserLeave({
     user,
     usersById: (id: number) => state.users.get(id),
     broadcast: async (cmd: ServerCommand) => {
       const prepared = prepareServerCommand(cmd);
-      for (const id of room2.allParticipantIds()) {
+      for (const id of room.allParticipantIds()) {
         const u = state.users.get(id);
         const session = u?.session;
         if (session) await session.trySendPrepared(prepared).catch(NOOP);
@@ -121,7 +120,7 @@ async function processDangleTimeout(timeout: DangleTimeout): Promise<void> {
     },
     broadcastToMonitors: (cmd: ServerCommand) => {
       const prepared = prepareServerCommand(cmd);
-      for (const id of room2.monitorIds()) {
+      for (const id of room.monitorIds()) {
         const u = state.users.get(id);
         const session = u?.session;
         if (session) session.trySendPreparedFast(prepared);
@@ -134,12 +133,12 @@ async function processDangleTimeout(timeout: DangleTimeout): Promise<void> {
   });
 
   if (shouldDrop) {
-    logRoomInfo(state.logger, state.serverLang, room2.id, "log-room-recycled", undefined, { userId: user.id });
+    logRoomInfo(state.logger, state.serverLang, room.id, "log-room-recycled", undefined, { userId: user.id });
     await state.mutex.runExclusive(async () => {
-      state.rooms.delete(room2.id);
+      state.rooms.delete(room.id);
     });
   } else {
-    refreshRoomLiveState(room2, state.replayEnabled);
+    refreshRoomLiveState(room, state.replayEnabled);
   }
 }
 
@@ -555,14 +554,13 @@ export class Session {
     const isBanned = this.state.bannedUsers.has(user.id);
     if (isBanned) {
       this.state.logger.info(tl(this.state.serverLang, "log-user-dangle", { user: user.name }), undefined, { userId: user.id });
-      const room2 = user.room;
       await this.state.mutex.runExclusive(async () => {
         this.state.users.delete(user.id);
       });
       // 清理用户相关内存数据，防止泄漏
       this.state.cleanupUserData(user.id);
-      if (room2) {
-        await this.handleUserLeaveRoom(user, room2);
+      if (room) {
+        await this.handleUserLeaveRoom(user, room);
       }
       return;
     }
