@@ -88,10 +88,23 @@ function makeExtendedMock(original: typeof fetch): typeof fetch {
       const id = Number(url.split("/").at(-1));
       const match = /^s(\d+)/.exec(token);
       const player = match ? parseInt(match[1]!, 10) : 100;
-      return new Response(JSON.stringify({
-        id, player, score: 999999, perfect: 1, good: 0, bad: 0, miss: 0,
-        max_combo: 1, accuracy: 1.0, full_combo: true, std: 0, std_score: 0
-      }), { status: 200 });
+      return new Response(
+        JSON.stringify({
+          id,
+          player,
+          score: 999999,
+          perfect: 1,
+          good: 0,
+          bad: 0,
+          miss: 0,
+          max_combo: 1,
+          accuracy: 1.0,
+          full_combo: true,
+          std: 0,
+          std_score: 0
+        }),
+        { status: 200 }
+      );
     }
 
     return original(input as string, init);
@@ -136,8 +149,10 @@ describe("大规模压力测试", () => {
 
       timing.reset();
       const clients: Client[] = [];
-      let connected = 0, connectFailed = 0;
-      let authOk = 0, authFail = 0;
+      let connected = 0,
+        connectFailed = 0;
+      let authOk = 0,
+        authFail = 0;
       const t0 = performance.now();
       const intervalMs = 1000 / CONNECT_RATE;
 
@@ -164,13 +179,17 @@ describe("大规模压力测试", () => {
 
         if ((i + 1) % 50 === 0 || i === TOTAL_CLIENTS - 1) {
           const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
-          process.stdout.write(`\r  ${i + 1}/${TOTAL_CLIENTS}  |  ${elapsed}s  |  OK:${connected} ERR:${connectFailed}  Auth:${authOk}/${authFail}`);
+          process.stdout.write(
+            `\r  ${i + 1}/${TOTAL_CLIENTS}  |  ${elapsed}s  |  OK:${connected} ERR:${connectFailed}  Auth:${authOk}/${authFail}`
+          );
         }
       }
 
       const totalMs = performance.now() - t0;
       console.log(`\n\n  结果: 连接 ${connected}/${TOTAL_CLIENTS}, 认证 ${authOk}/${authFail}`);
-      console.log(`  总耗时: ${(totalMs / 1000).toFixed(1)}s (${(TOTAL_CLIENTS / (totalMs / 1000)).toFixed(0)} conn/s)`);
+      console.log(
+        `  总耗时: ${(totalMs / 1000).toFixed(1)}s (${(TOTAL_CLIENTS / (totalMs / 1000)).toFixed(0)} conn/s)`
+      );
       console.log(`  峰值 Mutex 队列: ${running.state.mutex.getQueueSize()}\n`);
       console.log(timing.printReport());
 
@@ -178,7 +197,6 @@ describe("大规模压力测试", () => {
       for (const c of clients) {
         c.close().catch(() => {});
       }
-
     } finally {
       if (running) await running.close();
       await cleanupTempDir(tempDir);
@@ -233,7 +251,8 @@ describe("大规模压力测试", () => {
       // 创建房间 (串行，因为需要不同 roomId)
       timing.reset();
       console.log("\n创建房间...");
-      let created = 0, createFailed = 0;
+      let created = 0,
+        createFailed = 0;
       const createT0 = performance.now();
       for (let r = 0; r < ROOMS; r++) {
         try {
@@ -250,7 +269,8 @@ describe("大规模压力测试", () => {
       // 并发加入房间 (每个房间内部串行，房间间并行)
       timing.reset();
       console.log("\n并发加入房间...");
-      let joined = 0, joinFailed = 0;
+      let joined = 0,
+        joinFailed = 0;
       const joinT0 = performance.now();
 
       const joinRoom = async (roomIdx: number) => {
@@ -261,14 +281,18 @@ describe("大规模压力测试", () => {
           try {
             await p.joinRoom(roomId, false);
             joined++;
-          } catch { joinFailed++; }
+          } catch {
+            joinFailed++;
+          }
         }
         // 观战者加入
         for (const m of group.monitors) {
           try {
             await m.joinRoom(roomId, true);
             joined++;
-          } catch { joinFailed++; }
+          } catch {
+            joinFailed++;
+          }
         }
       };
 
@@ -277,14 +301,15 @@ describe("大规模压力测试", () => {
 
       const joinMs = performance.now() - joinT0;
       const expected = ROOMS * (PLAYERS_PER_ROOM - 1 + MONITORS_PER_ROOM);
-      console.log(`  加入: ${joined}/${expected}  (${joinMs.toFixed(0)}ms, ${(expected / (joinMs / 1000)).toFixed(0)} joins/s)`);
+      console.log(
+        `  加入: ${joined}/${expected}  (${joinMs.toFixed(0)}ms, ${(expected / (joinMs / 1000)).toFixed(0)} joins/s)`
+      );
       console.log(timing.printReport());
 
       // 清理
       for (const c of allClients) {
         c.close().catch(() => {});
       }
-
     } finally {
       if (running) await running.close();
       await cleanupTempDir(tempDir);

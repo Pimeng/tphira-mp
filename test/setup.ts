@@ -11,7 +11,7 @@ const envVarsToTrack = [
   "ROOM_MAX_USERS",
   "CHAT_ENABLED",
   "MONITORS",
-  "HTTP_SERVICE",
+  "HTTP_SERVICE"
 ];
 
 for (const key of envVarsToTrack) {

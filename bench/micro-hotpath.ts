@@ -60,13 +60,17 @@ function bench(name: string, iters: number, fn: () => void): number {
   const t1 = process.hrtime.bigint();
   const ns = Number(t1 - t0);
   const opsPerSec = (iters / ns) * 1e9;
-  console.log(`  ${name.padEnd(34)} ${(opsPerSec / 1e6).toFixed(1).padStart(8)} M ops/s   (${(ns / iters).toFixed(2)} ns/op)`);
+  console.log(
+    `  ${name.padEnd(34)} ${(opsPerSec / 1e6).toFixed(1).padStart(8)} M ops/s   (${(ns / iters).toFixed(2)} ns/op)`
+  );
   return opsPerSec;
 }
 
 function pair(label: string, oldOps: number, newOps: number): void {
   const speedup = newOps / oldOps;
-  console.log(`  → ${label}: ${speedup.toFixed(2)}x  (${speedup >= 1 ? "+" : ""}${((speedup - 1) * 100).toFixed(0)}%)\n`);
+  console.log(
+    `  → ${label}: ${speedup.toFixed(2)}x  (${speedup >= 1 ? "+" : ""}${((speedup - 1) * 100).toFixed(0)}%)\n`
+  );
 }
 
 const ITERS = 20_000_000;
@@ -81,16 +85,24 @@ console.log("\n========== 热路径微基准（优化前 vs 优化后） =======
 
 console.log("[1] f32 → f16 编码（每个触摸坐标都会调用）");
 let si = 0;
-const oldEnc = bench("old (Math.log2/pow/round)", ITERS, () => { oldF32ToF16Bits(samples[(si++) & 4095]!); });
+const oldEnc = bench("old (Math.log2/pow/round)", ITERS, () => {
+  oldF32ToF16Bits(samples[si++ & 4095]!);
+});
 si = 0;
-const newEnc = bench("new (Float16Array)", ITERS, () => { f32ToF16Bits(samples[(si++) & 4095]!); });
+const newEnc = bench("new (Float16Array)", ITERS, () => {
+  f32ToF16Bits(samples[si++ & 4095]!);
+});
 pair("encode 加速", oldEnc, newEnc);
 
 console.log("[2] f16 → f32 解码（每个入站触摸坐标都会调用）");
 let di = 0;
-const oldDec = bench("old (Math.pow)", ITERS, () => { oldF16BitsToF32(bitsSamples[(di++) & 4095]!); });
+const oldDec = bench("old (Math.pow)", ITERS, () => {
+  oldF16BitsToF32(bitsSamples[di++ & 4095]!);
+});
 di = 0;
-const newDec = bench("new (Float16Array)", ITERS, () => { f16BitsToF32(bitsSamples[(di++) & 4095]!); });
+const newDec = bench("new (Float16Array)", ITERS, () => {
+  f16BitsToF32(bitsSamples[di++ & 4095]!);
+});
 pair("decode 加速", oldDec, newDec);
 
 console.log("[3] 帧拼接（每条广播命令都会调用）");
@@ -143,9 +155,14 @@ function oldWriteUleb(buf: Buffer, v: number): void {
 }
 const w5 = new BinaryWriter(64, 0);
 let ui = 0;
-const oldUleb = bench("old (BigInt)", ITERS, () => { oldWriteUleb(ulebScratch, ulebSamples[(ui++) & 4095]!); });
+const oldUleb = bench("old (BigInt)", ITERS, () => {
+  oldWriteUleb(ulebScratch, ulebSamples[ui++ & 4095]!);
+});
 ui = 0;
-const newUleb = bench("new (number fast path)", ITERS, () => { w5.reset(); w5.writeUleb(ulebSamples[(ui++) & 4095]!); });
+const newUleb = bench("new (number fast path)", ITERS, () => {
+  w5.reset();
+  w5.writeUleb(ulebSamples[ui++ & 4095]!);
+});
 pair("writeUleb 加速", oldUleb, newUleb);
 
 // ===== [6] readUleb：number 域 vs BigInt =====
@@ -157,7 +174,10 @@ const ulebOffsets = new Int32Array(ulebSamples.length + 1);
   for (let i = 0; i < ulebSamples.length; i++) {
     ulebOffsets[i] = p;
     let x = ulebSamples[i]! >>> 0;
-    while (x >= 0x80) { ulebBytes[p++] = (x & 0x7f) | 0x80; x >>>= 7; }
+    while (x >= 0x80) {
+      ulebBytes[p++] = (x & 0x7f) | 0x80;
+      x >>>= 7;
+    }
     ulebBytes[p++] = x;
   }
   ulebOffsets[ulebSamples.length] = p;
@@ -173,10 +193,15 @@ function oldReadUleb(buf: Buffer, off: number): number {
   }
 }
 let ri = 0;
-const oldRead = bench("old (BigInt)", ITERS, () => { oldReadUleb(ulebBytes, ulebOffsets[(ri++) & 4095]!); });
+const oldRead = bench("old (BigInt)", ITERS, () => {
+  oldReadUleb(ulebBytes, ulebOffsets[ri++ & 4095]!);
+});
 ri = 0;
 const rdr = new BinaryReader(ulebBytes);
-const newRead = bench("new (number)", ITERS, () => { rdr.offset = ulebOffsets[(ri++) & 4095]!; rdr.readUlebNumber(); });
+const newRead = bench("new (number)", ITERS, () => {
+  rdr.offset = ulebOffsets[ri++ & 4095]!;
+  rdr.readUlebNumber();
+});
 pair("readUleb 加速", oldRead, newRead);
 
 // ===== [7] writeString：直写 vs Buffer.from+copy =====
@@ -189,9 +214,15 @@ function oldWriteString(w: BinaryWriter, s: string): void {
 }
 const w7 = new BinaryWriter(128, 0);
 let szi = 0;
-const oldStr = bench("old (Buffer.from+copy)", FRAME_ITERS, () => { w7.reset(); oldWriteString(w7, strSamples[(szi++) % strSamples.length]!); });
+const oldStr = bench("old (Buffer.from+copy)", FRAME_ITERS, () => {
+  w7.reset();
+  oldWriteString(w7, strSamples[szi++ % strSamples.length]!);
+});
 szi = 0;
-const newStr = bench("new (buf.write 直写)", FRAME_ITERS, () => { w7.reset(); w7.writeString(strSamples[(szi++) % strSamples.length]!); });
+const newStr = bench("new (buf.write 直写)", FRAME_ITERS, () => {
+  w7.reset();
+  w7.writeString(strSamples[szi++ % strSamples.length]!);
+});
 pair("writeString 加速", oldStr, newStr);
 
 // ===== [8] 观战广播扇出：每接收者 async Promise vs 同步入队 =====
@@ -204,9 +235,13 @@ const FANOUT_K = 50;
 const fanFrame = Buffer.alloc(24);
 const fanBatch: Buffer[] = [];
 // 旧路径：async trySendPrepared + .catch（每接收者一个 Promise + catch 闭包）
-async function oldTrySend(frame: Buffer): Promise<void> { fanBatch.push(frame); }
+async function oldTrySend(frame: Buffer): Promise<void> {
+  fanBatch.push(frame);
+}
 // 新路径：同步 void 入队（零 Promise）
-function newTrySendFast(frame: Buffer): void { fanBatch.push(frame); }
+function newTrySendFast(frame: Buffer): void {
+  fanBatch.push(frame);
+}
 // 控制未决 microtask 规模：每轮分发后清空 batch；迭代数取较小值
 const FAN_ITERS = 20_000;
 const oldFan = bench(`old (async Promise/接收者 ×${FANOUT_K})`, FAN_ITERS, () => {

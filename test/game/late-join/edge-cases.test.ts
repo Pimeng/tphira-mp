@@ -100,10 +100,7 @@ describe("late-join / edge-cases", () => {
       await carol.authenticate("cccccccccccccccccccccccccccccccc");
 
       // 两人同时加入
-      await Promise.all([
-        dave.joinRoom("edge3", false),
-        carol.joinRoom("edge3", false),
-      ]);
+      await Promise.all([dave.joinRoom("edge3", false), carol.joinRoom("edge3", false)]);
 
       await waitFor(() => dave.roomState()?.type === "Playing");
       await waitFor(() => carol.roomState()?.type === "Playing");

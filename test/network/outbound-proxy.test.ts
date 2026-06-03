@@ -63,16 +63,19 @@ describe("outbound proxy", () => {
     const proxy = http.createServer((req, res) => {
       proxySeen += 1;
       const targetUrl = new URL(req.url ?? "");
-      const upstream = http.request({
-        host: targetUrl.hostname,
-        port: targetUrl.port ? Number(targetUrl.port) : 80,
-        method: req.method,
-        path: `${targetUrl.pathname}${targetUrl.search}`,
-        headers: req.headers
-      }, (upstreamRes) => {
-        res.writeHead(upstreamRes.statusCode ?? 500, upstreamRes.headers);
-        upstreamRes.pipe(res);
-      });
+      const upstream = http.request(
+        {
+          host: targetUrl.hostname,
+          port: targetUrl.port ? Number(targetUrl.port) : 80,
+          method: req.method,
+          path: `${targetUrl.pathname}${targetUrl.search}`,
+          headers: req.headers
+        },
+        (upstreamRes) => {
+          res.writeHead(upstreamRes.statusCode ?? 500, upstreamRes.headers);
+          upstreamRes.pipe(res);
+        }
+      );
       req.pipe(upstream);
       upstream.once("error", (error) => {
         res.writeHead(502, { "content-type": "text/plain; charset=utf-8" });
@@ -82,9 +85,13 @@ describe("outbound proxy", () => {
     const proxyPort = await listen(proxy);
 
     try {
-      const res = await fetchWithTimeout(`http://127.0.0.1:${targetPort}/via-proxy`, {
-        proxy: `http://127.0.0.1:${proxyPort}`
-      }, 2000);
+      const res = await fetchWithTimeout(
+        `http://127.0.0.1:${targetPort}/via-proxy`,
+        {
+          proxy: `http://127.0.0.1:${proxyPort}`
+        },
+        2000
+      );
       expect(await res.text()).toBe("target:/via-proxy");
       expect(proxySeen).toBe(1);
     } finally {

@@ -1,8 +1,5 @@
 import fs from "node:fs";
-import {
-  createServerProcessMetricsCollector,
-  summarizeServerProcessMetrics,
-} from "./lib/serverProcessMetrics.js";
+import { createServerProcessMetricsCollector, summarizeServerProcessMetrics } from "./lib/serverProcessMetrics.js";
 
 function parseArgs(argv: string[]) {
   let pid: number | undefined;
@@ -43,7 +40,7 @@ async function main() {
   fs.mkdirSync("bench-results", { recursive: true });
 
   const collector = createServerProcessMetricsCollector(args.pid, {
-    intervalMs: args.intervalMs,
+    intervalMs: args.intervalMs
   });
   collector.start();
 
@@ -63,13 +60,11 @@ async function main() {
       startedAt,
       endedAt,
       samples,
-      summary,
+      summary
     };
 
     fs.writeFileSync(args.output, JSON.stringify(report, null, 2), "utf-8");
-    console.log(
-      `Server process metrics saved to ${args.output} (${samples.length} samples)`
-    );
+    console.log(`Server process metrics saved to ${args.output} (${samples.length} samples)`);
     process.exit(0);
   };
 

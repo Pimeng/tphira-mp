@@ -9,27 +9,23 @@ import { err, type StringResult } from "../../../common/binary.js";
 import { EMPTY_RECORD } from "../../../common/utils.js";
 import type { ClientCommand, JoinRoomResponse, ServerCommand } from "../../../common/commands.js";
 import { refreshRoomLive as refreshRoomLiveState } from "../../game/roomUtils.js";
-import type { Room } from "../../game/room.js";
+import type { Room, RoomLifecycleOptions } from "../../game/room.js";
 import type { User } from "../../game/user.js";
 import type { ServerState } from "../../core/state.js";
 import type { Chart, RecordData } from "../../core/types.js";
 import type { Logger } from "../../utils/logger.js";
-import { tl, type Language } from "../../utils/l10n.js";
+import { tl } from "../../utils/l10n.js";
 import { logRoomInfo, logRoomMark } from "../../utils/logUtils.js";
 import type { MonitorBuffer } from "./monitorBuffer.js";
 
 /**
  * 房间相关回调集合
  *
- * Room 类的多个方法 (onUserLeave, checkAllReady) 共享相同的回调形状,
- * 这里把它们抽出为统一类型以便复用。
+ * 以 {@link RoomLifecycleOptions}（Room.onUserLeave / checkAllReady 的共享形状）为
+ * 单一事实源，在命令路由场景下把必定提供的字段（logger、wsService、状态钩子）收紧
+ * 为必填，避免与 room.ts 重复声明同一组回调。
  */
-export type RoomCallbacks = {
-  usersById: (id: number) => User | undefined;
-  broadcast: (cmd: ServerCommand) => Promise<void>;
-  broadcastToMonitors: (cmd: ServerCommand) => void;
-  pickRandomUserId: (ids: number[]) => number | null;
-  lang: Language;
+export type RoomCallbacks = RoomLifecycleOptions & {
   logger: Logger;
   wsService: ServerState["wsService"];
   onEnterPlaying: (room: Room) => Promise<void>;

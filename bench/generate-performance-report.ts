@@ -139,9 +139,7 @@ function discoverScenarios(resultsDir: string): ScenarioData[] {
         connect: connect ? readJson<BenchReport>(connect) : null,
         room: room ? readJson<BenchReport>(room) : null,
         gameplay: gameplay ? readJson<BenchReport>(gameplay) : null,
-        serverMetrics: fs.existsSync(serverMetrics)
-          ? readJson<ServerMetricsReport>(serverMetrics)
-          : null,
+        serverMetrics: fs.existsSync(serverMetrics) ? readJson<ServerMetricsReport>(serverMetrics) : null
       });
     }
   } else if (hasRootData) {
@@ -150,9 +148,7 @@ function discoverScenarios(resultsDir: string): ScenarioData[] {
       connect: rootConnect ? readJson<BenchReport>(rootConnect) : null,
       room: rootRoom ? readJson<BenchReport>(rootRoom) : null,
       gameplay: rootGameplay ? readJson<BenchReport>(rootGameplay) : null,
-      serverMetrics: fs.existsSync(rootServerMetrics)
-        ? readJson<ServerMetricsReport>(rootServerMetrics)
-        : null,
+      serverMetrics: fs.existsSync(rootServerMetrics) ? readJson<ServerMetricsReport>(rootServerMetrics) : null
     });
   }
 
@@ -181,11 +177,15 @@ function buildMetricsReferenceLines(): string[] {
   lines.push(``);
   lines.push(`| 指标 | 含义 | 关注要点 |`);
   lines.push(`|---|---|---|`);
-  lines.push(`| 成功连接 / 失败 | TCP/WebSocket 握手成功与失败次数 | 失败率应接近 0%；weak 场景若显著上升，需检查握手超时 |`);
+  lines.push(
+    `| 成功连接 / 失败 | TCP/WebSocket 握手成功与失败次数 | 失败率应接近 0%；weak 场景若显著上升，需检查握手超时 |`
+  );
   lines.push(`| 平均连接延迟 | 从发起连接到握手完成的平均耗时 | 对 RTT 敏感；mobile 场景通常比 normal 高 1~2 倍 RTT |`);
   lines.push(`| 房间创建 / 失败 | 房间创建成功与失败次数 | 失败通常与连接断开或服务器内部错误有关 |`);
   lines.push(`| 加入成功 / 失败 | 玩家加入房间成功与失败次数 | 高失败率可能意味着房间状态同步异常或超时阈值过短 |`);
-  lines.push(`| 消息发送 / 失败 | gameplay 阶段消息发送成功与失败次数 | 大量失败通常由连接断开导致；需区分丢包与断连 |`);
+  lines.push(
+    `| 消息发送 / 失败 | gameplay 阶段消息发送成功与失败次数 | 大量失败通常由连接断开导致；需区分丢包与断连 |`
+  );
   lines.push(`| 消息每秒 | 服务端实际接收的消息速率 | 受 netem 丢包影响；显著下降时需评估缓冲/重传策略 |`);
   lines.push(``);
 
@@ -194,9 +194,13 @@ function buildMetricsReferenceLines(): string[] {
   lines.push(``);
   lines.push(`| 指标 | 含义 | 关注要点 |`);
   lines.push(`|---|---|---|`);
-  lines.push(`| RSS | 进程常驻内存（含 C++ 层、V8 堆外内存、缓冲区） | 峰值反映整体内存占用；multi-scenario 连续运行时注意累积效应 |`);
+  lines.push(
+    `| RSS | 进程常驻内存（含 C++ 层、V8 堆外内存、缓冲区） | 峰值反映整体内存占用；multi-scenario 连续运行时注意累积效应 |`
+  );
   lines.push(`| HeapUsed | V8 堆内存使用量 | 若持续增长可能存在内存泄漏；benchmark 结束后应回落至基线 |`);
-  lines.push(`| EL 延迟均值 | 事件循环（Event Loop）延迟平均值，反映主线程繁忙程度 | 持续 > 50 ms 表示主线程阻塞风险，可能影响消息及时处理 |`);
+  lines.push(
+    `| EL 延迟均值 | 事件循环（Event Loop）延迟平均值，反映主线程繁忙程度 | 持续 > 50 ms 表示主线程阻塞风险，可能影响消息及时处理 |`
+  );
   lines.push(`| EL 延迟 P95 最大 | 所有采样中 P95 延迟的最大值 | 突发峰值指标；接近或超过 100 ms 需警惕瞬时拥塞 |`);
   lines.push(`| CPU 平均 / 峰值 | 进程占用的单核 CPU 百分比 | 峰值持续接近 100% 意味着单核计算瓶颈 |`);
   lines.push(`| 内存% | 进程 RSS 占系统总内存的比例 | 超过 80% 可能触发系统 OOM 或交换分区抖动 |`);
@@ -221,7 +225,9 @@ function buildNotesLines(): string[] {
   lines.push(`- GitHub Actions 运行器性能存在波动，这些数据仅供版本间对比参考。`);
   lines.push(`  GitHub Actions runner performance varies; use these numbers for version-to-version comparison only.`);
   lines.push(`- **弱网场景解读建议 / Interpretation Guide**`);
-  lines.push(`  - 若 weak 场景下连接延迟增加超过 2 倍，说明握手阶段对 RTT 敏感，建议评估是否启用 TCP Fast Open 或缩短握手轮次。`);
+  lines.push(
+    `  - 若 weak 场景下连接延迟增加超过 2 倍，说明握手阶段对 RTT 敏感，建议评估是否启用 TCP Fast Open 或缩短握手轮次。`
+  );
   lines.push(`  - 若 mobile 场景下房间创建或加入失败率显著上升，需检查超时阈值是否过于激进（如 < 3s）。`);
   lines.push(`  - 若 bad 场景下消息吞吐下降超过 50%，建议评估消息合并（batching）、心跳补偿或前向纠错机制。`);
   lines.push(`  - 事件循环延迟在 weak/mobile 场景下若出现数量级增长，通常意味着丢包触发了大量重传或超时回调堆积。`);
@@ -236,10 +242,10 @@ function buildSingleScenarioReport(scenario: ScenarioData): string[] {
 
   lines.push(`# 发布基准测试报告 / Release Benchmark Report`);
   lines.push(``);
+  lines.push(`> 本次基准测试在 GitHub Actions 上运行，仅用于版本间对比，不代表绝对的生产环境容量保证。`);
   lines.push(
-    `> 本次基准测试在 GitHub Actions 上运行，仅用于版本间对比，不代表绝对的生产环境容量保证。`
+    `> This benchmark was run on GitHub Actions and is intended for version-to-version comparison, not as an absolute production capacity guarantee.`
   );
-  lines.push(`> This benchmark was run on GitHub Actions and is intended for version-to-version comparison, not as an absolute production capacity guarantee.`);
   lines.push(``);
 
   // --- Benchmark Parameters ---
@@ -348,10 +354,10 @@ function buildMultiScenarioReport(scenarios: ScenarioData[]): string[] {
 
   lines.push(`# 发布基准测试报告 / Release Benchmark Report`);
   lines.push(``);
+  lines.push(`> 本次基准测试在 GitHub Actions 上运行，仅用于版本间对比，不代表绝对的生产环境容量保证。`);
   lines.push(
-    `> 本次基准测试在 GitHub Actions 上运行，仅用于版本间对比，不代表绝对的生产环境容量保证。`
+    `> This benchmark was run on GitHub Actions and is intended for version-to-version comparison, not as an absolute production capacity guarantee.`
   );
-  lines.push(`> This benchmark was run on GitHub Actions and is intended for version-to-version comparison, not as an absolute production capacity guarantee.`);
   lines.push(``);
 
   // --- Scenarios ---
@@ -507,8 +513,7 @@ function buildMultiScenarioReport(scenarios: ScenarioData[]): string[] {
       const cpuAvg = sum.cpuAvgPercent !== undefined ? `${sum.cpuAvgPercent}%` : "-";
       const cpuPeak = sum.cpuMaxPercent !== undefined ? `${sum.cpuMaxPercent}%` : "-";
       const memAvg = sum.memoryPercentAvg !== undefined ? `${sum.memoryPercentAvg.toFixed(2)}%` : "-";
-      const memPeak =
-        sum.memoryPercentPeak !== undefined ? `${sum.memoryPercentPeak.toFixed(2)}%` : "-";
+      const memPeak = sum.memoryPercentPeak !== undefined ? `${sum.memoryPercentPeak.toFixed(2)}%` : "-";
       lines.push(
         `| ${s.name} | ${formatBytes(sum.rssAvgBytes)} | ${formatBytes(sum.rssMaxBytes)} | ${cpuAvg} | ${cpuPeak} | ${memAvg} | ${memPeak} |`
       );

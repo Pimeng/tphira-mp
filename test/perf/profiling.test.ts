@@ -67,7 +67,10 @@ describe("服务端性能分析", () => {
     const tempDir = await createTempDir("perf-auth");
     let running: RunningServer | undefined;
     try {
-      running = await startServer({ port: 0, config: { monitors: [200], replay_enabled: false, replay_base_dir: tempDir } });
+      running = await startServer({
+        port: 0,
+        config: { monitors: [200], replay_enabled: false, replay_base_dir: tempDir }
+      });
       const port = running.address().port;
 
       timing.reset();
@@ -89,7 +92,10 @@ describe("服务端性能分析", () => {
     const tempDir = await createTempDir("perf-room");
     let running: RunningServer | undefined;
     try {
-      running = await startServer({ port: 0, config: { monitors: [200], replay_enabled: false, replay_base_dir: tempDir } });
+      running = await startServer({
+        port: 0,
+        config: { monitors: [200], replay_enabled: false, replay_base_dir: tempDir }
+      });
       const port = running.address().port;
 
       const alice = await Client.connect("127.0.0.1", port);
@@ -147,7 +153,10 @@ describe("服务端性能分析", () => {
     const tempDir = await createTempDir("perf-concurrent");
     let running: RunningServer | undefined;
     try {
-      running = await startServer({ port: 0, config: { monitors: [], replay_enabled: false, replay_base_dir: tempDir } });
+      running = await startServer({
+        port: 0,
+        config: { monitors: [], replay_enabled: false, replay_base_dir: tempDir }
+      });
       const port = running.address().port;
 
       const alice = await Client.connect("127.0.0.1", port);
@@ -155,7 +164,10 @@ describe("服务端性能分析", () => {
       await alice.createRoom("perf-concurrent");
 
       // 为每个客户端生成唯一 token (通过 mock 映射到不同 ID)
-      const tokens = [TOKENS.bob, TOKENS.carol, TOKENS.dave,
+      const tokens = [
+        TOKENS.bob,
+        TOKENS.carol,
+        TOKENS.dave,
         "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
         "ffffffffffffffffffffffffffffffff",
         "gggggggggggggggggggggggggggggggg",
@@ -176,7 +188,9 @@ describe("服务端性能分析", () => {
           const token = auth.replace(/^Bearer\s+/i, "");
           const idx = tokens.indexOf(token);
           if (idx >= 0) {
-            return new Response(JSON.stringify({ id: idOffsets[idx], name: names[idx], language: "zh-CN" }), { status: 200 });
+            return new Response(JSON.stringify({ id: idOffsets[idx], name: names[idx], language: "zh-CN" }), {
+              status: 200
+            });
           }
         }
         return mockFetch(input as string, init);
@@ -192,7 +206,7 @@ describe("服务端性能分析", () => {
       printPhase("认证 (10 unique clients)");
 
       timing.reset();
-      const joins = clients.map(c => c.joinRoom("perf-concurrent", false).catch(() => {}));
+      const joins = clients.map((c) => c.joinRoom("perf-concurrent", false).catch(() => {}));
       await Promise.all(joins);
 
       printPhase("加入房间 (10 clients 并发)");
@@ -210,7 +224,10 @@ describe("服务端性能分析", () => {
     const tempDir = await createTempDir("perf-touches");
     let running: RunningServer | undefined;
     try {
-      running = await startServer({ port: 0, config: { monitors: [], replay_enabled: false, replay_base_dir: tempDir } });
+      running = await startServer({
+        port: 0,
+        config: { monitors: [], replay_enabled: false, replay_base_dir: tempDir }
+      });
       const port = running.address().port;
 
       const alice = await Client.connect("127.0.0.1", port);

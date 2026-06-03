@@ -20,4 +20,3 @@ await build({
   sourcemap: false,
   logLevel: "info"
 });
-

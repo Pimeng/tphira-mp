@@ -50,10 +50,10 @@ describe("CLI 房间管理", () => {
     });
 
     expect(rooms).toHaveLength(3);
-    expect(rooms.find(r => r.roomid === "newbie_room")).toBeDefined();
-    expect(rooms.find(r => r.roomid === "expert_room")?.maxUsers).toBe(16);
-    expect(rooms.find(r => r.roomid === "expert_room")?.locked).toBe(true);
-    expect(rooms.find(r => r.roomid === "contest_room")?.maxUsers).toBe(4);
+    expect(rooms.find((r) => r.roomid === "newbie_room")).toBeDefined();
+    expect(rooms.find((r) => r.roomid === "expert_room")?.maxUsers).toBe(16);
+    expect(rooms.find((r) => r.roomid === "expert_room")?.locked).toBe(true);
+    expect(rooms.find((r) => r.roomid === "contest_room")?.maxUsers).toBe(4);
   });
 
   it("应该能够修改房间最大人数", async () => {
@@ -106,14 +106,14 @@ describe("CLI 房间管理", () => {
       const room = state.rooms.get(roomId);
       if (room) room.maxUsers = 1;
     });
-    expect((await state.mutex.runExclusive(async () => state.rooms.get(roomId)?.maxUsers))).toBe(1);
+    expect(await state.mutex.runExclusive(async () => state.rooms.get(roomId)?.maxUsers)).toBe(1);
 
     // 测试最大值 64
     await state.mutex.runExclusive(async () => {
       const room = state.rooms.get(roomId);
       if (room) room.maxUsers = 64;
     });
-    expect((await state.mutex.runExclusive(async () => state.rooms.get(roomId)?.maxUsers))).toBe(64);
+    expect(await state.mutex.runExclusive(async () => state.rooms.get(roomId)?.maxUsers)).toBe(64);
   });
 
   it("应该能够解散房间", async () => {
@@ -234,7 +234,7 @@ describe("CLI 房间管理", () => {
       return state.rooms.has(roomId);
     });
     let monitorsCount = await state.mutex.runExclusive(async () => {
-      return [...state.users.values()].filter(u => u.monitor).length;
+      return [...state.users.values()].filter((u) => u.monitor).length;
     });
     expect(roomExists).toBe(true);
     expect(monitorsCount).toBe(1);
@@ -249,7 +249,7 @@ describe("CLI 房间管理", () => {
       return state.rooms.has(roomId);
     });
     monitorsCount = await state.mutex.runExclusive(async () => {
-      return [...state.users.values()].filter(u => u.monitor).length;
+      return [...state.users.values()].filter((u) => u.monitor).length;
     });
     expect(roomExists).toBe(false);
     expect(monitorsCount).toBe(1);
@@ -293,11 +293,7 @@ describe("CLI 房间管理", () => {
 
   it("应该能够解散多个房间", async () => {
     const { state } = refs.current();
-    const roomIds = [
-      parseRoomId("disband_room1"),
-      parseRoomId("disband_room2"),
-      parseRoomId("disband_room3")
-    ];
+    const roomIds = [parseRoomId("disband_room1"), parseRoomId("disband_room2"), parseRoomId("disband_room3")];
 
     // 创建多个房间
     await state.mutex.runExclusive(async () => {

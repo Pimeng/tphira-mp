@@ -46,9 +46,9 @@ describe("CLI 用户管理", () => {
     });
 
     expect(users).toHaveLength(3);
-    expect(users.find(u => u.name === "小明")?.monitor).toBe(false);
-    expect(users.find(u => u.name === "小红")?.monitor).toBe(true);
-    expect(users.find(u => u.name === "小刚")?.lang).toBe("en-US");
+    expect(users.find((u) => u.name === "小明")?.monitor).toBe(false);
+    expect(users.find((u) => u.name === "小红")?.monitor).toBe(true);
+    expect(users.find((u) => u.name === "小刚")?.lang).toBe("en-US");
   });
 
   it("应该能够获取用户详细信息", async () => {
@@ -114,7 +114,7 @@ describe("CLI 用户管理", () => {
       }));
     });
 
-    expect(users.find(u => u.id === 1001)?.monitor).toBe(false);
-    expect(users.find(u => u.id === 1002)?.monitor).toBe(true);
+    expect(users.find((u) => u.id === 1001)?.monitor).toBe(false);
+    expect(users.find((u) => u.id === 1002)?.monitor).toBe(true);
   });
 });

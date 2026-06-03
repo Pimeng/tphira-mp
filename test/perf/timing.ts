@@ -101,35 +101,41 @@ export class TimingCollector {
     if (groups.length === 0) return "No timing data collected.";
 
     const lines: string[] = [];
-    lines.push("=" .repeat(90));
+    lines.push("=".repeat(90));
     lines.push("  Performance Timing Report");
-    lines.push("=" .repeat(90));
+    lines.push("=".repeat(90));
     lines.push(
-      "  Label" + " ".repeat(45) +
-      "Count" + " ".repeat(6) +
-      "Total(ms)" + " ".repeat(3) +
-      "Avg(ms)" + " ".repeat(5) +
-      "Min(ms)" + " ".repeat(5) +
-      "Max(ms)"
+      "  Label" +
+        " ".repeat(45) +
+        "Count" +
+        " ".repeat(6) +
+        "Total(ms)" +
+        " ".repeat(3) +
+        "Avg(ms)" +
+        " ".repeat(5) +
+        "Min(ms)" +
+        " ".repeat(5) +
+        "Max(ms)"
     );
     lines.push("-".repeat(90));
 
     for (const g of groups) {
       const label = g.label.length > 44 ? g.label.slice(0, 41) + "..." : g.label;
       lines.push(
-        "  " + label.padEnd(44) +
-        String(g.count).padStart(7) +
-        g.totalMs.toFixed(2).padStart(10) +
-        g.avgMs.toFixed(2).padStart(10) +
-        g.minMs.toFixed(2).padStart(10) +
-        g.maxMs.toFixed(2).padStart(10)
+        "  " +
+          label.padEnd(44) +
+          String(g.count).padStart(7) +
+          g.totalMs.toFixed(2).padStart(10) +
+          g.avgMs.toFixed(2).padStart(10) +
+          g.minMs.toFixed(2).padStart(10) +
+          g.maxMs.toFixed(2).padStart(10)
       );
     }
     lines.push("-".repeat(90));
 
     const totalAll = groups.reduce((s, g) => s + g.totalMs, 0);
     lines.push(`  TOTAL: ${totalAll.toFixed(2)}ms across ${groups.reduce((s, g) => s + g.count, 0)} samples`);
-    lines.push("=" .repeat(90));
+    lines.push("=".repeat(90));
 
     return lines.join("\n");
   }

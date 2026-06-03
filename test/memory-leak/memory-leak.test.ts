@@ -48,77 +48,75 @@ describe("内存泄漏回归", () => {
     globalThis.fetch = originalFetch;
   });
 
-  test(
-    "大量连接/断开循环后内存应趋于平稳（无监听器泄漏）",
-    async () => {
-      if (typeof global.gc !== "function") {
-        console.warn("[memory-leak] 未检测到 --expose-gc，跳过强制 GC。");
+  test("大量连接/断开循环后内存应趋于平稳（无监听器泄漏）", async () => {
+    if (typeof global.gc !== "function") {
+      console.warn("[memory-leak] 未检测到 --expose-gc，跳过强制 GC。");
+    }
+
+    const tempDir = await createTempDir("memory-leak-test");
+    const running = await startServer({
+      port: 0,
+      config: {
+        monitors: [200, 300, 400],
+        replay_enabled: false,
+        replay_base_dir: tempDir
       }
+    });
+    const port = running.address().port;
 
-      const tempDir = await createTempDir("memory-leak-test");
-      const running = await startServer({
-        port: 0,
-        config: {
-          monitors: [200, 300, 400],
-          replay_enabled: false,
-          replay_base_dir: tempDir,
-        },
-      });
-      const port = running.address().port;
+    // 预热：先执行一轮让 JIT 编译稳定，不计入统计
+    await warmup(port);
 
-      // 预热：先执行一轮让 JIT 编译稳定，不计入统计
-      await warmup(port);
+    // 正式轮次
+    const measurements: number[] = [];
+    const ROUNDS = 8;
+    const CLIENTS_PER_ROUND = 16;
 
-      // 正式轮次
-      const measurements: number[] = [];
-      const ROUNDS = 8;
-      const CLIENTS_PER_ROUND = 16;
+    for (let round = 0; round < ROUNDS; round++) {
+      await stressRound(port, CLIENTS_PER_ROUND);
 
-      for (let round = 0; round < ROUNDS; round++) {
-        await stressRound(port, CLIENTS_PER_ROUND);
+      // 等待 dangling timeout 结束，确保所有 User 被清理
+      await waitForDangleTimeouts();
 
-        // 等待 dangling timeout 结束，确保所有 User 被清理
-        await waitForDangleTimeouts();
+      forceGc();
+      await sleep(200);
+      forceGc();
 
-        forceGc();
-        await sleep(200);
-        forceGc();
+      const mem = getHeapUsedMB();
+      measurements.push(mem);
+      console.log(`[memory-leak] Round ${round + 1}/${ROUNDS}: heapUsed = ${mem} MB`);
+    }
 
-        const mem = getHeapUsedMB();
-        measurements.push(mem);
-        console.log(`[memory-leak] Round ${round + 1}/${ROUNDS}: heapUsed = ${mem} MB`);
-      }
+    await running.close();
+    await cleanupTempDir(tempDir);
 
-      await running.close();
-      await cleanupTempDir(tempDir);
+    // 分析：排除前两轮（JIT / 模块缓存影响），取后半段均值
+    const warmupRounds = 2;
+    const stableMeasurements = measurements.slice(warmupRounds);
 
-      // 分析：排除前两轮（JIT / 模块缓存影响），取后半段均值
-      const warmupRounds = 2;
-      const stableMeasurements = measurements.slice(warmupRounds);
+    // 计算线性回归斜率：如果斜率显著为正，说明内存泄漏
+    const slope = linearRegressionSlope(stableMeasurements);
+    const avg = stableMeasurements.reduce((a, b) => a + b, 0) / stableMeasurements.length;
+    const max = Math.max(...stableMeasurements);
+    const min = Math.min(...stableMeasurements);
 
-      // 计算线性回归斜率：如果斜率显著为正，说明内存泄漏
-      const slope = linearRegressionSlope(stableMeasurements);
-      const avg = stableMeasurements.reduce((a, b) => a + b, 0) / stableMeasurements.length;
-      const max = Math.max(...stableMeasurements);
-      const min = Math.min(...stableMeasurements);
+    console.log(
+      `[memory-leak] 分析结果: avg=${avg.toFixed(1)}MB, max=${max}MB, min=${min}MB, slope=${slope.toFixed(2)}MB/round`
+    );
 
-      console.log(`[memory-leak] 分析结果: avg=${avg.toFixed(1)}MB, max=${max}MB, min=${min}MB, slope=${slope.toFixed(2)}MB/round`);
+    // 断言：
+    // 1. 斜率不应显著为正（每轮增长 < 2MB 视为正常波动）
+    expect(slope).toBeLessThan(2);
 
-      // 断言：
-      // 1. 斜率不应显著为正（每轮增长 < 2MB 视为正常波动）
-      expect(slope).toBeLessThan(2);
+    // 2. 最大值不应超过平均值太多（波动 < 30%）
+    expect(max).toBeLessThan(avg * 1.3 + 5);
 
-      // 2. 最大值不应超过平均值太多（波动 < 30%）
-      expect(max).toBeLessThan(avg * 1.3 + 5);
-
-      // 3. 最后一轮不应比平均值高出太多
-      const last = stableMeasurements[stableMeasurements.length - 1];
-      expect(last).toBeLessThan(avg * 1.25 + 5);
-    },
-    // 每轮大约需要：连接(16*50ms) + 操作(500ms) + dangle(11s) = ~12s
+    // 3. 最后一轮不应比平均值高出太多
+    const last = stableMeasurements[stableMeasurements.length - 1];
+    expect(last).toBeLessThan(avg * 1.25 + 5);
     // 8 轮 ≈ 96s + 预热 12s = 108s，留足余量
-    180_000
-  );
+    // 每轮大约需要：连接(16*50ms) + 操作(500ms) + dangle(11s) = ~12s
+  }, 180_000);
 });
 
 /** 预热一轮，让 JIT 和模块缓存稳定 */
@@ -128,7 +126,7 @@ async function warmup(port: number): Promise<void> {
     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     "cccccccccccccccccccccccccccccccc",
-    "dddddddddddddddddddddddddddddddd",
+    "dddddddddddddddddddddddddddddddd"
   ];
   for (let i = 0; i < 4; i++) {
     const c = await Client.connect("127.0.0.1", port, { timeoutMs: 5000 });
@@ -154,7 +152,7 @@ async function stressRound(port: number, count: number): Promise<void> {
     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     "cccccccccccccccccccccccccccccccc",
-    "dddddddddddddddddddddddddddddddd",
+    "dddddddddddddddddddddddddddddddd"
   ];
 
   // 串行连接+认证：避免同一 token 的并发连接互相踢掉。

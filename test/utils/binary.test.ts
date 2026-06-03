@@ -1,5 +1,14 @@
 import { describe, it, expect } from "vitest";
-import { BinaryReader, BinaryWriter, decodePacket, encodePacket, ok, err, encodeStringResult, decodeStringResult } from "../../src/common/binary.js";
+import {
+  BinaryReader,
+  BinaryWriter,
+  decodePacket,
+  encodePacket,
+  ok,
+  err,
+  encodeStringResult,
+  decodeStringResult
+} from "../../src/common/binary.js";
 import { encodeLengthPrefixU32 } from "../../src/common/framing.js";
 
 describe("BinaryReader", () => {
@@ -119,10 +128,16 @@ describe("BinaryReader", () => {
     w.writeBool(false);
     w.writeString("error");
     const r = new BinaryReader(w.toBuffer());
-    const okRes = r.readResult((rr) => rr.readU32(), (rr) => rr.readString());
+    const okRes = r.readResult(
+      (rr) => rr.readU32(),
+      (rr) => rr.readString()
+    );
     expect(okRes.ok).toBe(true);
     if (okRes.ok) expect(okRes.value).toBe(42);
-    const errRes = r.readResult((rr) => rr.readU32(), (rr) => rr.readString());
+    const errRes = r.readResult(
+      (rr) => rr.readU32(),
+      (rr) => rr.readString()
+    );
     expect(errRes.ok).toBe(false);
     if (!errRes.ok) expect(errRes.error).toBe("error");
   });
@@ -146,7 +161,10 @@ describe("BinaryReader", () => {
     w.writeString("b");
     w.writeU32(2);
     const r = new BinaryReader(w.toBuffer());
-    const map = r.readMap((rr) => rr.readString(), (rr) => rr.readU32());
+    const map = r.readMap(
+      (rr) => rr.readString(),
+      (rr) => rr.readU32()
+    );
     expect(map.get("a")).toBe(1);
     expect(map.get("b")).toBe(2);
   });
@@ -303,12 +321,26 @@ describe("BinaryWriter", () => {
 
   it("writeResult", () => {
     const w = new BinaryWriter();
-    w.writeResult(ok(42), (ww, v) => ww.writeU32(v), (ww, e) => ww.writeString(e));
-    w.writeResult(err("fail"), (ww, v) => ww.writeU32(v), (ww, e) => ww.writeString(e));
+    w.writeResult(
+      ok(42),
+      (ww, v) => ww.writeU32(v),
+      (ww, e) => ww.writeString(e)
+    );
+    w.writeResult(
+      err("fail"),
+      (ww, v) => ww.writeU32(v),
+      (ww, e) => ww.writeString(e)
+    );
     const r = new BinaryReader(w.toBuffer());
-    const res1 = r.readResult((rr) => rr.readU32(), (rr) => rr.readString());
+    const res1 = r.readResult(
+      (rr) => rr.readU32(),
+      (rr) => rr.readString()
+    );
     expect(res1.ok).toBe(true);
-    const res2 = r.readResult((rr) => rr.readU32(), (rr) => rr.readString());
+    const res2 = r.readResult(
+      (rr) => rr.readU32(),
+      (rr) => rr.readString()
+    );
     expect(res2.ok).toBe(false);
   });
 
@@ -324,8 +356,15 @@ describe("BinaryWriter", () => {
 
   it("writeMap", () => {
     const w = new BinaryWriter();
-    const map = new Map([["a", 1], ["b", 2]]);
-    w.writeMap(map, (ww, k) => ww.writeString(k), (ww, v) => ww.writeU32(v));
+    const map = new Map([
+      ["a", 1],
+      ["b", 2]
+    ]);
+    w.writeMap(
+      map,
+      (ww, k) => ww.writeString(k),
+      (ww, v) => ww.writeU32(v)
+    );
     const r = new BinaryReader(w.toBuffer());
     expect(r.readUlebNumber()).toBe(2);
     expect(r.readString()).toBe("a");

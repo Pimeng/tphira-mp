@@ -60,7 +60,9 @@ export function printBenchFooter(
   }
   console.log(`\n--- Client Process Metrics ---`);
   console.log(`  RSS avg/peak:        ${formatBytes(metricsSummary.rssAvg)} / ${formatBytes(metricsSummary.rssPeak)}`);
-  console.log(`  HeapUsed avg/peak:   ${formatBytes(metricsSummary.heapUsedAvg)} / ${formatBytes(metricsSummary.heapUsedPeak)}`);
+  console.log(
+    `  HeapUsed avg/peak:   ${formatBytes(metricsSummary.heapUsedAvg)} / ${formatBytes(metricsSummary.heapUsedPeak)}`
+  );
   console.log(`  EventLoopDelay mean: ${metricsSummary.eventLoopDelayMeanAvg} ms`);
   console.log(`  EventLoopDelay p95:  ${metricsSummary.eventLoopDelayP95Max} ms (max)`);
   console.log(`  EventLoopDelay p99:  ${metricsSummary.eventLoopDelayP99Max} ms (max)`);
@@ -68,10 +70,14 @@ export function printBenchFooter(
 
   if (serverMetricsSummary) {
     console.log(`\n--- Server Process Metrics ---`);
-    console.log(`  RSS avg/peak:        ${formatBytes(serverMetricsSummary.rssAvg)} / ${formatBytes(serverMetricsSummary.rssPeak)}`);
+    console.log(
+      `  RSS avg/peak:        ${formatBytes(serverMetricsSummary.rssAvg)} / ${formatBytes(serverMetricsSummary.rssPeak)}`
+    );
     console.log(`  CPU avg/peak:        ${serverMetricsSummary.cpuAvg}% / ${serverMetricsSummary.cpuPeak}%`);
     if (serverMetricsSummary.memoryPercentAvg !== undefined) {
-      console.log(`  Memory%% avg/peak:   ${serverMetricsSummary.memoryPercentAvg.toFixed(2)}% / ${serverMetricsSummary.memoryPercentPeak?.toFixed(2)}%`);
+      console.log(
+        `  Memory%% avg/peak:   ${serverMetricsSummary.memoryPercentAvg.toFixed(2)}% / ${serverMetricsSummary.memoryPercentPeak?.toFixed(2)}%`
+      );
     }
   }
 

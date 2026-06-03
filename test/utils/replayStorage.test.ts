@@ -104,7 +104,10 @@ describe("readReplayHeader", () => {
   it("读取 PHIR 魔数格式", async () => {
     const filePath = join(tempDir, "test.phir");
     const buf = Buffer.allocUnsafe(16);
-    buf[0] = 0x50; buf[1] = 0x48; buf[2] = 0x49; buf[3] = 0x52;
+    buf[0] = 0x50;
+    buf[1] = 0x48;
+    buf[2] = 0x49;
+    buf[3] = 0x52;
     buf.writeUInt32LE(2, 4); // chartId
     buf.writeUInt32LE(100, 8); // userId
     buf.writeUInt32LE(1, 12); // recordId

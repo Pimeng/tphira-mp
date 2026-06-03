@@ -8,7 +8,15 @@ import { parseRoomId } from "../../src/common/roomId.js";
 import { ReplayRecorder } from "../../src/server/replay/replayRecorder.js";
 import { startServer } from "../../src/server/core/server.js";
 import { Logger } from "../../src/server/utils/logger.js";
-import { sleep, waitFor, setupMockFetch, parsePhiraRec, parsePhiraRecordV2, createTempDir, cleanupTempDir } from "../helpers.js";
+import {
+  sleep,
+  waitFor,
+  setupMockFetch,
+  parsePhiraRec,
+  parsePhiraRecordV2,
+  createTempDir,
+  cleanupTempDir
+} from "../helpers.js";
 import type { JudgeEvent, TouchFrame } from "../../src/common/commands.js";
 
 describe("回放录制", () => {
@@ -32,7 +40,10 @@ describe("回放录制", () => {
   test("启用回放录制时，无观战者也能产生触控/判定录制数据", async () => {
     tempDir = await createTempDir("replay-test-1");
 
-    const running = await startServer({ port: 0, config: { monitors: [], replay_enabled: true, replay_base_dir: tempDir } });
+    const running = await startServer({
+      port: 0,
+      config: { monitors: [], replay_enabled: true, replay_base_dir: tempDir }
+    });
     const port = running.address().port;
 
     const alice = await Client.connect("127.0.0.1", port);
@@ -98,7 +109,18 @@ describe("回放录制", () => {
   test("回放开关不应覆盖真实观战者的 live 转发", async () => {
     tempDir = await createTempDir("replay-test-live-monitor");
 
-    const running = await startServer({ port: 0, configPath: join(tempDir, "server_config.yml"), config: { monitors: [200], http_service: true, http_port: 0, admin_token: "test-token", replay_enabled: true, replay_base_dir: tempDir } });
+    const running = await startServer({
+      port: 0,
+      configPath: join(tempDir, "server_config.yml"),
+      config: {
+        monitors: [200],
+        http_service: true,
+        http_port: 0,
+        admin_token: "test-token",
+        replay_enabled: true,
+        replay_base_dir: tempDir
+      }
+    });
     const port = running.address().port;
     const httpPort = running.http!.address().port;
 
@@ -187,7 +209,9 @@ describe("回放录制", () => {
     await recorder.endRoom(roomId);
     logger.close();
 
-    expect(debugLogs).toContain("[Replay] endRoom stats: roomKey=room_log_summary, userId=100, recordId=1, touchFrames=1, judgeEvents=1");
+    expect(debugLogs).toContain(
+      "[Replay] endRoom stats: roomKey=room_log_summary, userId=100, recordId=1, touchFrames=1, judgeEvents=1"
+    );
   });
 
   test("回放结束时即便没有触控/判定也会输出 0 统计", async () => {
@@ -210,7 +234,9 @@ describe("回放录制", () => {
     await recorder.endRoom(roomId);
     logger.close();
 
-    expect(debugLogs).toContain("[Replay] endRoom stats: roomKey=room_zero_summary, userId=100, recordId=1, touchFrames=0, judgeEvents=0");
+    expect(debugLogs).toContain(
+      "[Replay] endRoom stats: roomKey=room_zero_summary, userId=100, recordId=1, touchFrames=0, judgeEvents=0"
+    );
   });
 
   test("回放录制：落盘、列表、下载", async () => {
@@ -218,7 +244,11 @@ describe("回放录制", () => {
     const testConfigPath = join(tempDir, "server_config.yml");
 
     // 先关闭录制，确保测试初始状态正确
-    const running0 = await startServer({ port: 0, configPath: testConfigPath, config: { monitors: [200], http_service: true, http_port: 0, admin_token: "test-token", replay_base_dir: tempDir } });
+    const running0 = await startServer({
+      port: 0,
+      configPath: testConfigPath,
+      config: { monitors: [200], http_service: true, http_port: 0, admin_token: "test-token", replay_base_dir: tempDir }
+    });
     const httpPort0 = running0.http!.address().port;
     await originalFetch(`http://127.0.0.1:${httpPort0}/admin/replay/config`, {
       method: "POST",
@@ -227,7 +257,11 @@ describe("回放录制", () => {
     });
     await running0.close();
 
-    const running = await startServer({ port: 0, configPath: testConfigPath, config: { monitors: [200], http_service: true, http_port: 0, admin_token: "test-token", replay_base_dir: tempDir } });
+    const running = await startServer({
+      port: 0,
+      configPath: testConfigPath,
+      config: { monitors: [200], http_service: true, http_port: 0, admin_token: "test-token", replay_base_dir: tempDir }
+    });
     const port = running.address().port;
     const httpPort = running.http!.address().port;
 
@@ -306,7 +340,9 @@ describe("回放录制", () => {
       const replay = (chart1.replays as any[]).find((r) => r.timestamp === ts && r.recordId === 1);
       expect(replay).toBeTruthy();
 
-      const dl = await originalFetch(`http://127.0.0.1:${httpPort}/replay/download?sessionToken=${encodeURIComponent(authRes.sessionToken)}&chartId=1&timestamp=${ts}`);
+      const dl = await originalFetch(
+        `http://127.0.0.1:${httpPort}/replay/download?sessionToken=${encodeURIComponent(authRes.sessionToken)}&chartId=1&timestamp=${ts}`
+      );
       expect(dl.status).toBe(200);
       const dlBuf = Buffer.from(await dl.arrayBuffer());
       const dlRecord = parsePhiraRecordV2(dlBuf);
@@ -324,7 +360,9 @@ describe("回放录制", () => {
 
       await waitFor(() => !existsSync(filePath), 3000);
 
-      const dl2 = await originalFetch(`http://127.0.0.1:${httpPort}/replay/download?sessionToken=${encodeURIComponent(authRes.sessionToken)}&chartId=1&timestamp=${ts}`);
+      const dl2 = await originalFetch(
+        `http://127.0.0.1:${httpPort}/replay/download?sessionToken=${encodeURIComponent(authRes.sessionToken)}&chartId=1&timestamp=${ts}`
+      );
       expect(dl2.status).toBe(404);
     } finally {
       await alice.close();
@@ -338,7 +376,11 @@ describe("回放录制", () => {
     const testConfigPath = join(tempDir, "server_config.yml");
 
     // 先关闭录制，确保测试初始状态正确
-    const running0 = await startServer({ port: 0, configPath: testConfigPath, config: { monitors: [200], http_service: true, http_port: 0, admin_token: "test-token", replay_base_dir: tempDir } });
+    const running0 = await startServer({
+      port: 0,
+      configPath: testConfigPath,
+      config: { monitors: [200], http_service: true, http_port: 0, admin_token: "test-token", replay_base_dir: tempDir }
+    });
     const httpPort0 = running0.http!.address().port;
     await originalFetch(`http://127.0.0.1:${httpPort0}/admin/replay/config`, {
       method: "POST",
@@ -347,7 +389,11 @@ describe("回放录制", () => {
     });
     await running0.close();
 
-    const running = await startServer({ port: 0, configPath: testConfigPath, config: { monitors: [200], http_service: true, http_port: 0, admin_token: "test-token", replay_base_dir: tempDir } });
+    const running = await startServer({
+      port: 0,
+      configPath: testConfigPath,
+      config: { monitors: [200], http_service: true, http_port: 0, admin_token: "test-token", replay_base_dir: tempDir }
+    });
     const port = running.address().port;
     const httpPort = running.http!.address().port;
 
@@ -396,7 +442,11 @@ describe("回放录制", () => {
     const testConfigPath = join(tempDir, "server_config.yml");
 
     // 先关闭录制，确保测试初始状态正确
-    const running0 = await startServer({ port: 0, configPath: testConfigPath, config: { monitors: [200], http_service: true, http_port: 0, admin_token: "test-token", replay_base_dir: tempDir } });
+    const running0 = await startServer({
+      port: 0,
+      configPath: testConfigPath,
+      config: { monitors: [200], http_service: true, http_port: 0, admin_token: "test-token", replay_base_dir: tempDir }
+    });
     const httpPort0 = running0.http!.address().port;
     await originalFetch(`http://127.0.0.1:${httpPort0}/admin/replay/config`, {
       method: "POST",
@@ -405,7 +455,11 @@ describe("回放录制", () => {
     });
     await running0.close();
 
-    const running = await startServer({ port: 0, configPath: testConfigPath, config: { monitors: [200], replay_base_dir: tempDir } });
+    const running = await startServer({
+      port: 0,
+      configPath: testConfigPath,
+      config: { monitors: [200], replay_base_dir: tempDir }
+    });
     const port = running.address().port;
 
     const alice = await Client.connect("127.0.0.1", port);

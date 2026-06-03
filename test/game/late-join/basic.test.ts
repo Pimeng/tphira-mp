@@ -17,7 +17,7 @@ describe("late-join / basic", () => {
 
   test("普通玩家游戏中加入不影响本局结束，下局可正常参与", async () => {
     const { running, port, alice, bob, tempDir } = await createPlayingGame("room1", {
-      replay: true,
+      replay: true
     });
 
     const dave = await Client.connect("127.0.0.1", port);

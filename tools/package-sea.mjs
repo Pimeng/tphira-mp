@@ -41,15 +41,7 @@ function nodePath() {
 }
 
 function postjectArgs(outBin, blobPath) {
-  const args = [
-    "postject",
-    outBin,
-    "NODE_SEA_BLOB",
-    blobPath,
-    "--sentinel-fuse",
-    seaSentinel(),
-    "--overwrite"
-  ];
+  const args = ["postject", outBin, "NODE_SEA_BLOB", blobPath, "--sentinel-fuse", seaSentinel(), "--overwrite"];
   if (process.platform === "darwin") {
     args.push("--macho-segment-name", "NODE_SEA");
   }
@@ -96,4 +88,3 @@ if (existsSync(configExample)) {
 }
 
 console.log(`打包完成：${outBin}`);
-

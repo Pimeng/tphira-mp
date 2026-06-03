@@ -9,7 +9,7 @@ describe("Phira API 端点配置", () => {
   const originalFetch = globalThis.fetch;
   let fetchCalls: Array<{ url: string; init?: RequestInit }> = [];
 
-  const createMockFetch = (_customEndpoint: string) =>{
+  const createMockFetch = (_customEndpoint: string) => {
     return (async (input: string | URL | Request, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
       fetchCalls.push({ url, init });
@@ -20,7 +20,11 @@ describe("Phira API 端点配置", () => {
       }
 
       if (url.endsWith("/me")) {
-        const auth = String(init?.headers && (init.headers as any).Authorization ? (init.headers as any).Authorization : (init?.headers as any)?.get?.("Authorization") ?? "");
+        const auth = String(
+          init?.headers && (init.headers as any).Authorization
+            ? (init.headers as any).Authorization
+            : ((init?.headers as any)?.get?.("Authorization") ?? "")
+        );
         const token = auth.replace(/^Bearer\s+/i, "");
         if (token === "test_token_for_custom_endpoint") {
           return new Response(JSON.stringify({ id: 999, name: "CustomUser", language: "zh-CN" }), { status: 200 });
@@ -80,9 +84,9 @@ describe("Phira API 端点配置", () => {
 
     try {
       await client.authenticate("test_token_for_custom_endpoint");
-      
+
       // 验证请求发送到默认端点
-      const meCalls = fetchCalls.filter(c => c.url.endsWith("/me"));
+      const meCalls = fetchCalls.filter((c) => c.url.endsWith("/me"));
       expect(meCalls.length).toBeGreaterThan(0);
       expect(meCalls[0].url).toContain("phira.5wyxi.com");
     } finally {
@@ -97,12 +101,12 @@ describe("Phira API 端点配置", () => {
     globalThis.fetch = mockFetch;
 
     // 配置自定义 Phira API 端点
-    const running = await startServer({ 
-      port: 0, 
-      config: { 
+    const running = await startServer({
+      port: 0,
+      config: {
         monitors: [],
         phira_api_endpoint: customEndpoint
-      } 
+      }
     });
     const port = running.address().port;
 
@@ -110,9 +114,9 @@ describe("Phira API 端点配置", () => {
 
     try {
       await client.authenticate("test_token_for_custom_endpoint");
-      
+
       // 验证请求发送到自定义端点
-      const meCalls = fetchCalls.filter(c => c.url.endsWith("/me"));
+      const meCalls = fetchCalls.filter((c) => c.url.endsWith("/me"));
       expect(meCalls.length).toBeGreaterThan(0);
       expect(meCalls[0].url).toContain("custom-phira-api.example.com");
     } finally {
@@ -126,12 +130,12 @@ describe("Phira API 端点配置", () => {
     const mockFetch = createMockFetch(customEndpoint);
     globalThis.fetch = mockFetch;
 
-    const running = await startServer({ 
-      port: 0, 
-      config: { 
+    const running = await startServer({
+      port: 0,
+      config: {
         monitors: [],
         phira_api_endpoint: customEndpoint
-      } 
+      }
     });
     const port = running.address().port;
 
@@ -140,12 +144,12 @@ describe("Phira API 端点配置", () => {
     try {
       await client.authenticate("test_token_for_custom_endpoint");
       await client.createRoom("test-room");
-      
+
       // 选择谱面会触发 /chart/ 请求
       await client.selectChart(12345);
-      
+
       // 验证谱面请求发送到自定义端点
-      const chartCalls = fetchCalls.filter(c => /\/chart\//.test(c.url));
+      const chartCalls = fetchCalls.filter((c) => /\/chart\//.test(c.url));
       expect(chartCalls.length).toBeGreaterThan(0);
       expect(chartCalls[0].url).toContain("phira-mirror.example.org");
       expect(chartCalls[0].url).toContain("/chart/12345");
@@ -173,9 +177,9 @@ describe("Phira API 端点配置", () => {
 
       try {
         await client.authenticate("test_token_for_custom_endpoint");
-        
+
         // 验证请求发送到环境变量配置的端点
-        const meCalls = fetchCalls.filter(c => c.url.endsWith("/me"));
+        const meCalls = fetchCalls.filter((c) => c.url.endsWith("/me"));
         expect(meCalls.length).toBeGreaterThan(0);
         expect(meCalls[0].url).toContain("env-configured.example.com");
       } finally {

@@ -38,7 +38,13 @@ export function useCliTestSuite(): { current: () => CliTestRefs } {
     };
 
     const logger = new Logger({ logsDir: tempDir, minLevel: "ERROR" });
-    const state = new ServerState(config, logger, "测试服务器", `${tempDir}/test_admin_data.json`, `${tempDir}/test_server_config.yml`);
+    const state = new ServerState(
+      config,
+      logger,
+      "测试服务器",
+      `${tempDir}/test_admin_data.json`,
+      `${tempDir}/test_server_config.yml`
+    );
     refs.value = { state, logger, tempDir };
   });
 

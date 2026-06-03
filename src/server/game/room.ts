@@ -87,8 +87,7 @@ export class Room {
   private _cachedMonitorIds: number[] | null = null;
   private _cachedAllParticipantIds: number[] | null = null;
 
-  /** clientState 缓存：版本号机制，成员或状态变更时递增 */
-  private _stateVersion = 0;
+  /** clientState 的 infoMap 缓存：成员变更时置空，下次 clientState 调用时按需重建 */
   private _cachedInfoMap: Map<number, ReturnType<User["toInfo"]>> | null = null;
 
   private invalidateIdCache(): void {
@@ -96,7 +95,6 @@ export class Room {
     this._cachedMonitorIds = null;
     this._cachedAllParticipantIds = null;
     this._cachedInfoMap = null;
-    this._stateVersion++;
   }
 
   /** 只读用户 ID 集合 */

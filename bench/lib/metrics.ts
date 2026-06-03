@@ -42,7 +42,7 @@ export function createMetricsCollector(intervalMs = 1000): MetricsCollector {
     if (monitor) {
       monitor.disable();
       const mean = monitor.mean;
-      eventLoopDelayMean = (mean !== undefined && !Number.isNaN(mean)) ? nsToMs(mean) : 0;
+      eventLoopDelayMean = mean !== undefined && !Number.isNaN(mean) ? nsToMs(mean) : 0;
       const p50 = monitor.percentile(50);
       const p95 = monitor.percentile(95);
       const p99 = monitor.percentile(99);
@@ -50,7 +50,7 @@ export function createMetricsCollector(intervalMs = 1000): MetricsCollector {
       eventLoopDelayP95 = !Number.isNaN(p95) ? nsToMs(p95) : 0;
       eventLoopDelayP99 = !Number.isNaN(p99) ? nsToMs(p99) : 0;
       const max = monitor.max;
-      eventLoopDelayMax = (max !== undefined && !Number.isNaN(max)) ? nsToMs(max) : 0;
+      eventLoopDelayMax = max !== undefined && !Number.isNaN(max) ? nsToMs(max) : 0;
       monitor.enable();
     }
 
@@ -66,7 +66,7 @@ export function createMetricsCollector(intervalMs = 1000): MetricsCollector {
       eventLoopDelayP95,
       eventLoopDelayP99,
       eventLoopDelayMax,
-      uptime,
+      uptime
     });
   };
 
@@ -88,7 +88,7 @@ export function createMetricsCollector(intervalMs = 1000): MetricsCollector {
         monitor = null;
       }
       return samples;
-    },
+    }
   };
 }
 
@@ -102,7 +102,7 @@ export function summarizeMetrics(samples: MetricsSample[]): MetricsSummary {
       eventLoopDelayMeanAvg: 0,
       eventLoopDelayP95Max: 0,
       eventLoopDelayP99Max: 0,
-      eventLoopDelayMaxPeak: 0,
+      eventLoopDelayMaxPeak: 0
     };
   }
 
@@ -123,7 +123,7 @@ export function summarizeMetrics(samples: MetricsSample[]): MetricsSummary {
     eventLoopDelayMeanAvg: Math.round(eventLoopDelayMeanAvg * 100) / 100,
     eventLoopDelayP95Max: Math.round(eventLoopDelayP95Max * 100) / 100,
     eventLoopDelayP99Max: Math.round(eventLoopDelayP99Max * 100) / 100,
-    eventLoopDelayMaxPeak: Math.round(eventLoopDelayMaxPeak * 100) / 100,
+    eventLoopDelayMaxPeak: Math.round(eventLoopDelayMaxPeak * 100) / 100
   };
 }
 

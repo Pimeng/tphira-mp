@@ -41,11 +41,16 @@ describe("核心功能", () => {
       await bob.authenticate("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
       const bobChat: string[] = [];
       await waitFor(() => {
-        const batch = bob.takeMessages()
+        const batch = bob
+          .takeMessages()
           .filter((m) => m.type === "Chat" && m.user === 0)
           .map((m) => (m as any).content as string);
         bobChat.push(...batch);
-        return bobChat.some((s) => s.includes("当前可用的房间如下：")) && bobChat.some((s) => s.includes("群：123456")) && bobChat.some((s) => s.includes("欲买桂花同载酒"));
+        return (
+          bobChat.some((s) => s.includes("当前可用的房间如下：")) &&
+          bobChat.some((s) => s.includes("群：123456")) &&
+          bobChat.some((s) => s.includes("欲买桂花同载酒"))
+        );
       }, 1500);
 
       expect(bobChat.join("\n")).toContain("欲买桂花同载酒，荒泷天下第一斗。");
@@ -74,7 +79,8 @@ describe("核心功能", () => {
 
       const endChats: string[] = [];
       await waitFor(() => {
-        const batch = bob.takeMessages()
+        const batch = bob
+          .takeMessages()
           .filter((m) => m.type === "Chat" && m.user === 0)
           .map((m) => (m as any).content as string);
         endChats.push(...batch);

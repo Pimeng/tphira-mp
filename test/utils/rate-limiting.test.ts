@@ -63,11 +63,11 @@ describe("RateLimiter", () => {
 
       // ip2不受ip1影响，因为是按IP限流
       expect(rateLimiter.shouldLogConnection(ip2)).toBe(true);
-      
+
       // 只有ip1在黑名单中
       const blacklist = rateLimiter.getBlacklistedIps();
-      expect(blacklist.some(item => item.ip === ip1)).toBe(true);
-      expect(blacklist.some(item => item.ip === ip2)).toBe(false);
+      expect(blacklist.some((item) => item.ip === ip1)).toBe(true);
+      expect(blacklist.some((item) => item.ip === ip2)).toBe(false);
     });
   });
 
@@ -128,10 +128,10 @@ describe("RateLimiter", () => {
 
       // 移除黑名单后，历史计数被清空，可以重新开始记录
       expect(rateLimiter.shouldLogConnection(ip)).toBe(true);
-      
+
       // 等待时间窗口过期
       await new Promise((resolve) => setTimeout(resolve, 1100));
-      
+
       // 时间窗口过期后可以记录
       expect(rateLimiter.shouldLogConnection(ip)).toBe(true);
     });
@@ -146,7 +146,7 @@ describe("RateLimiter", () => {
       for (let i = 0; i < 11; i++) {
         rateLimiter.shouldLogConnection(ip1);
       }
-      
+
       // ip2也会触发限流
       rateLimiter.shouldLogConnection(ip2);
 

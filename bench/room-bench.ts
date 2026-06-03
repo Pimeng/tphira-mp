@@ -1,17 +1,8 @@
 import { Client } from "../src/client/client.js";
 import { parseRoomArgs, printRoomHelp } from "./lib/args.js";
 import { createMetricsCollector, summarizeMetrics } from "./lib/metrics.js";
-import {
-  createServerProcessMetricsCollector,
-  summarizeServerProcessMetrics,
-} from "./lib/serverProcessMetrics.js";
-import {
-  printProgress,
-  clearProgress,
-  saveReport,
-  printBenchHeader,
-  printBenchFooter,
-} from "./lib/reporter.js";
+import { createServerProcessMetricsCollector, summarizeServerProcessMetrics } from "./lib/serverProcessMetrics.js";
+import { printProgress, clearProgress, saveReport, printBenchHeader, printBenchFooter } from "./lib/reporter.js";
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -36,7 +27,7 @@ async function run(): Promise<void> {
     totalClients,
     rate: `${args.rate}/s`,
     duration: `${args.duration}s`,
-    tokens: args.tokens.length,
+    tokens: args.tokens.length
   });
 
   const requiredTokens = totalClients;
@@ -51,9 +42,7 @@ async function run(): Promise<void> {
   const metrics = createMetricsCollector(1000);
   metrics.start();
 
-  const serverMetrics = args.serverPid
-    ? createServerProcessMetricsCollector(args.serverPid, 1000)
-    : null;
+  const serverMetrics = args.serverPid ? createServerProcessMetricsCollector(args.serverPid, 1000) : null;
   serverMetrics?.start();
 
   const startTime = Date.now();
@@ -94,7 +83,7 @@ async function run(): Promise<void> {
     try {
       client = await Client.connect(args.host, args.port, {
         timeoutMs: 7000,
-        autoReconnect: false,
+        autoReconnect: false
       });
       connectLatencies.push(Date.now() - connectStart);
       clientsConnected++;
@@ -222,9 +211,7 @@ async function run(): Promise<void> {
   console.log(`Joined ${joinedPlayers} players/monitors. Performing room actions...`);
 
   // 执行可选行为：ready + chat
-  const actionTargets = rooms
-    .filter((r) => r.host.roomId() !== null)
-    .flatMap((r) => [r.host, ...r.players]);
+  const actionTargets = rooms.filter((r) => r.host.roomId() !== null).flatMap((r) => [r.host, ...r.players]);
 
   for (let i = 0; i < actionTargets.length; i++) {
     const target = actionTargets[i]!;
@@ -250,7 +237,9 @@ async function run(): Promise<void> {
     }
   }
 
-  console.log(`Actions done. Ready: ${readySuccess}/${readySuccess + readyFailed}, Chat: ${chatSuccess}/${chatSuccess + chatFailed}. Keeping for ${args.duration}s...`);
+  console.log(
+    `Actions done. Ready: ${readySuccess}/${readySuccess + readyFailed}, Chat: ${chatSuccess}/${chatSuccess + chatFailed}. Keeping for ${args.duration}s...`
+  );
 
   // 保持连接
   const elapsedTotal = Date.now() - startTime;
@@ -269,7 +258,8 @@ async function run(): Promise<void> {
   console.log("Leaving rooms and closing connections...");
   await Promise.all(
     clients.map((c) =>
-      c.leaveRoom()
+      c
+        .leaveRoom()
         .catch(() => {})
         .then(() => c.close().catch(() => {}))
     )
@@ -279,9 +269,8 @@ async function run(): Promise<void> {
   const metricsSamples = metrics.stop();
   const metricsSummary = summarizeMetrics(metricsSamples);
   const serverMetricsSamples = serverMetrics?.stop() ?? [];
-  const serverMetricsSummary = serverMetricsSamples.length > 0
-    ? summarizeServerProcessMetrics(serverMetricsSamples)
-    : undefined;
+  const serverMetricsSummary =
+    serverMetricsSamples.length > 0 ? summarizeServerProcessMetrics(serverMetricsSamples) : undefined;
 
   const avg = (arr: number[]) => (arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0);
 
@@ -302,7 +291,7 @@ async function run(): Promise<void> {
     avgAuthLatency: `${avg(authLatencies).toFixed(2)} ms`,
     avgCreateRoomLatency: `${avg(createRoomLatencies).toFixed(2)} ms`,
     avgJoinRoomLatency: `${avg(joinRoomLatencies).toFixed(2)} ms`,
-    duration: `${args.duration} s`,
+    duration: `${args.duration} s`
   };
 
   const report = {
@@ -314,7 +303,7 @@ async function run(): Promise<void> {
       playersPerRoom: args.playersPerRoom,
       monitorsPerRoom: args.monitorsPerRoom,
       rate: args.rate,
-      duration: args.duration,
+      duration: args.duration
     },
     startedAt: new Date(startTime).toISOString(),
     endedAt: new Date(endedAt).toISOString(),
@@ -324,7 +313,7 @@ async function run(): Promise<void> {
     metricsSamples,
     metricsSummary,
     serverMetricsSamples: serverMetricsSamples.length > 0 ? serverMetricsSamples : undefined,
-    serverMetricsSummary,
+    serverMetricsSummary
   };
 
   const filepath = saveReport(report);

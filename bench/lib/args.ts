@@ -28,7 +28,7 @@ export function parseConnectArgs(argv: string[]): ConnectBenchArgs {
     clients: 10,
     rate: 10,
     duration: 30,
-    token: "",
+    token: ""
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -74,7 +74,7 @@ export function parseRoomArgs(argv: string[]): RoomBenchArgs {
     monitorsPerRoom: 0,
     rate: 10,
     duration: 30,
-    tokens: [],
+    tokens: []
   };
 
   for (let i = 0; i < argv.length; i++) {

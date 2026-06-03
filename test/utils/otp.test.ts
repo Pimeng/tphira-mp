@@ -37,8 +37,8 @@ describe("OTP临时TOKEN功能测试", () => {
       const res = await fetch(`${baseUrl}/admin/otp/request`, {
         method: "POST"
       });
-      const data = await res.json() as any;
-      
+      const data = (await res.json()) as any;
+
       expect(res.status).toBe(200);
       expect(data.ok).toBe(true);
       expect(data.ssid).toBeDefined();
@@ -63,8 +63,8 @@ describe("OTP临时TOKEN功能测试", () => {
         otp: "invalid-otp"
       })
     });
-    const data = await res.json() as any;
-    
+    const data = (await res.json()) as any;
+
     expect(res.status).toBe(401);
     expect(data.ok).toBe(false);
     expect(data.error).toBe("invalid-or-expired-otp");
@@ -82,7 +82,7 @@ describe("OTP临时TOKEN功能测试", () => {
       const otpRes = await fetch(`${baseUrl}/admin/otp/request`, {
         method: "POST"
       });
-      const otpData = await otpRes.json() as any;
+      const otpData = (await otpRes.json()) as any;
       expect(otpData.ok).toBe(true);
       const ssid = otpData.ssid;
 
@@ -96,7 +96,7 @@ describe("OTP临时TOKEN功能测试", () => {
             otp: "wrong-otp"
           })
         });
-        const data = await res.json() as any;
+        const data = (await res.json()) as any;
         expect(data.ok).toBe(false);
       }
 
@@ -109,8 +109,8 @@ describe("OTP临时TOKEN功能测试", () => {
           otp: "wrong-otp"
         })
       });
-      const data4 = await res4.json() as any;
-      
+      const data4 = (await res4.json()) as any;
+
       expect(res4.status).toBe(403);
       expect(data4.ok).toBe(false);
       expect(data4.error).toMatch(/banned/);
@@ -130,9 +130,9 @@ describe("OTP临时TOKEN功能测试", () => {
     const otpRes = await fetch(`${baseUrl}/admin/otp/request`, {
       method: "POST"
     });
-    const otpData = await otpRes.json() as any;
+    const otpData = (await otpRes.json()) as any;
     expect(otpData.ok).toBe(true);
-    
+
     // 注意：实际测试中无法获取终端输出的OTP，这里仅测试API结构
     // 在真实场景中，管理员需要从服务器终端查看OTP
   });
@@ -141,7 +141,7 @@ describe("OTP临时TOKEN功能测试", () => {
     const res = await fetch(`${baseUrl}/admin/rooms`, {
       headers: { "X-Admin-Token": "any-token" }
     });
-    const data = await res.json() as any;
+    const data = (await res.json()) as any;
 
     // 因为没有配置ADMIN_TOKEN，且没有有效的临时TOKEN
     expect(res.status).toBe(403);
@@ -161,7 +161,7 @@ describe("OTP临时TOKEN功能测试", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mode: "cli" })
       });
-      const data = await res.json() as any;
+      const data = (await res.json()) as any;
 
       expect(res.status).toBe(200);
       expect(data.ok).toBe(true);
@@ -313,8 +313,8 @@ describe("配置ADMIN_TOKEN后OTP应该被禁用", () => {
     const res = await fetch(`${baseUrl}/admin/otp/request`, {
       method: "POST"
     });
-    const data = await res.json() as any;
-    
+    const data = (await res.json()) as any;
+
     expect(res.status).toBe(403);
     expect(data.ok).toBe(false);
     expect(data.error).toBe("otp-disabled-when-token-configured");
@@ -329,8 +329,8 @@ describe("配置ADMIN_TOKEN后OTP应该被禁用", () => {
         otp: "any-otp"
       })
     });
-    const data = await res.json() as any;
-    
+    const data = (await res.json()) as any;
+
     expect(res.status).toBe(403);
     expect(data.ok).toBe(false);
     expect(data.error).toBe("otp-disabled-when-token-configured");
@@ -340,8 +340,8 @@ describe("配置ADMIN_TOKEN后OTP应该被禁用", () => {
     const res = await fetch(`${baseUrl}/admin/rooms`, {
       headers: { "X-Admin-Token": "test-admin-token" }
     });
-    const data = await res.json() as any;
-    
+    const data = (await res.json()) as any;
+
     expect(res.status).toBe(200);
     expect(data.ok).toBe(true);
     expect(Array.isArray(data.rooms)).toBe(true);

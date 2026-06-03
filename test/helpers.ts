@@ -1,6 +1,12 @@
 // 共享的测试工具函数
 import { BinaryReader, decodePacket } from "../src/common/binary.js";
-import { decodeClientCommand, type ClientCommand, type CompactPos, type JudgeEvent, type TouchFrame } from "../src/common/commands.js";
+import {
+  decodeClientCommand,
+  type ClientCommand,
+  type CompactPos,
+  type JudgeEvent,
+  type TouchFrame
+} from "../src/common/commands.js";
 import { mkdir, rm } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
@@ -50,15 +56,15 @@ export async function waitForFast(cond: () => boolean, timeoutMs = 500): Promise
 // 预定义的测试令牌常量
 export const TOKENS = {
   alice: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-  bob:   "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  bob: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
   carol: "cccccccccccccccccccccccccccccccc",
-  dave:  "dddddddddddddddddddddddddddddddd",
+  dave: "dddddddddddddddddddddddddddddddd"
 } as const;
 
 export const MONITOR_IDS = {
   bob: 200,
   carol: 300,
-  dave: 400,
+  dave: 400
 } as const;
 
 export type ParsedPhiraRecordV2 = {
@@ -160,7 +166,7 @@ export function setupMockFetch() {
 
   const mockFetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input.toString();
-    
+
     if (url.startsWith("https://v1.hitokoto.cn/")) {
       hitokotoCalls += 1;
       return new Response(
@@ -172,9 +178,13 @@ export function setupMockFetch() {
         { status: 200 }
       );
     }
-    
+
     if (url.endsWith("/me")) {
-      const auth = String(init?.headers && (init.headers as any).Authorization ? (init.headers as any).Authorization : (init?.headers as any)?.get?.("Authorization") ?? "");
+      const auth = String(
+        init?.headers && (init.headers as any).Authorization
+          ? (init.headers as any).Authorization
+          : ((init?.headers as any)?.get?.("Authorization") ?? "")
+      );
       const token = auth.replace(/^Bearer\s+/i, "");
       if (token === "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa") {
         return new Response(JSON.stringify({ id: 100, name: "Alice", language: "zh-CN" }), { status: 200 });
@@ -198,13 +208,17 @@ export function setupMockFetch() {
 
     if (/\/record\/\d+$/.test(url)) {
       const id = Number(url.split("/").at(-1));
-      const auth = String(init?.headers && (init.headers as any).Authorization ? (init.headers as any).Authorization : (init?.headers as any)?.get?.("Authorization") ?? "");
+      const auth = String(
+        init?.headers && (init.headers as any).Authorization
+          ? (init.headers as any).Authorization
+          : ((init?.headers as any)?.get?.("Authorization") ?? "")
+      );
       const token = auth.replace(/^Bearer\s+/i, "");
       const playerMap: Record<string, number> = {
-        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": 100,
-        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": 200,
-        "cccccccccccccccccccccccccccccccc": 300,
-        "dddddddddddddddddddddddddddddddd": 400
+        aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa: 100,
+        bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb: 200,
+        cccccccccccccccccccccccccccccccc: 300,
+        dddddddddddddddddddddddddddddddd: 400
       };
       return new Response(
         JSON.stringify({
@@ -232,7 +246,9 @@ export function setupMockFetch() {
     originalFetch,
     mockFetch,
     getHitokotoCalls: () => hitokotoCalls,
-    resetHitokotoCalls: () => { hitokotoCalls = 0; }
+    resetHitokotoCalls: () => {
+      hitokotoCalls = 0;
+    }
   };
 }
 
@@ -242,10 +258,14 @@ export function setupMockFetch() {
  */
 export function useMockFetch() {
   const { originalFetch, mockFetch, getHitokotoCalls, resetHitokotoCalls } = setupMockFetch();
-  
+
   return {
-    install: () => { globalThis.fetch = mockFetch; },
-    restore: () => { globalThis.fetch = originalFetch; },
+    install: () => {
+      globalThis.fetch = mockFetch;
+    },
+    restore: () => {
+      globalThis.fetch = originalFetch;
+    },
     getHitokotoCalls,
     resetHitokotoCalls
   };

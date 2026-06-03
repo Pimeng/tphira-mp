@@ -30,9 +30,7 @@ async function resolveServerPid(parentPid: number): Promise<number | null> {
       if (!output) return null;
       const data = JSON.parse(output);
       if (Array.isArray(data)) {
-        const pids = data
-          .map((item) => item.ProcessId)
-          .filter((n: unknown) => typeof n === "number" && n > 0);
+        const pids = data.map((item) => item.ProcessId).filter((n: unknown) => typeof n === "number" && n > 0);
         if (pids.length > 0) return pids[0];
       } else if (data && typeof data.ProcessId === "number") {
         return data.ProcessId;
@@ -79,7 +77,7 @@ function parseArgs(argv: string[]): BenchSuiteArgs {
     rooms: 2,
     playersPerRoom: 2,
     monitorsPerRoom: 0,
-    hz: 20,
+    hz: 20
   };
   for (let i = 0; i < argv.length; i++) {
     switch (argv[i]) {
@@ -158,7 +156,7 @@ async function run(): Promise<void> {
   const serverEnv = {
     ...process.env,
     BENCH_TOKEN: args.tokens,
-    PHIRA_API_ENDPOINT: mockAuth.url,
+    PHIRA_API_ENDPOINT: mockAuth.url
   };
   const isWin = process.platform === "win32";
   let server: ReturnType<typeof spawn>;
@@ -168,7 +166,7 @@ async function run(): Promise<void> {
     server = spawn(nodeCmd, ["dist/server/main.js", "--port", String(args.port)], {
       stdio: ["ignore", "pipe", "pipe"],
       env: serverEnv,
-      shell: false,
+      shell: false
     });
   } else {
     console.log("Production build not found, falling back to pnpm run dev:server");
@@ -177,8 +175,12 @@ async function run(): Promise<void> {
       : spawn("pnpm", ["run", "dev:server"], { stdio: ["ignore", "pipe", "pipe"], env: serverEnv, shell: false });
   }
   let serverLog = "";
-  server.stdout?.on("data", (d) => { serverLog += d.toString(); });
-  server.stderr?.on("data", (d) => { serverLog += d.toString(); });
+  server.stdout?.on("data", (d) => {
+    serverLog += d.toString();
+  });
+  server.stderr?.on("data", (d) => {
+    serverLog += d.toString();
+  });
 
   // 等待服务端就绪
   await sleep(3000);
@@ -201,16 +203,27 @@ async function run(): Promise<void> {
 
   // 1. Connect bench
   console.log("\n>>> Running connect-bench <<<\n");
-  const connectCode = await runCommand(pnpm, [
-    "run", "bench:connect", "--",
-    "--host", args.host,
-    "--port", String(args.port),
-    "--clients", String(args.clients),
-    "--rate", String(args.rate),
-    "--duration", String(args.duration),
-    ...tokenArgs,
-    ...serverPidArgs,
-  ], benchEnv);
+  const connectCode = await runCommand(
+    pnpm,
+    [
+      "run",
+      "bench:connect",
+      "--",
+      "--host",
+      args.host,
+      "--port",
+      String(args.port),
+      "--clients",
+      String(args.clients),
+      "--rate",
+      String(args.rate),
+      "--duration",
+      String(args.duration),
+      ...tokenArgs,
+      ...serverPidArgs
+    ],
+    benchEnv
+  );
   if (connectCode !== 0) {
     console.warn(`connect-bench exited with code ${connectCode}`);
     exitCode = 1;
@@ -218,18 +231,31 @@ async function run(): Promise<void> {
 
   // 2. Room bench
   console.log("\n>>> Running room-bench <<<\n");
-  const roomCode = await runCommand(pnpm, [
-    "run", "bench:room", "--",
-    "--host", args.host,
-    "--port", String(args.port),
-    "--rooms", String(args.rooms),
-    "--players-per-room", String(args.playersPerRoom),
-    "--monitors-per-room", String(args.monitorsPerRoom),
-    "--rate", String(args.rate),
-    "--duration", String(args.duration),
-    ...tokenArgs,
-    ...serverPidArgs,
-  ], benchEnv);
+  const roomCode = await runCommand(
+    pnpm,
+    [
+      "run",
+      "bench:room",
+      "--",
+      "--host",
+      args.host,
+      "--port",
+      String(args.port),
+      "--rooms",
+      String(args.rooms),
+      "--players-per-room",
+      String(args.playersPerRoom),
+      "--monitors-per-room",
+      String(args.monitorsPerRoom),
+      "--rate",
+      String(args.rate),
+      "--duration",
+      String(args.duration),
+      ...tokenArgs,
+      ...serverPidArgs
+    ],
+    benchEnv
+  );
   if (roomCode !== 0) {
     console.warn(`room-bench exited with code ${roomCode}`);
     exitCode = 1;
@@ -237,19 +263,33 @@ async function run(): Promise<void> {
 
   // 3. Gameplay bench
   console.log("\n>>> Running gameplay-bench <<<\n");
-  const gameplayCode = await runCommand(pnpm, [
-    "run", "bench:gameplay", "--",
-    "--host", args.host,
-    "--port", String(args.port),
-    "--rooms", String(args.rooms),
-    "--players-per-room", String(args.playersPerRoom),
-    "--monitors-per-room", String(args.monitorsPerRoom),
-    "--rate", String(args.rate),
-    "--hz", String(args.hz),
-    "--duration", String(args.duration),
-    ...tokenArgs,
-    ...serverPidArgs,
-  ], benchEnv);
+  const gameplayCode = await runCommand(
+    pnpm,
+    [
+      "run",
+      "bench:gameplay",
+      "--",
+      "--host",
+      args.host,
+      "--port",
+      String(args.port),
+      "--rooms",
+      String(args.rooms),
+      "--players-per-room",
+      String(args.playersPerRoom),
+      "--monitors-per-room",
+      String(args.monitorsPerRoom),
+      "--rate",
+      String(args.rate),
+      "--hz",
+      String(args.hz),
+      "--duration",
+      String(args.duration),
+      ...tokenArgs,
+      ...serverPidArgs
+    ],
+    benchEnv
+  );
   if (gameplayCode !== 0) {
     console.warn(`gameplay-bench exited with code ${gameplayCode}`);
     exitCode = 1;

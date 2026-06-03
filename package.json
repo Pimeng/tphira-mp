@@ -10,8 +10,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "format": "prettier --write \"src/**/*.ts\"",
-    "format:check": "prettier --check \"src/**/*.ts\"",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "dev": "tsx src/server/main.ts",
     "start": "node dist/server/main.js",
     "bundle:server": "node tools/bundle-server.mjs",

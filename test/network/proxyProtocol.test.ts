@@ -75,16 +75,18 @@ describe("parseProxyProtocol", () => {
     const verCmd = 0x21; // ver=2, cmd=PROXY
     const famProto = 0x11; // TCP over IPv4
     const addrLen = 12;
-    const header = Buffer.concat([
-      sig,
-      Buffer.from([verCmd, famProto]),
-      Buffer.allocUnsafe(2)
-    ]);
+    const header = Buffer.concat([sig, Buffer.from([verCmd, famProto]), Buffer.allocUnsafe(2)]);
     header.writeUInt16BE(addrLen, 14);
 
     const addr = Buffer.alloc(addrLen);
-    addr[0] = 192; addr[1] = 168; addr[2] = 0; addr[3] = 1; // source
-    addr[4] = 192; addr[5] = 168; addr[6] = 0; addr[7] = 11; // dest
+    addr[0] = 192;
+    addr[1] = 168;
+    addr[2] = 0;
+    addr[3] = 1; // source
+    addr[4] = 192;
+    addr[5] = 168;
+    addr[6] = 0;
+    addr[7] = 11; // dest
     addr.writeUInt16BE(56324, 8); // sourcePort
     addr.writeUInt16BE(443, 10); // destPort
 
@@ -108,11 +110,7 @@ describe("parseProxyProtocol", () => {
     const verCmd = 0x20; // ver=2, cmd=LOCAL
     const famProto = 0x00;
     const addrLen = 0;
-    const header = Buffer.concat([
-      sig,
-      Buffer.from([verCmd, famProto]),
-      Buffer.allocUnsafe(2)
-    ]);
+    const header = Buffer.concat([sig, Buffer.from([verCmd, famProto]), Buffer.allocUnsafe(2)]);
     header.writeUInt16BE(addrLen, 14);
 
     await emitData(socket, header);

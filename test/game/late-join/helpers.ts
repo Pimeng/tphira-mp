@@ -22,8 +22,8 @@ export async function createPlayingGame(
       monitors: opts.extraMonitors ?? [],
       replay_enabled: opts.replay ?? false,
       room_max_users: opts.maxUsers,
-      ...(tempDir ? { replay_base_dir: tempDir } : {}),
-    },
+      ...(tempDir ? { replay_base_dir: tempDir } : {})
+    }
   });
 
   const port = running.address().port;
@@ -53,7 +53,7 @@ export async function createPlayingGame(
 export async function createWaitingGame(roomName: string) {
   const running = await startServer({
     port: 0,
-    config: { monitors: [] },
+    config: { monitors: [] }
   });
 
   const port = running.address().port;

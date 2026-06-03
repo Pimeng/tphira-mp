@@ -34,7 +34,13 @@ describe("管理员API", () => {
 
     const running = await startServer({
       port: 0,
-      config: { monitors: [200], http_service: true, http_port: 0, admin_token: "test-token", admin_data_path: dataPath }
+      config: {
+        monitors: [200],
+        http_service: true,
+        http_port: 0,
+        admin_token: "test-token",
+        admin_data_path: dataPath
+      }
     });
     const port = running.address().port;
     const httpPort = running.http!.address().port;
@@ -133,7 +139,13 @@ describe("管理员API", () => {
 
     const running1 = await startServer({
       port: 0,
-      config: { monitors: [200], http_service: true, http_port: 0, admin_token: "test-token", admin_data_path: dataPath }
+      config: {
+        monitors: [200],
+        http_service: true,
+        http_port: 0,
+        admin_token: "test-token",
+        admin_data_path: dataPath
+      }
     });
     const port1 = running1.address().port;
     const httpPort1 = running1.http!.address().port;
@@ -319,7 +331,14 @@ describe("管理员API", () => {
 
     const running = await startServer({
       port: 0,
-      config: { monitors: [200], http_service: true, http_port: 0, admin_token: "test-token", replay_enabled: true, replay_base_dir: replayDir }
+      config: {
+        monitors: [200],
+        http_service: true,
+        http_port: 0,
+        admin_token: "test-token",
+        replay_enabled: true,
+        replay_base_dir: replayDir
+      }
     });
     const port = running.address().port;
     const httpPort = running.http!.address().port;

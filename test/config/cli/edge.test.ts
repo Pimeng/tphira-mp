@@ -89,12 +89,7 @@ describe("CLI 边界情况处理", () => {
 
   it("应该正确处理特殊字符的房间ID", async () => {
     const { state } = refs.current();
-    const validRoomIds = [
-      "room_123",
-      "room-test",
-      "Room123",
-      "test_room-01"
-    ];
+    const validRoomIds = ["room_123", "room-test", "Room123", "test_room-01"];
 
     for (const roomId of validRoomIds) {
       const parsed = parseRoomId(roomId);

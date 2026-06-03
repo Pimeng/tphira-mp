@@ -28,7 +28,7 @@ async function createWebSocket(url: string): Promise<WebSocket> {
 // 辅助函数：关闭WebSocket并等待完成
 async function closeWebSocket(ws: WebSocket): Promise<void> {
   if (ws.readyState === WebSocket.CLOSED) return;
-  
+
   ws.close();
   await new Promise<void>((resolve) => {
     if (ws.readyState === WebSocket.CLOSED) {
@@ -50,14 +50,18 @@ describe("WebSocket 测试", () => {
     // 模拟身份验证的 fetch
     globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
-      
+
       // 只拦截外部认证和谱面请求，让本地 HTTP 请求通过
       if (url.includes("127.0.0.1") || url.includes("localhost")) {
         return originalFetch(input, init);
       }
-      
+
       if (url.endsWith("/me")) {
-        const auth = String(init?.headers && (init.headers as any).Authorization ? (init.headers as any).Authorization : (init?.headers as any)?.get?.("Authorization") ?? "");
+        const auth = String(
+          init?.headers && (init.headers as any).Authorization
+            ? (init.headers as any).Authorization
+            : ((init?.headers as any)?.get?.("Authorization") ?? "")
+        );
         const token = auth.replace(/^Bearer\s+/i, "");
 
         const usersByToken: Record<string, { id: number; name: string; language: string }> = {
@@ -156,20 +160,22 @@ describe("WebSocket 测试", () => {
         messages.push(JSON.parse(data.toString()));
       });
 
-      ws.send(JSON.stringify({
-        type: "subscribe",
-        roomId: "test-room-1",
-        userId: 1001
-      }));
+      ws.send(
+        JSON.stringify({
+          type: "subscribe",
+          roomId: "test-room-1",
+          userId: 1001
+        })
+      );
 
-      await waitFor(() => messages.some(m => m.type === "subscribed"));
-      await waitFor(() => messages.some(m => m.type === "room_update"));
+      await waitFor(() => messages.some((m) => m.type === "subscribed"));
+      await waitFor(() => messages.some((m) => m.type === "room_update"));
 
-      const subscribed = messages.find(m => m.type === "subscribed");
+      const subscribed = messages.find((m) => m.type === "subscribed");
       expect(subscribed).toBeDefined();
       expect(subscribed.roomId).toBe("test-room-1");
 
-      const roomUpdate = messages.find(m => m.type === "room_update");
+      const roomUpdate = messages.find((m) => m.type === "room_update");
       expect(roomUpdate).toBeDefined();
       expect(roomUpdate.data.roomid).toBe("test-room-1");
       expect(roomUpdate.data.state).toBe("select_chart");
@@ -190,10 +196,12 @@ describe("WebSocket 测试", () => {
         });
       });
 
-      ws.send(JSON.stringify({
-        type: "subscribe",
-        roomId: "non-existent-room"
-      }));
+      ws.send(
+        JSON.stringify({
+          type: "subscribe",
+          roomId: "non-existent-room"
+        })
+      );
 
       const error = await errorReceived;
       expect(error.message).toBe("room-not-found");
@@ -217,22 +225,29 @@ describe("WebSocket 测试", () => {
           messages.push(JSON.parse(data.toString()));
         });
 
-        ws.send(JSON.stringify({
-          type: "subscribe",
-          roomId,
-          userId: 3001
-        }));
+        ws.send(
+          JSON.stringify({
+            type: "subscribe",
+            roomId,
+            userId: 3001
+          })
+        );
 
-        await waitFor(() => messages.some(m => m.type === "subscribed"));
-        const countRoomLogsFor = (name: string) => messages.filter((m) => {
-          const text = String(m.data?.message ?? "");
-          return m.type === "room_log" && text.includes(name) && text.includes(roomId);
-        }).length;
+        await waitFor(() => messages.some((m) => m.type === "subscribed"));
+        const countRoomLogsFor = (name: string) =>
+          messages.filter((m) => {
+            const text = String(m.data?.message ?? "");
+            return m.type === "room_log" && text.includes(name) && text.includes(roomId);
+          }).length;
 
         server.state.logger.log("INFO", "opaque structured room log", undefined, { roomId });
-        await waitFor(() => messages.some(m => m.type === "room_log" && m.data.message === "opaque structured room log"));
+        await waitFor(() =>
+          messages.some((m) => m.type === "room_log" && m.data.message === "opaque structured room log")
+        );
         server.state.logger.log("MARK", "opaque structured room mark", undefined, { roomId });
-        await waitFor(() => messages.some(m => m.type === "room_log" && m.data.message === "opaque structured room mark"));
+        await waitFor(() =>
+          messages.some((m) => m.type === "room_log" && m.data.message === "opaque structured room mark")
+        );
 
         await guest.authenticate("roomlogguest");
         await guest.joinRoom(roomId, false);
@@ -250,7 +265,7 @@ describe("WebSocket 测试", () => {
         await guest.ready();
         await waitFor(() => countRoomLogsFor("RoomLogGuest") > guestLogsBeforeReady);
 
-        await waitFor(() => messages.some(m => m.type === "room_log" && String(m.data.message).includes(roomId)));
+        await waitFor(() => messages.some((m) => m.type === "room_log" && String(m.data.message).includes(roomId)));
         const guestLogsBeforeLeave = countRoomLogsFor("RoomLogGuest");
         await guest.leaveRoom();
         await waitFor(() => countRoomLogsFor("RoomLogGuest") > guestLogsBeforeLeave);
@@ -271,18 +286,20 @@ describe("WebSocket 测试", () => {
         messages.push(JSON.parse(data.toString()));
       });
 
-      ws.send(JSON.stringify({
-        type: "admin_subscribe",
-        token: "test-admin-token"
-      }));
+      ws.send(
+        JSON.stringify({
+          type: "admin_subscribe",
+          token: "test-admin-token"
+        })
+      );
 
-      await waitFor(() => messages.some(m => m.type === "admin_subscribed"));
-      await waitFor(() => messages.some(m => m.type === "admin_update"));
+      await waitFor(() => messages.some((m) => m.type === "admin_subscribed"));
+      await waitFor(() => messages.some((m) => m.type === "admin_update"));
 
-      const subscribed = messages.find(m => m.type === "admin_subscribed");
+      const subscribed = messages.find((m) => m.type === "admin_subscribed");
       expect(subscribed).toBeDefined();
 
-      const adminUpdate = messages.find(m => m.type === "admin_update");
+      const adminUpdate = messages.find((m) => m.type === "admin_update");
       expect(adminUpdate).toBeDefined();
       expect(adminUpdate.data.timestamp).toBeDefined();
       expect(adminUpdate.data.changes).toBeDefined();
@@ -303,10 +320,12 @@ describe("WebSocket 测试", () => {
         });
       });
 
-      ws.send(JSON.stringify({
-        type: "admin_subscribe",
-        token: "invalid-token"
-      }));
+      ws.send(
+        JSON.stringify({
+          type: "admin_subscribe",
+          token: "invalid-token"
+        })
+      );
 
       const error = await errorReceived;
       expect(error.message).toBe("unauthorized");
@@ -331,16 +350,18 @@ describe("WebSocket 测试", () => {
         }
       });
 
-      ws.send(JSON.stringify({
-        type: "admin_subscribe",
-        token: "test-admin-token"
-      }));
+      ws.send(
+        JSON.stringify({
+          type: "admin_subscribe",
+          token: "test-admin-token"
+        })
+      );
 
       await waitFor(() => updates.length > 0);
-      
+
       const room = updates[0].changes.rooms.find((r: any) => r.roomid === "admin-detail-test");
       expect(room).toBeDefined();
-      
+
       // 检查详细字段
       expect(room.max_users).toBe(8);
       expect(room.current_users).toBe(1);
@@ -358,11 +379,11 @@ describe("WebSocket 测试", () => {
       // 此测试验证临时 token 在 WebSocket 中的支持
       // 由于测试服务器配置了 admin_token，OTP 功能被禁用
       // 我们通过直接在 state 中添加临时 token 来模拟
-      
+
       const tempToken = "test-temp-token-12345";
       const clientIp = "127.0.0.1";
       const expiresAt = Date.now() + 4 * 60 * 60 * 1000; // 4小时后过期
-      
+
       // 直接在 server state 中添加临时 token（模拟 OTP 验证后的结果）
       server.state.tempAdminTokens.set(tempToken, { ip: clientIp, expiresAt, banned: false });
 
@@ -374,22 +395,24 @@ describe("WebSocket 测试", () => {
         messages.push(JSON.parse(data.toString()));
       });
 
-      ws.send(JSON.stringify({
-        type: "admin_subscribe",
-        token: tempToken
-      }));
+      ws.send(
+        JSON.stringify({
+          type: "admin_subscribe",
+          token: tempToken
+        })
+      );
 
-      await waitFor(() => messages.some(m => m.type === "admin_subscribed"));
-      await waitFor(() => messages.some(m => m.type === "admin_update"));
+      await waitFor(() => messages.some((m) => m.type === "admin_subscribed"));
+      await waitFor(() => messages.some((m) => m.type === "admin_update"));
 
-      const subscribed = messages.find(m => m.type === "admin_subscribed");
+      const subscribed = messages.find((m) => m.type === "admin_subscribed");
       expect(subscribed).toBeDefined();
 
-      const adminUpdate = messages.find(m => m.type === "admin_update");
+      const adminUpdate = messages.find((m) => m.type === "admin_update");
       expect(adminUpdate).toBeDefined();
 
       await closeWebSocket(ws);
-      
+
       // 清理
       server.state.tempAdminTokens.delete(tempToken);
     });
@@ -429,8 +452,8 @@ describe("WebSocket 测试", () => {
         ws1.send(JSON.stringify({ type: "subscribe", roomId: "room-index-1", userId: 1001 }));
         ws2.send(JSON.stringify({ type: "subscribe", roomId: "room-index-2", userId: 1002 }));
 
-        await waitFor(() => messages1.some(m => m.type === "subscribed"));
-        await waitFor(() => messages2.some(m => m.type === "subscribed"));
+        await waitFor(() => messages1.some((m) => m.type === "subscribed"));
+        await waitFor(() => messages2.some((m) => m.type === "subscribed"));
 
         // 清空初始消息
         messages1.length = 0;
@@ -442,12 +465,12 @@ describe("WebSocket 测试", () => {
         await sleep(200);
 
         // ws1 应该收到 room-index-1 的更新
-        const ws1Updates = messages1.filter(m => m.type === "room_update");
+        const ws1Updates = messages1.filter((m) => m.type === "room_update");
         expect(ws1Updates.length).toBeGreaterThanOrEqual(1);
 
         // ws2 不应该收到 room-index-1 的更新
         const ws2UpdatesForRoom1 = messages2.filter(
-          m => m.type === "room_update" && m.data?.roomid === "room-index-1"
+          (m) => m.type === "room_update" && m.data?.roomid === "room-index-1"
         );
         expect(ws2UpdatesForRoom1.length).toBe(0);
 
@@ -477,11 +500,11 @@ describe("WebSocket 测试", () => {
         });
 
         ws.send(JSON.stringify({ type: "subscribe", roomId: "unsub-test", userId: 1001 }));
-        await waitFor(() => messages.some(m => m.type === "subscribed"));
+        await waitFor(() => messages.some((m) => m.type === "subscribed"));
 
         // 取消订阅
         ws.send(JSON.stringify({ type: "unsubscribe" }));
-        await waitFor(() => messages.some(m => m.type === "unsubscribed"));
+        await waitFor(() => messages.some((m) => m.type === "unsubscribed"));
 
         // 清空消息
         const beforeCount = messages.length;
@@ -492,7 +515,7 @@ describe("WebSocket 测试", () => {
 
         // 不应该收到新的 room_update
         const newMessages = messages.slice(beforeCount);
-        const roomUpdates = newMessages.filter(m => m.type === "room_update");
+        const roomUpdates = newMessages.filter((m) => m.type === "room_update");
         expect(roomUpdates.length).toBe(0);
 
         await closeWebSocket(ws);
@@ -519,7 +542,7 @@ describe("WebSocket 测试", () => {
         });
 
         ws.send(JSON.stringify({ type: "subscribe", roomId: "disconnect-test", userId: 1001 }));
-        await waitFor(() => messages.some(m => m.type === "subscribed"));
+        await waitFor(() => messages.some((m) => m.type === "subscribed"));
 
         // 断开 WebSocket
         await closeWebSocket(ws);

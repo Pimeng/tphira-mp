@@ -18,7 +18,7 @@ describe("late-join / observer", () => {
 
   test("观战者可以在任何状态加入并接收实时数据", async () => {
     const { running, port, alice, bob } = await createPlayingGame("room4", {
-      extraMonitors: [400],
+      extraMonitors: [400]
     });
 
     const dave = await Client.connect("127.0.0.1", port);

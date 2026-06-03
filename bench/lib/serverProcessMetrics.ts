@@ -57,7 +57,7 @@ function parseProcStatus(pid: number): { vmRssKb: number; vmSizeKb: number } | n
     if (!rssMatch) return null;
     return {
       vmRssKb: Number(rssMatch[1]),
-      vmSizeKb: sizeMatch ? Number(sizeMatch[1]) : 0,
+      vmSizeKb: sizeMatch ? Number(sizeMatch[1]) : 0
     };
   } catch {
     return null;
@@ -91,7 +91,7 @@ function getClkTck(): number {
     const out = execSync("getconf CLK_TCK", {
       encoding: "utf-8",
       timeout: 5000,
-      stdio: ["pipe", "pipe", "pipe"],
+      stdio: ["pipe", "pipe", "pipe"]
     }).trim();
     const n = Number(out);
     if (!Number.isNaN(n) && n > 0) return n;
@@ -120,7 +120,7 @@ function getLinuxMetrics(
     const wallDiffMs = now - prev.timestamp;
     if (wallDiffMs > 0) {
       const wallDiffSec = wallDiffMs / 1000;
-      const raw = (ticksDiff / clkTck) / wallDiffSec * 100;
+      const raw = (ticksDiff / clkTck / wallDiffSec) * 100;
       cpuPercent = raw < 0 ? 0 : Math.round(raw * 100) / 100;
     }
   }
@@ -147,9 +147,9 @@ function getLinuxMetrics(
       vmSizeBytes,
       cpuPercent,
       memoryPercent,
-      uptimeSeconds,
+      uptimeSeconds
     },
-    state: { utime: stat.utime, stime: stat.stime, timestamp: now },
+    state: { utime: stat.utime, stime: stat.stime, timestamp: now }
   };
 }
 
@@ -158,7 +158,7 @@ export function createServerProcessMetricsCollector(
   options?: ServerProcessMetricsCollectorOptions | number
 ): ServerProcessMetricsCollector {
   const opts: ServerProcessMetricsCollectorOptions =
-    typeof options === "number" ? { intervalMs: options } : options ?? {};
+    typeof options === "number" ? { intervalMs: options } : (options ?? {});
   const { intervalMs = 1000 } = opts;
 
   const samples: ServerProcessMetricSample[] = [];
@@ -194,7 +194,7 @@ export function createServerProcessMetricsCollector(
         timer = null;
       }
       return samples;
-    },
+    }
   };
 }
 
@@ -218,9 +218,7 @@ export type ServerProcessMetricsSummary = {
   cpuPeak: number;
 };
 
-export function summarizeServerProcessMetrics(
-  samples: ServerProcessMetricSample[]
-): ServerProcessMetricsSummary {
+export function summarizeServerProcessMetrics(samples: ServerProcessMetricSample[]): ServerProcessMetricsSummary {
   if (samples.length === 0) {
     return {
       samples: 0,
@@ -230,7 +228,7 @@ export function summarizeServerProcessMetrics(
       rssAvg: 0,
       rssPeak: 0,
       cpuAvg: 0,
-      cpuPeak: 0,
+      cpuPeak: 0
     };
   }
 
@@ -240,25 +238,15 @@ export function summarizeServerProcessMetrics(
   const rssMax = Math.max(...rssValues);
   const rssAvg = rssSum / samples.length;
 
-  const vmSizeValues = samples
-    .map((s) => s.vmSizeBytes)
-    .filter((v): v is number => v !== undefined);
+  const vmSizeValues = samples.map((s) => s.vmSizeBytes).filter((v): v is number => v !== undefined);
   const vmSizeMax = vmSizeValues.length > 0 ? Math.max(...vmSizeValues) : undefined;
 
-  const cpuValues = samples
-    .map((s) => s.cpuPercent)
-    .filter((v): v is number => v !== undefined);
-  const cpuAvg = cpuValues.length > 0
-    ? cpuValues.reduce((a, b) => a + b, 0) / cpuValues.length
-    : undefined;
+  const cpuValues = samples.map((s) => s.cpuPercent).filter((v): v is number => v !== undefined);
+  const cpuAvg = cpuValues.length > 0 ? cpuValues.reduce((a, b) => a + b, 0) / cpuValues.length : undefined;
   const cpuMax = cpuValues.length > 0 ? Math.max(...cpuValues) : undefined;
 
-  const memoryValues = samples
-    .map((s) => s.memoryPercent)
-    .filter((v): v is number => v !== undefined);
-  const memoryAvg = memoryValues.length > 0
-    ? memoryValues.reduce((a, b) => a + b, 0) / memoryValues.length
-    : undefined;
+  const memoryValues = samples.map((s) => s.memoryPercent).filter((v): v is number => v !== undefined);
+  const memoryAvg = memoryValues.length > 0 ? memoryValues.reduce((a, b) => a + b, 0) / memoryValues.length : undefined;
   const memoryPeak = memoryValues.length > 0 ? Math.max(...memoryValues) : undefined;
 
   const out: ServerProcessMetricsSummary = {
@@ -269,7 +257,7 @@ export function summarizeServerProcessMetrics(
     rssAvg: Math.round(rssAvg),
     rssPeak: Math.round(rssMax),
     cpuAvg: cpuAvg !== undefined ? Math.round(cpuAvg * 100) / 100 : 0,
-    cpuPeak: cpuMax !== undefined ? Math.round(cpuMax * 100) / 100 : 0,
+    cpuPeak: cpuMax !== undefined ? Math.round(cpuMax * 100) / 100 : 0
   };
 
   if (vmSizeMax !== undefined) {

@@ -25,7 +25,11 @@ describe("协议和连接", () => {
       const url = typeof input === "string" ? input : input.toString();
       if (url.endsWith("/me")) {
         await sleep(3500);
-        const auth = String(init?.headers && (init.headers as any).Authorization ? (init.headers as any).Authorization : (init?.headers as any)?.get?.("Authorization") ?? "");
+        const auth = String(
+          init?.headers && (init.headers as any).Authorization
+            ? (init.headers as any).Authorization
+            : ((init?.headers as any)?.get?.("Authorization") ?? "")
+        );
         const token = auth.replace(/^Bearer\s+/i, "");
         if (token === "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa") {
           return new Response(JSON.stringify({ id: 100, name: "Alice", language: "zh-CN" }), { status: 200 });
@@ -53,7 +57,10 @@ describe("协议和连接", () => {
 
   test("观战者不读数据导致广播背压时，结算仍能正常结束（不应卡死/心跳误断）", async () => {
     const tempDir = await createTempDir("protocol-test");
-    const running = await startServer({ port: 0, config: { monitors: [200], replay_enabled: true, replay_base_dir: tempDir } });
+    const running = await startServer({
+      port: 0,
+      config: { monitors: [200], replay_enabled: true, replay_base_dir: tempDir }
+    });
     const port = running.address().port;
     const alice = await Client.connect("127.0.0.1", port, { timeoutMs: 20000 });
     const bob = await Client.connect("127.0.0.1", port, { timeoutMs: 20000 });

@@ -20,8 +20,7 @@ function tryForceTty(value: boolean): () => void {
       try {
         if (desc) Object.defineProperty(process.stdout, "isTTY", desc);
         else delete (process.stdout as any).isTTY;
-      } catch {
-      }
+      } catch {}
     };
   } catch {
     return () => {};

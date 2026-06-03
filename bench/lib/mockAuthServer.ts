@@ -39,7 +39,7 @@ export function startMockAuthServer(port = 0): Promise<MockAuthServer> {
         stop: () =>
           new Promise<void>((res) => {
             server.close(() => res());
-          }),
+          })
       });
     });
 

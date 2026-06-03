@@ -17,5 +17,11 @@ bench-results/
 # Localization resources (Fluent .ftl + JSON, not Prettier-managed)
 locales/
 
+# Docs & hand-tuned config (markdown embeds raw HTML; YAML has aligned comments)
+*.md
+docs/
+*.yml
+*.yaml
+
 # Misc
 *.min.js

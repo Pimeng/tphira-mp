@@ -1,17 +1,8 @@
 import { Client } from "../src/client/client.js";
 import { parseConnectArgs, printConnectHelp } from "./lib/args.js";
 import { createMetricsCollector, summarizeMetrics } from "./lib/metrics.js";
-import {
-  createServerProcessMetricsCollector,
-  summarizeServerProcessMetrics,
-} from "./lib/serverProcessMetrics.js";
-import {
-  printProgress,
-  clearProgress,
-  saveReport,
-  printBenchHeader,
-  printBenchFooter,
-} from "./lib/reporter.js";
+import { createServerProcessMetricsCollector, summarizeServerProcessMetrics } from "./lib/serverProcessMetrics.js";
+import { printProgress, clearProgress, saveReport, printBenchHeader, printBenchFooter } from "./lib/reporter.js";
 
 type ClientResult = {
   connected: boolean;
@@ -39,15 +30,13 @@ async function run(): Promise<void> {
     clients: args.clients,
     rate: `${args.rate}/s`,
     duration: `${args.duration}s`,
-    token: args.token ? "<provided>" : "<none>",
+    token: args.token ? "<provided>" : "<none>"
   });
 
   const metrics = createMetricsCollector(1000);
   metrics.start();
 
-  const serverMetrics = args.serverPid
-    ? createServerProcessMetricsCollector(args.serverPid, 1000)
-    : null;
+  const serverMetrics = args.serverPid ? createServerProcessMetricsCollector(args.serverPid, 1000) : null;
   serverMetrics?.start();
 
   const results: ClientResult[] = [];
@@ -72,7 +61,7 @@ async function run(): Promise<void> {
     try {
       client = await Client.connect(args.host, args.port, {
         timeoutMs: 7000,
-        autoReconnect: false,
+        autoReconnect: false
       });
       const connectLatency = Date.now() - connectStart;
 
@@ -95,7 +84,7 @@ async function run(): Promise<void> {
         connected: true,
         connectLatencyMs: connectLatency,
         authenticated,
-        authLatencyMs: authLatency,
+        authLatencyMs: authLatency
       });
       clients.push(client);
     } catch (e) {
@@ -105,7 +94,7 @@ async function run(): Promise<void> {
         connectLatencyMs: connectLatency,
         authenticated: false,
         authLatencyMs: 0,
-        error: e instanceof Error ? e.message : String(e),
+        error: e instanceof Error ? e.message : String(e)
       });
       if (client) {
         await client.close().catch(() => {});
@@ -137,9 +126,8 @@ async function run(): Promise<void> {
   const metricsSamples = metrics.stop();
   const metricsSummary = summarizeMetrics(metricsSamples);
   const serverMetricsSamples = serverMetrics?.stop() ?? [];
-  const serverMetricsSummary = serverMetricsSamples.length > 0
-    ? summarizeServerProcessMetrics(serverMetricsSamples)
-    : undefined;
+  const serverMetricsSummary =
+    serverMetricsSamples.length > 0 ? summarizeServerProcessMetrics(serverMetricsSamples) : undefined;
 
   const connected = results.filter((r) => r.connected).length;
   const connectFailed = results.filter((r) => !r.connected).length;
@@ -149,12 +137,9 @@ async function run(): Promise<void> {
   const connectLatencies = results.filter((r) => r.connected).map((r) => r.connectLatencyMs);
   const authLatencies = results.filter((r) => r.authenticated).map((r) => r.authLatencyMs);
 
-  const avgConnectLatency = connectLatencies.length > 0
-    ? connectLatencies.reduce((a, b) => a + b, 0) / connectLatencies.length
-    : 0;
-  const avgAuthLatency = authLatencies.length > 0
-    ? authLatencies.reduce((a, b) => a + b, 0) / authLatencies.length
-    : 0;
+  const avgConnectLatency =
+    connectLatencies.length > 0 ? connectLatencies.reduce((a, b) => a + b, 0) / connectLatencies.length : 0;
+  const avgAuthLatency = authLatencies.length > 0 ? authLatencies.reduce((a, b) => a + b, 0) / authLatencies.length : 0;
 
   const errors = new Map<string, number>();
   for (const r of results) {
@@ -171,7 +156,7 @@ async function run(): Promise<void> {
     authFailed,
     avgConnectLatency: `${avgConnectLatency.toFixed(2)} ms`,
     avgAuthLatency: `${avgAuthLatency.toFixed(2)} ms`,
-    duration: `${args.duration} s`,
+    duration: `${args.duration} s`
   };
 
   const report = {
@@ -181,7 +166,7 @@ async function run(): Promise<void> {
       port: args.port,
       clients: args.clients,
       rate: args.rate,
-      duration: args.duration,
+      duration: args.duration
     },
     startedAt: new Date(startTime).toISOString(),
     endedAt: new Date(endedAt).toISOString(),
@@ -191,7 +176,7 @@ async function run(): Promise<void> {
     metricsSamples,
     metricsSummary,
     serverMetricsSamples: serverMetricsSamples.length > 0 ? serverMetricsSamples : undefined,
-    serverMetricsSummary,
+    serverMetricsSummary
   };
 
   const filepath = saveReport(report);

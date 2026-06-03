@@ -2,17 +2,8 @@ import { Client } from "../src/client/client.js";
 import { Judgement } from "../src/common/commands.js";
 import { parseRoomArgs, printRoomHelp } from "./lib/args.js";
 import { createMetricsCollector, summarizeMetrics } from "./lib/metrics.js";
-import {
-  createServerProcessMetricsCollector,
-  summarizeServerProcessMetrics,
-} from "./lib/serverProcessMetrics.js";
-import {
-  printProgress,
-  clearProgress,
-  saveReport,
-  printBenchHeader,
-  printBenchFooter,
-} from "./lib/reporter.js";
+import { createServerProcessMetricsCollector, summarizeServerProcessMetrics } from "./lib/serverProcessMetrics.js";
+import { printProgress, clearProgress, saveReport, printBenchHeader, printBenchFooter } from "./lib/reporter.js";
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -21,7 +12,7 @@ function sleep(ms: number): Promise<void> {
 function makeTouchFrame(time: number) {
   return {
     time,
-    points: [[0, { x: Math.random(), y: Math.random() }]] as Array<[number, { x: number; y: number }]>,
+    points: [[0, { x: Math.random(), y: Math.random() }]] as Array<[number, { x: number; y: number }]>
   };
 }
 
@@ -30,7 +21,7 @@ function makeJudgeEvent(time: number) {
     time,
     line_id: Math.floor(Math.random() * 4),
     note_id: Math.floor(Math.random() * 100),
-    judgement: Math.floor(Math.random() * 6) as Judgement,
+    judgement: Math.floor(Math.random() * 6) as Judgement
   };
 }
 
@@ -53,7 +44,7 @@ async function run(): Promise<void> {
     hz: args.hz ?? 20,
     totalClients,
     duration: `${args.duration}s`,
-    tokens: args.tokens.length,
+    tokens: args.tokens.length
   });
 
   const requiredTokens = totalClients;
@@ -68,9 +59,7 @@ async function run(): Promise<void> {
   const metrics = createMetricsCollector(1000);
   metrics.start();
 
-  const serverMetrics = args.serverPid
-    ? createServerProcessMetricsCollector(args.serverPid, 1000)
-    : null;
+  const serverMetrics = args.serverPid ? createServerProcessMetricsCollector(args.serverPid, 1000) : null;
   serverMetrics?.start();
 
   const startTime = Date.now();
@@ -114,7 +103,7 @@ async function run(): Promise<void> {
     try {
       const client = await Client.connect(args.host, args.port, {
         timeoutMs: 15000,
-        autoReconnect: false,
+        autoReconnect: false
       });
       clientsConnected++;
 
@@ -215,7 +204,9 @@ async function run(): Promise<void> {
       }
     }
   }
-  console.log(`Joined ${joinsSucceeded}/${joinsSucceeded + joinsFailed} players, ${monitorJoinsSucceeded}/${monitorJoinsSucceeded + monitorJoinsFailed} monitors.`);
+  console.log(
+    `Joined ${joinsSucceeded}/${joinsSucceeded + joinsFailed} players, ${monitorJoinsSucceeded}/${monitorJoinsSucceeded + monitorJoinsFailed} monitors.`
+  );
 
   // 进入 gameplay：选谱 -> requestStart -> ready（并行执行各房间以加速 setup）
   const gameplaySetupPromises = rooms.map(async (room) => {
@@ -259,7 +250,9 @@ async function run(): Promise<void> {
   });
 
   await Promise.all(gameplaySetupPromises);
-  console.log(`Gameplay setup: selectChart=${selectChartsSucceeded}/${selectChartsSucceeded + selectChartsFailed}, requestStart=${requestStartsSucceeded}/${requestStartsSucceeded + requestStartsFailed}, ready=${readiesSucceeded}/${readiesSucceeded + readiesFailed}`);
+  console.log(
+    `Gameplay setup: selectChart=${selectChartsSucceeded}/${selectChartsSucceeded + selectChartsFailed}, requestStart=${requestStartsSucceeded}/${requestStartsSucceeded + requestStartsFailed}, ready=${readiesSucceeded}/${readiesSucceeded + readiesFailed}`
+  );
 
   // 等待一小段时间让状态变为 Playing
   await sleep(500);
@@ -281,9 +274,7 @@ async function run(): Promise<void> {
   const endTime = sendPhaseStart + args.duration * 1000;
   const senders: NodeJS.Timeout[] = [];
 
-  const allSenders = rooms
-    .filter((r) => r.host.roomId() !== null)
-    .flatMap((r) => [r.host, ...r.players]);
+  const allSenders = rooms.filter((r) => r.host.roomId() !== null).flatMap((r) => [r.host, ...r.players]);
 
   if (allSenders.length === 0) {
     console.error("\n[CRITICAL] No senders available for gameplay load test.");
@@ -355,7 +346,8 @@ async function run(): Promise<void> {
   console.log("Leaving rooms and closing connections...");
   await Promise.all(
     clients.map((c) =>
-      c.leaveRoom()
+      c
+        .leaveRoom()
         .catch(() => {})
         .then(() => c.close().catch(() => {}))
     )
@@ -365,9 +357,8 @@ async function run(): Promise<void> {
   const metricsSamples = metrics.stop();
   const metricsSummary = summarizeMetrics(metricsSamples);
   const serverMetricsSamples = serverMetrics?.stop() ?? [];
-  const serverMetricsSummary = serverMetricsSamples.length > 0
-    ? summarizeServerProcessMetrics(serverMetricsSamples)
-    : undefined;
+  const serverMetricsSummary =
+    serverMetricsSamples.length > 0 ? summarizeServerProcessMetrics(serverMetricsSamples) : undefined;
 
   const actualDurationSec = (endedAt - startTime) / 1000;
   // 吞吐基于实际发送窗口（setup 完成后），不被慢速 setup 稀释
@@ -377,9 +368,8 @@ async function run(): Promise<void> {
   const sortedLatencies = [...sendLatencies].sort((a, b) => a - b);
   const p95Index = Math.floor(sortedLatencies.length * 0.95);
   const p99Index = Math.floor(sortedLatencies.length * 0.99);
-  const avgSendLatency = sortedLatencies.length > 0
-    ? sortedLatencies.reduce((a, b) => a + b, 0) / sortedLatencies.length
-    : 0;
+  const avgSendLatency =
+    sortedLatencies.length > 0 ? sortedLatencies.reduce((a, b) => a + b, 0) / sortedLatencies.length : 0;
   const p95SendLatency = sortedLatencies[p95Index] ?? 0;
   const p99SendLatency = sortedLatencies[p99Index] ?? 0;
 
@@ -419,7 +409,7 @@ async function run(): Promise<void> {
     avgSendLatency: `${avgSendLatency.toFixed(2)} ms`,
     p95SendLatency: `${p95SendLatency.toFixed(2)} ms`,
     p99SendLatency: `${p99SendLatency.toFixed(2)} ms`,
-    duration: `${args.duration} s`,
+    duration: `${args.duration} s`
   };
 
   const report = {
@@ -431,7 +421,7 @@ async function run(): Promise<void> {
       playersPerRoom: args.playersPerRoom,
       monitorsPerRoom: args.monitorsPerRoom,
       hz,
-      duration: args.duration,
+      duration: args.duration
     },
     startedAt: new Date(startTime).toISOString(),
     endedAt: new Date(endedAt).toISOString(),
@@ -441,7 +431,7 @@ async function run(): Promise<void> {
     metricsSamples,
     metricsSummary,
     serverMetricsSamples: serverMetricsSamples.length > 0 ? serverMetricsSamples : undefined,
-    serverMetricsSummary,
+    serverMetricsSummary
   };
 
   const filepath = saveReport(report);

@@ -95,7 +95,7 @@ describe("客户端自动重连", () => {
       await client.authenticate("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
 
       // 拦截重连尝试，快速失败
-      (client as any).doConnect = async function() {
+      (client as any).doConnect = async function () {
         throw new Error("mock-connection-failed");
       };
 
@@ -148,7 +148,7 @@ describe("客户端自动重连", () => {
       const timestamps: number[] = [];
 
       // 拦截重连尝试，快速失败以避免长时间等待连接超时
-      (client as any).doConnect = async function() {
+      (client as any).doConnect = async function () {
         timestamps.push(Date.now());
         throw new Error("mock-connection-failed");
       };
