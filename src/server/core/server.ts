@@ -215,10 +215,10 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
         if (proxyInfo) {
           remoteIp = proxyInfo.sourceAddress;
           remotePort = proxyInfo.sourcePort;
-          logger.log("DEBUG", `[${id}] HAProxy PROXY Protocol 解析成功: ${remoteIp}:${remotePort}`);
+          logger.debug(`[${id}] HAProxy PROXY Protocol 解析成功: ${remoteIp}:${remotePort}`);
         }
       } catch (e) {
-        logger.log("WARN", `[${id}] HAProxy PROXY Protocol 解析失败: ${e instanceof Error ? e.message : String(e)}`);
+        logger.warn(`[${id}] HAProxy PROXY Protocol 解析失败: ${e instanceof Error ? e.message : String(e)}`);
         // PROXY Protocol 解析失败时直接断开，防止恶意连接
         socket.destroy();
         activeSockets.delete(socket);
@@ -226,7 +226,7 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
       }
     }
 
-    logger.log("DEBUG", tl(state.serverLang, "log-new-connection", {
+    logger.debug(tl(state.serverLang, "log-new-connection", {
       id,
       remote: `${remoteIp}:${remotePort}`
     }), undefined, { ip: remoteIp, isConnectionLog: true });
@@ -246,13 +246,13 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
           await session.onCommand(cmd);
         },
         onError: (phase, err) => {
-          logger.log("WARN", `[${id}] Stream ${phase} error: ${err.message}`, undefined, { ip: remoteIp, userId: session.user?.id });
+          logger.warn(`[${id}] Stream ${phase} error: ${err.message}`, undefined, { ip: remoteIp, userId: session.user?.id });
         }
       });
 
       session.bindStream(stream);
       state.sessions.set(id, session);
-      logger.log("DEBUG", tl(state.serverLang, "log-handshake-ok", { id, version: String(stream.version) }), undefined, { ip: remoteIp, isConnectionLog: true });
+      logger.debug(tl(state.serverLang, "log-handshake-ok", { id, version: String(stream.version) }), undefined, { ip: remoteIp, isConnectionLog: true });
     } catch (e) {
       // 握手失败：解析错误原因并记录日志，然后断开连接
       const msg = e instanceof Error ? e.message : String(e);
@@ -265,7 +265,7 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
           return msg;
         }
       })();
-      logger.log("WARN", tl(state.serverLang, "log-handshake-failed", { id, reason }), undefined, { ip: remoteIp, isConnectionLog: true });
+      logger.warn(tl(state.serverLang, "log-handshake-failed", { id, reason }), undefined, { ip: remoteIp, isConnectionLog: true });
       socket.destroy();
       activeSockets.delete(socket);
     }

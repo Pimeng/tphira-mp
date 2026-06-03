@@ -131,7 +131,7 @@ export function startWebSocketService(opts: { httpServer: http.Server; state: Se
     };
     clients.set(ws, client);
 
-    state.logger.log("DEBUG", tl(state.serverLang, "log-websocket-connected", { total: String(clients.size) }));
+    state.logger.debug(tl(state.serverLang, "log-websocket-connected", { total: String(clients.size) }));
 
     ws.on("message", async (data: Buffer) => {
       try {
@@ -228,11 +228,11 @@ export function startWebSocketService(opts: { httpServer: http.Server; state: Se
       client.adminToken = null;
       adminClients.delete(ws);
       clients.delete(ws);
-      state.logger.log("DEBUG", tl(state.serverLang, "log-websocket-disconnected", { total: String(clients.size) }));
+      state.logger.debug(tl(state.serverLang, "log-websocket-disconnected", { total: String(clients.size) }));
     });
 
     ws.on("error", (err: Error) => {
-      state.logger.log("WARN", `WebSocket error: ${err.message}`);
+      state.logger.warn(`WebSocket error: ${err.message}`);
     });
   });
 
@@ -335,7 +335,7 @@ export function startWebSocketService(opts: { httpServer: http.Server; state: Se
     for (const ws of subscribers) {
       if (ws.readyState !== WebSocket.OPEN) continue;
       ws.send(message, (err) => {
-        if (err) state.logger.log("WARN", `WebSocket send error: ${err.message}`);
+        if (err) state.logger.warn(`WebSocket send error: ${err.message}`);
       });
     }
   };

@@ -276,7 +276,7 @@ export class Session {
   checkHeartbeat(now: number): void {
     if (this.lost) return;
     if (now - this.lastRecv > HEARTBEAT_DISCONNECT_TIMEOUT_MS) {
-      this.state.logger.log("WARN", tl(this.state.serverLang, "log-heartbeat-timeout-disconnect", { id: this.id }), { session: this.id }, { userId: this.user?.id });
+      this.state.logger.warn(tl(this.state.serverLang, "log-heartbeat-timeout-disconnect", { id: this.id }), { session: this.id }, { userId: this.user?.id });
       void this.markLost();
     }
   }
@@ -306,7 +306,7 @@ export class Session {
       await stream.send(cmd);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      this.state.logger.log("DEBUG", `[${this.id}] Send failed: ${msg}`, undefined, { userId: this.user?.id });
+      this.state.logger.debug(`[${this.id}] Send failed: ${msg}`, undefined, { userId: this.user?.id });
       await this.markLost();
     }
   }
@@ -318,7 +318,7 @@ export class Session {
       await stream.sendFrame(prepared.frame, prepared.highPriority);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      this.state.logger.log("DEBUG", `[${this.id}] Send failed: ${msg}`, undefined, { userId: this.user?.id });
+      this.state.logger.debug(`[${this.id}] Send failed: ${msg}`, undefined, { userId: this.user?.id });
       await this.markLost();
     }
   }
@@ -416,14 +416,14 @@ export class Session {
       this.waitingForAuthenticate = false;
 
       const monitorSuffix = user.monitor ? tl(this.state.serverLang, "label-monitor-suffix") : "";
-      this.state.logger.log("DEBUG", tl(this.state.serverLang, "log-auth-ok", {
+      this.state.logger.debug(tl(this.state.serverLang, "log-auth-ok", {
         id: this.id,
         user: user.name,
         monitorSuffix,
         version: String(this.protocolVersion ?? "?")
       }), undefined, { userId: user.id, isConnectionLog: true });
 
-      this.state.logger.log("INFO", tl(this.state.serverLang, "log-player-join", {
+      this.state.logger.info(tl(this.state.serverLang, "log-player-join", {
         user: user.name,
         id: String(user.id),
         monitorSuffix
@@ -437,7 +437,7 @@ export class Session {
       }).catch(NOOP);
     } catch (e) {
       const localized = this.localizeError(this.state.serverLang, e instanceof Error ? e : new Error("auth-failed"));
-      this.state.logger.log("WARN", tl(this.state.serverLang, "log-auth-failed", { id: this.id, reason: localized }), undefined, { ip: this.remoteIp, isConnectionLog: true });
+      this.state.logger.warn(tl(this.state.serverLang, "log-auth-failed", { id: this.id, reason: localized }), undefined, { ip: this.remoteIp, isConnectionLog: true });
       await this.trySend({ type: "Authenticate", result: err(localized) });
       
       this.panicked = true;
@@ -513,7 +513,7 @@ export class Session {
       await this.state.mutex.runExclusive(async () => {
         this.state.sessions.delete(this.id);
       });
-      this.state.logger.log("DEBUG", tl(this.state.serverLang, "log-disconnect", { id: this.id, who: "" }), undefined, { isConnectionLog: true });
+      this.state.logger.debug(tl(this.state.serverLang, "log-disconnect", { id: this.id, who: "" }), undefined, { isConnectionLog: true });
       return;
     }
 
@@ -527,7 +527,7 @@ export class Session {
     });
 
     const who = tl(this.state.serverLang, "log-disconnect-user", { user: user.name });
-    this.state.logger.log("DEBUG", tl(this.state.serverLang, "log-disconnect", { id: this.id, who }), undefined, { userId: user.id, isConnectionLog: true });
+    this.state.logger.debug(tl(this.state.serverLang, "log-disconnect", { id: this.id, who }), undefined, { userId: user.id, isConnectionLog: true });
 
     if (detachedUserSession && !this.preserveRoomOnLost && user.session === null) await this.dangleUser(user);
   }
@@ -554,7 +554,7 @@ export class Session {
     // 优化：直接读取Set，不需要mutex
     const isBanned = this.state.bannedUsers.has(user.id);
     if (isBanned) {
-      this.state.logger.log("INFO", tl(this.state.serverLang, "log-user-dangle", { user: user.name }), undefined, { userId: user.id });
+      this.state.logger.info(tl(this.state.serverLang, "log-user-dangle", { user: user.name }), undefined, { userId: user.id });
       const room2 = user.room;
       await this.state.mutex.runExclusive(async () => {
         this.state.users.delete(user.id);
@@ -567,7 +567,7 @@ export class Session {
       return;
     }
 
-    this.state.logger.log("INFO", tl(this.state.serverLang, "log-user-dangle", { user: user.name }), undefined, { userId: user.id });
+    this.state.logger.info(tl(this.state.serverLang, "log-user-dangle", { user: user.name }), undefined, { userId: user.id });
     const token = user.markDangle();
     dangleTimeouts.set(user.id, { user, token, deadline: Date.now() + 10_000, state: this.state });
     startDangleSweepIfNeeded();

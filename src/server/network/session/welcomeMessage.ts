@@ -50,6 +50,6 @@ export async function sendWelcomeExtras(opts: {
     await sendSystemChat(parts.join(""));
   } catch (e) {
     const errorMsg = e instanceof Error ? e.message : String(e);
-    state.logger.log("ERROR", errorMsg);
+    state.logger.error(errorMsg);
   }
 }

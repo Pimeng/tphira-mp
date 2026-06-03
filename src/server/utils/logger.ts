@@ -29,6 +29,9 @@ type LoggerOptions = {
 
 export type LogContext = { userId?: number; ip?: string; roomId?: string };
 
+/** 写日志时可用的上下文：在 LogContext 基础上附加连接日志限流标记 */
+export type LogWriteContext = LogContext & { isConnectionLog?: boolean };
+
 const PAD2 = Array.from({ length: 100 }, (_, i) => String(i).padStart(2, "0"));
 const PAD3 = Array.from({ length: 1000 }, (_, i) => String(i).padStart(3, "0"));
 
@@ -114,28 +117,32 @@ export class Logger {
     mkdirSync(this.logsDir, { recursive: true });
   }
 
-  debug(message: string, meta?: Record<string, unknown>, context?: LogContext): void {
+  debug(message: string, meta?: Record<string, unknown>, context?: LogWriteContext): void {
     this.write("DEBUG", message, meta, context);
   }
 
-  info(message: string, meta?: Record<string, unknown>, context?: LogContext): void {
+  info(message: string, meta?: Record<string, unknown>, context?: LogWriteContext): void {
     this.write("INFO", message, meta, context);
   }
 
-  mark(message: string, meta?: Record<string, unknown>, context?: LogContext): void {
+  mark(message: string, meta?: Record<string, unknown>, context?: LogWriteContext): void {
     this.write("MARK", message, meta, context);
   }
 
-  warn(message: string, meta?: Record<string, unknown>, context?: LogContext): void {
+  warn(message: string, meta?: Record<string, unknown>, context?: LogWriteContext): void {
     this.write("WARN", message, meta, context);
   }
 
-  error(message: string, meta?: Record<string, unknown>, context?: LogContext): void {
+  error(message: string, meta?: Record<string, unknown>, context?: LogWriteContext): void {
     this.write("ERROR", message, meta, context);
   }
 
-  /** 带上下文的日志：当 context.userId 为测试账号且全局非 DEBUG 时不写入文件；当启用限流且IP被限流时，连接日志不输出 */
-  log(level: LogLevel, message: string, meta?: Record<string, unknown>, context?: LogContext & { isConnectionLog?: boolean }): void {
+  /**
+   * 动态等级日志的底层入口：当 level 由运行时变量决定时使用（如 ReplayRecorder 透传）。
+   * 业务代码请优先使用 debug/info/mark/warn/error 命名方法。
+   * 当 context.userId 为测试账号且全局非 DEBUG 时不写入文件；当启用限流且IP被限流时，连接日志不输出。
+   */
+  log(level: LogLevel, message: string, meta?: Record<string, unknown>, context?: LogWriteContext): void {
     this.write(level, message, meta, context);
   }
 
@@ -146,7 +153,7 @@ export class Logger {
    * 避免 DEBUG 未开启时仍白白付出格式化与对象分配的开销：
    *
    *   if (logger.isLevelEnabled("DEBUG")) {
-   *     logger.log("DEBUG", tl(lang, "log-user-touches", {...}), { frames }, { userId });
+   *     logger.debug(tl(lang, "log-user-touches", {...}), { frames }, { userId });
    *   }
    *
    * 注意：仅反映 minLevel 文件/控制台阈值，不考虑 onLog 侧信道（onLog 即便低于阈值也会触发）。
@@ -223,7 +230,7 @@ export class Logger {
     this.stream.write(combined);
   }
 
-  private write(level: LogLevel, message: string, meta?: Record<string, unknown>, context?: LogContext & { isConnectionLog?: boolean }): void {
+  private write(level: LogLevel, message: string, meta?: Record<string, unknown>, context?: LogWriteContext): void {
     if (LEVEL_WEIGHT[level] < LEVEL_WEIGHT[this.minLevel]) {
       // Skip file and console, but still invoke onLog for side-channel listeners
       if (this.onLog) {
