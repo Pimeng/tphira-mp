@@ -1,0 +1,4 @@
+{
+  "entry": ["src/**/index.ts", "bench/micro-hotpath.ts"],
+  "ignoreDependencies": ["postject", "ts-prune"]
+}

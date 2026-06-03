@@ -5,13 +5,13 @@
  * 用于定位性能瓶颈。仅在测试环境中使用。
  */
 
-export type TimingEntry = {
+type TimingEntry = {
   label: string;
   elapsedMs: number;
   timestamp: number;
 };
 
-export type TimingGroup = {
+type TimingGroup = {
   label: string;
   entries: TimingEntry[];
   /** 调用次数 */
@@ -26,7 +26,7 @@ export type TimingGroup = {
   avgMs: number;
 };
 
-export class TimingCollector {
+class TimingCollector {
   private labels = new Map<string, TimingEntry[]>();
   private enabled = false;
 

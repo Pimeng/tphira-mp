@@ -34,6 +34,7 @@ record-*/
 
 # 压测结果（运行时生成）
 bench-results/
+performance-report.md
 
 # 压测临时文档
 docs/bench-dev/

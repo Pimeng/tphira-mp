@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "knip": "knip",
     "dev": "tsx src/server/main.ts",
     "start": "node dist/server/main.js",
     "bundle:server": "node tools/bundle-server.mjs",

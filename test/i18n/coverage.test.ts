@@ -30,7 +30,7 @@ const repoRoot = join(here, "..", "..");
 const localesDir = join(repoRoot, "locales");
 const srcDir = join(repoRoot, "src");
 
-const LOCALE_FILES = ["en-US.ftl", "zh-CN.ftl"] as const;
+const LOCALE_FILES = ["en-US.ftl", "zh-CN.ftl", "zh-TW.ftl", "ja-JP.ftl", "ko-KR.ftl", "ru-RU.ftl"] as const;
 
 /** kebab/标识符风格的翻译键，例如 join-room-full、cli-invalid-port。 */
 const KEY = "[a-z][a-zA-Z0-9_-]*";

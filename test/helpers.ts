@@ -43,28 +43,12 @@ export async function waitFor(cond: () => boolean, timeoutMs = 1000): Promise<vo
   throw new Error("等待超时");
 }
 
-/** 快速轮询版 waitFor，用于预期很快完成的操作（5ms 间隔） */
-export async function waitForFast(cond: () => boolean, timeoutMs = 500): Promise<void> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    if (cond()) return;
-    await sleep(5);
-  }
-  throw new Error("等待超时");
-}
-
 // 预定义的测试令牌常量
 export const TOKENS = {
   alice: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   bob: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
   carol: "cccccccccccccccccccccccccccccccc",
   dave: "dddddddddddddddddddddddddddddddd"
-} as const;
-
-export const MONITOR_IDS = {
-  bob: 200,
-  carol: 300,
-  dave: 400
 } as const;
 
 export type ParsedPhiraRecordV2 = {
@@ -249,24 +233,5 @@ export function setupMockFetch() {
     resetHitokotoCalls: () => {
       hitokotoCalls = 0;
     }
-  };
-}
-
-/**
- * 自动设置和清理 Mock Fetch 的辅助函数
- * 在 beforeAll 中安装，在 afterAll 中恢复
- */
-export function useMockFetch() {
-  const { originalFetch, mockFetch, getHitokotoCalls, resetHitokotoCalls } = setupMockFetch();
-
-  return {
-    install: () => {
-      globalThis.fetch = mockFetch;
-    },
-    restore: () => {
-      globalThis.fetch = originalFetch;
-    },
-    getHitokotoCalls,
-    resetHitokotoCalls
   };
 }

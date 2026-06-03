@@ -47,7 +47,7 @@ export function parseRoomMaxUsersValue(value: unknown): number | undefined {
   return Math.min(v, 64);
 }
 
-export function parseStringListValue(value: unknown): string[] | undefined {
+function parseStringListValue(value: unknown): string[] | undefined {
   if (Array.isArray(value)) {
     const out = value.filter((it): it is string => typeof it === "string" && it.trim().length > 0);
     return out.length > 0 ? out : undefined;

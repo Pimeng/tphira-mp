@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { getAppPaths } from "../utils/appPaths.js";
 
-const SUPPORTED_LANGS = ["en-US", "zh-CN"] as const;
+const SUPPORTED_LANGS = ["en-US", "zh-CN", "zh-TW", "ja-JP", "ko-KR", "ru-RU"] as const;
 type SupportedLang = (typeof SUPPORTED_LANGS)[number];
 
 function loadBundle(lang: SupportedLang): FluentBundle {
@@ -15,10 +15,9 @@ function loadBundle(lang: SupportedLang): FluentBundle {
   return bundle;
 }
 
-const bundles: Record<SupportedLang, FluentBundle> = {
-  "en-US": loadBundle("en-US"),
-  "zh-CN": loadBundle("zh-CN")
-};
+const bundles: Record<SupportedLang, FluentBundle> = Object.fromEntries(
+  SUPPORTED_LANGS.map((lang) => [lang, loadBundle(lang)])
+) as Record<SupportedLang, FluentBundle>;
 
 export class Language {
   readonly lang: SupportedLang;

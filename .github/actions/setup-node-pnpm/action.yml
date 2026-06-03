@@ -3,13 +3,17 @@ description: Setup Node.js, pnpm and optionally install dependencies with pnpm c
 
 inputs:
   node-version:
-    description: Node.js version to use.
+    description: Node.js version to use. Leave empty to resolve from package.json engines.node.
     required: false
-    default: '24'
+    default: ''
   pnpm-version:
-    description: pnpm version to use.
+    description: pnpm version to use. Leave empty to resolve from package.json packageManager.
     required: false
-    default: '10.29.3'
+    default: ''
+  package-json-path:
+    description: Path to the package.json used to resolve Node.js and pnpm versions.
+    required: false
+    default: package.json
   install:
     description: Whether to install dependencies after setup.
     required: false
@@ -18,15 +22,57 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: 解析版本
+      id: resolve-versions
+      shell: pwsh
+      run: |
+        $packageJsonPath = '${{ inputs.package-json-path }}'
+        if (-not (Test-Path -LiteralPath $packageJsonPath)) {
+          throw "package.json not found: $packageJsonPath"
+        }
+
+        $packageJson = Get-Content -LiteralPath $packageJsonPath -Raw | ConvertFrom-Json
+
+        $nodeVersion = '${{ inputs.node-version }}'
+        if ([string]::IsNullOrWhiteSpace($nodeVersion)) {
+          $engineNode = [string]$packageJson.engines.node
+          if ([string]::IsNullOrWhiteSpace($engineNode)) {
+            throw 'package.json is missing engines.node and no node-version input was provided.'
+          }
+
+          if ($engineNode -match '(\d+(?:\.\d+)*)') {
+            $nodeVersion = $Matches[1]
+          } else {
+            throw "Unable to resolve a Node.js version from engines.node: $engineNode"
+          }
+        }
+
+        $pnpmVersion = '${{ inputs.pnpm-version }}'
+        if ([string]::IsNullOrWhiteSpace($pnpmVersion)) {
+          $packageManager = [string]$packageJson.packageManager
+          if ([string]::IsNullOrWhiteSpace($packageManager)) {
+            throw 'package.json is missing packageManager and no pnpm-version input was provided.'
+          }
+
+          if ($packageManager -match '^pnpm@([^\s]+)$') {
+            $pnpmVersion = $Matches[1]
+          } else {
+            throw "Unable to resolve a pnpm version from packageManager: $packageManager"
+          }
+        }
+
+        "node-version=$nodeVersion" >> $env:GITHUB_OUTPUT
+        "pnpm-version=$pnpmVersion" >> $env:GITHUB_OUTPUT
+
     - name: 设置 pnpm
       uses: pnpm/action-setup@v4
       with:
-        version: ${{ inputs.pnpm-version }}
+        version: ${{ steps.resolve-versions.outputs.pnpm-version }}
 
     - name: 设置 Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: ${{ inputs.node-version }}
+        node-version: ${{ steps.resolve-versions.outputs.node-version }}
         cache: pnpm
         cache-dependency-path: pnpm-lock.yaml
 

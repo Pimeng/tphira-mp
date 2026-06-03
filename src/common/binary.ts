@@ -455,8 +455,6 @@ export function encodePacket<T>(value: T, encode: (w: BinaryWriter, v: T) => voi
 
 /** 字符串结果类型（Rust 风格的 Result，但错误类型固定为 string） */
 export type StringResult<T> = { ok: true; value: T } | { ok: false; error: string };
-/** 空类型（相当于 Rust 的 ()） */
-export type Unit = Record<never, never>;
 
 /** 创建成功的 StringResult */
 export function ok<T>(value: T): StringResult<T> {
