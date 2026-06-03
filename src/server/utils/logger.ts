@@ -139,6 +139,22 @@ export class Logger {
     this.write(level, message, meta, context);
   }
 
+  /**
+   * 该等级是否会产生文件/控制台输出（即是否达到 minLevel 阈值）。
+   *
+   * 用于热路径在构造昂贵的日志消息（如 Fluent 格式化、聚合 meta 对象）之前先行短路，
+   * 避免 DEBUG 未开启时仍白白付出格式化与对象分配的开销：
+   *
+   *   if (logger.isLevelEnabled("DEBUG")) {
+   *     logger.log("DEBUG", tl(lang, "log-user-touches", {...}), { frames }, { userId });
+   *   }
+   *
+   * 注意：仅反映 minLevel 文件/控制台阈值，不考虑 onLog 侧信道（onLog 即便低于阈值也会触发）。
+   */
+  isLevelEnabled(level: LogLevel): boolean {
+    return LEVEL_WEIGHT[level] >= LEVEL_WEIGHT[this.minLevel];
+  }
+
   /** 获取当前黑名单中的IP列表 */
   getBlacklistedIps(): Array<{ ip: string; expiresIn: number }> {
     return this.rateLimiter?.getBlacklistedIps() ?? [];

@@ -47,7 +47,6 @@ chat-welcome = "{ $userName }"你好！欢迎来到 { $serverName } 服务器！
 chat-welcome-version = 服务器当前版本： { $version } 
 chat-hitokoto = { $quote } —— { $from }
 chat-hitokoto-from-unknown = 佚名
-chat-hitokoto-unavailable = 一言获取失败
 chat-roomlist-title = 当前可用的房间如下：
 chat-roomlist-empty = 当前没有可用房间
 chat-roomlist-item = { $id }（{ $count }/{ $max }）
@@ -64,13 +63,11 @@ chat-game-summary-std = 最佳无瑕度：“{ $name } ”({ $id }) { $std }ms
 
 auth-invalid-token = token 不合法
 auth-fetch-me-failed = 获取用户信息失败
-auth-account-already-online = 连接过快，请等待5秒后再试
 auth-failed = 认证失败
 auth-invalid-response = 认证响应无效
 auth-invalid-user-id = 认证响应中用户ID无效
 auth-invalid-user-name = 认证响应中用户名无效
 auth-repeated-authenticate = 重复认证
-auth-banned = 你已被封禁，无法进入服务器
 user-banned-by-server = 你已被服务器封禁，无法进行任何操作。
 
 room-already-in-room = 已在房间中
@@ -91,7 +88,6 @@ record-fetch-failed = 获取记录失败
 
 chart-fetch-failed = 获取谱面失败
 
-net-request-timeout = 请求超时
 net-connection-closed = 连接已关闭
 net-send-timeout = 发送超时
 net-unsupported-protocol-version = 不支持的协议版本：{ $version }

@@ -47,7 +47,6 @@ chat-welcome = Hello "{ $userName }"! Welcome to { $serverName }!
 chat-welcome-version = Server is running version { $version }
 chat-hitokoto = { $quote } — { $from }
 chat-hitokoto-from-unknown = Unknown
-chat-hitokoto-unavailable = Failed to fetch quote
 chat-roomlist-title = Available rooms:
 chat-roomlist-empty = No available rooms
 chat-roomlist-item = { $id } ({ $count }/{ $max })
@@ -64,13 +63,11 @@ chat-game-summary-std = Best std: "{ $name } "({ $id }) { $std }ms
 
 auth-invalid-token = Invalid token
 auth-fetch-me-failed = Failed to fetch user info
-auth-account-already-online = Account is already online. Duplicate connection blocked.
 auth-failed = Authentication failed
 auth-invalid-response = Invalid auth response
 auth-invalid-user-id = Invalid user ID in auth response
 auth-invalid-user-name = Invalid user name in auth response
 auth-repeated-authenticate = Repeated authenticate
-auth-banned = You are banned from this server
 user-banned-by-server = You have been banned from this server and cannot perform any operations.
 
 room-already-in-room = Already in a room
@@ -91,7 +88,6 @@ record-fetch-failed = Failed to fetch record
 
 chart-fetch-failed = Failed to fetch chart
 
-net-request-timeout = Request timeout
 net-connection-closed = Connection closed
 net-send-timeout = Send timeout
 net-unsupported-protocol-version = Unsupported protocol version: { $version }

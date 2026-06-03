@@ -104,6 +104,15 @@ export async function processClientCommand(
       if (room.state.aborted.has(user.id) || room.state.results.has(user.id)) return null;
       const last = cmd.frames.at(-1);
       if (last) user.gameTime = last.time;
+      // DEBUG 帧日志：先短路判断等级，避免热路径上无谓的格式化与 meta 分配
+      if (state.logger.isLevelEnabled("DEBUG")) {
+        state.logger.log(
+          "DEBUG",
+          tl(state.serverLang, "log-user-touches", { user: user.name, room: room.id, count: String(cmd.frames.length) }),
+          { frames: cmd.frames },
+          { userId: user.id }
+        );
+      }
       if (room.monitors.size > 0) {
         ctx.monitorBuffer.bufferTouches(room, room.monitors, user.id, cmd.frames);
       }
@@ -118,6 +127,15 @@ export async function processClientCommand(
       if (!room) return null;
       if (room.state.type !== "Playing") return null;
       if (room.state.aborted.has(user.id) || room.state.results.has(user.id)) return null;
+      // DEBUG 帧日志：先短路判断等级，避免热路径上无谓的格式化与 meta 分配
+      if (state.logger.isLevelEnabled("DEBUG")) {
+        state.logger.log(
+          "DEBUG",
+          tl(state.serverLang, "log-user-judges", { user: user.name, room: room.id, count: String(cmd.judges.length) }),
+          { judges: cmd.judges },
+          { userId: user.id }
+        );
+      }
       if (room.monitors.size > 0) {
         ctx.monitorBuffer.bufferJudges(room, room.monitors, user.id, cmd.judges);
       }

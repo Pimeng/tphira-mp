@@ -45,7 +45,7 @@ export async function sendWelcomeExtras(opts: {
     if (tip) parts.push(tip + "\n");
     if (hitokoto) {
       const fromText = hitokoto.from || lang.format("chat-hitokoto-from-unknown");
-      parts.push(`${hitokoto.quote} —— ${fromText}`);
+      parts.push(lang.format("chat-hitokoto", { quote: hitokoto.quote, from: fromText }));
     }
     await sendSystemChat(parts.join(""));
   } catch (e) {

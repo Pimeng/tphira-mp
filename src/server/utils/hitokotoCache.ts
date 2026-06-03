@@ -16,6 +16,12 @@ const hitokotoCache = new Cache<"current", HitokotoValue>({
 
 let lastAttemptAt = 0;
 let inFlight: Promise<HitokotoValue | null> | null = null;
+/**
+ * 最近一次成功获取的一言，不随 60s 缓存 TTL 过期。
+ * 当 TTL 过期后重新获取失败（远端故障/超时）时，回退到它，避免欢迎消息缺一言；
+ * 仅在「进程启动后从未成功过」时才为 null。
+ */
+let lastGood: HitokotoValue | null = null;
 
 async function fetchHitokoto(proxy?: OutboundProxyValue, url?: string): Promise<HitokotoValue | null> {
   if (!url) return null;
@@ -42,7 +48,7 @@ export async function getHitokotoCached(proxy?: OutboundProxyValue, url?: string
 
   // 控制最小请求间隔，避免频繁请求远端
   if (now - lastAttemptAt < HITOKOTO_MIN_INTERVAL_MS) {
-    return cached;
+    return cached ?? lastGood;
   }
 
   lastAttemptAt = now;
@@ -51,11 +57,12 @@ export async function getHitokotoCached(proxy?: OutboundProxyValue, url?: string
       const value = await fetchHitokoto(proxy, url);
       if (value) {
         await hitokotoCache.set("current", value);
+        lastGood = value;
         return value;
       }
-      return cached;
+      return cached ?? lastGood;
     } catch {
-      return cached;
+      return cached ?? lastGood;
     } finally {
       inFlight = null;
     }
