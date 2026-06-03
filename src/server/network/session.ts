@@ -369,7 +369,7 @@ export class Session {
   private async handleAuthenticate(token: string): Promise<void> {
     try {
       // 校验 token 合法性：长度需小于 32 字符，否则拒绝（在发起 API 请求前快速失败）
-      if (token.length >= 32) throw new Error("auth-invalid-token");
+      if (token.length > 32) throw new Error("auth-invalid-token");
 
       // 并行发起 Phira API 认证和一言预热，减少总延迟
       const [me, hitokoto] = await Promise.all([
