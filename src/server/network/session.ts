@@ -432,10 +432,31 @@ export class Session {
         await this.handleUserLeaveRoom(user, user.room);
       }
 
-      const roomState: ClientRoomState | null = user.room
-        ? user.room.clientState(user, (id) => this.state.users.get(id))
+      const reconnectRoom = user.room;
+      const roomState: ClientRoomState | null = reconnectRoom
+        ? reconnectRoom.clientState(user, (id) => this.state.users.get(id))
         : null;
+
+      // 断线重连修正：若房间处于 WaitForReady，客户端需先经过 SelectChart 载入谱面上下文，
+      // 否则会因缺少谱面进入异常状态。先在响应中伪装成 SelectChart，再延迟换回 WaitingForReady。
+      // 其他状态（SelectChart / Playing）正常发：Playing 重连时客户端本地仍保有谱面。
+      let restoreWaitForReadyChartId: number | null = null;
+      if (roomState && reconnectRoom && reconnectRoom.state.type === "WaitForReady" && reconnectRoom.chart) {
+        restoreWaitForReadyChartId = reconnectRoom.chart.id;
+        roomState.state = { type: "SelectChart", id: reconnectRoom.chart.id };
+      }
+
       await this.trySend({ type: "Authenticate", result: ok([user.toInfo(), roomState]) });
+
+      if (restoreWaitForReadyChartId !== null) {
+        const chartId = restoreWaitForReadyChartId;
+        setTimeout(() => {
+          void user.trySend({ type: "ChangeState", state: { type: "SelectChart", id: chartId } });
+          setTimeout(() => {
+            void user.trySend({ type: "ChangeState", state: { type: "WaitingForReady" } });
+          }, 20);
+        }, 20);
+      }
 
       this.waitingForAuthenticate = false;
 
@@ -741,6 +762,17 @@ export class Session {
           void user.trySend({ type: "ChangeState", state: realState });
         }, 2);
       }, 2);
+    }
+
+    // 同步 cycle/lock 状态：JoinRoomResponse 不携带这两个字段，需延迟补发 Message，
+    // 否则客户端显示会有偏差（cycle 不发会有显示上的小毛病；lock 默认 false，仅在锁定时补发）。
+    const syncCycle = room.isCycle();
+    const syncLock = room.isLocked();
+    if (syncCycle || syncLock) {
+      setTimeout(() => {
+        if (syncCycle) void user.trySend({ type: "Message", message: { type: "CycleRoom", cycle: true } });
+        if (syncLock) void user.trySend({ type: "Message", message: { type: "LockRoom", lock: true } });
+      }, 20);
     }
 
     this.sendFakeMonitorJoin(user, room);
