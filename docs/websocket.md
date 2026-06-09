@@ -150,6 +150,7 @@ ws://服务器地址:HTTP端口/ws
 - `room-not-found`: 房间不存在
 - `invalid-room-id`: 房间ID格式错误
 - `invalid-message`: 消息格式错误
+- `message-too-large`: 单条消息体积超过上限
 - `unauthorized`: 管理员权限验证失败
 
 ## 使用示例

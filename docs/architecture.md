@@ -14,7 +14,6 @@ src/
 │   ├── commands.ts  # 命令定义（客户端<->服务端通信协议）
 │   ├── framing.ts   # 帧协议（消息分帧，支持最大2MB负载）
 │   ├── http.ts      # HTTP 工具函数
-│   ├── response.ts  # 响应处理
 │   ├── roomId.ts    # 房间ID处理
 │   ├── stream.ts    # 流处理
 │   ├── utils.ts     # 通用工具函数
@@ -60,7 +59,7 @@ src/
 - 处理客户端连接和游戏协议
 - 支持 HAProxy PROXY Protocol（可选）
 - 支持帧协议（最大2MB负载）
-- 心跳检测（3秒间隔，10秒超时断开）
+- 心跳检测（2秒间隔检查，10秒超时断开）
 
 #### HTTP 服务
 - RESTful API 接口
@@ -111,7 +110,7 @@ SelectChart → WaitForReady → Playing → SelectChart
 - IP 绑定（临时 Token）
 
 #### OTP 临时认证
-- 请求验证码（5分钟有效期）
+- 请求验证码（1分钟有效期）
 - 验证验证码获取临时 Token
 - IP 绑定和过期自动清理
 
@@ -120,7 +119,7 @@ SelectChart → WaitForReady → Playing → SelectChart
 **功能：**
 - 自动录制游戏过程
 - 文件组织：`record/{userId}/{chartId}/{timestamp}.phirarec`
-- 自动清理（4天后）
+- 自动清理（默认 4 天，由 `REPLAY_TTL_DAYS` 配置）
 - 限速下载（50KB/s）
 
 **文件格式：**
@@ -243,7 +242,7 @@ SelectChart → WaitForReady → Playing → SelectChart
 
 ### 网络优化
 - 限速（回放下载 50KB/s）
-- 心跳检测（3秒/30秒）
+- 心跳检测（TCP 2秒检查 / WebSocket 30秒）
 - 增量更新（管理员 WebSocket）
 
 ## 部署建议 / Deployment Recommendations

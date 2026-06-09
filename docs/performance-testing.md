@@ -4,8 +4,8 @@
 
 ## 前提条件
 
-- Node.js >= 22
-- pnpm >= 10
+- Node.js >= 24
+- pnpm >= 10.29.3
 
 ## 环境准备
 
@@ -87,7 +87,7 @@ pnpm run bench:gameplay -- --rooms 10 --players-per-room 4 --hz 20 --duration 60
 ```
 
 参数说明：
-- `--rooms`：目标房间数（默认 2）
+- `--rooms`：目标房间数（默认 5）
 - `--players-per-room`：每个房间的玩家数（默认 2）
 - `--monitors-per-room`：每个房间的观战者数（默认 0）
 - `--hz`：每个客户端每秒发送消息数（默认 20）

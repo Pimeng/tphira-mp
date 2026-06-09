@@ -29,11 +29,11 @@
 - 环境变量：`ADMIN_TOKEN=your_token`
 - 配置文件：`ADMIN_TOKEN: "your_token"`
 
-请求携带 token 的方式（三选一）：
+请求携带 token 的方式：
 
 - Header：`X-Admin-Token: your_token`
 - Header：`Authorization: Bearer your_token`
-- Query：`?token=your_token`
+- Query：`?token=your_token`（默认禁用，需配置 `ALLOW_TOKEN_IN_QUERY: true` 才生效；启用会使 token 出现在日志中，存在泄露风险）
 
 未配置 `ADMIN_TOKEN`：返回 `403 { "ok": false, "error": "admin-disabled" }`  
 token 错误/缺失：返回 `401 { "ok": false, "error": "unauthorized" }`
@@ -293,7 +293,7 @@ Body：
 
 `record/{用户ID}/{谱面ID}/{时间戳}.phirarec`
 
-并在每天 0 点清理超过 4 天的回放文件（按文件名时间戳判断）。
+并在每天 0 点清理超过保留期（`REPLAY_TTL_DAYS`，默认 4 天）的回放文件（按文件名时间戳判断）。
 
 #### 1) 认证并获取回放列表
 

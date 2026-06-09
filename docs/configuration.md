@@ -238,6 +238,27 @@ REAL_IP_HEADER: "X-Real-IP"
 - TCP 游戏服务请使用 `HAPROXY_PROTOCOL`
 - For TCP game service, use `HAPROXY_PROTOCOL`
 
+#### CORS_ORIGINS
+
+HTTP API 允许的跨域来源（CORS）列表。配置后，仅列表中的来源才能通过浏览器跨域访问 HTTP API。
+
+List of allowed CORS origins for the HTTP API. When configured, only listed origins can access the HTTP API cross-origin from a browser.
+
+- 类型 / Type: `array of strings`
+- 默认值 / Default: 不设置或空数组 → 允许所有来源（`*`，向后兼容）/ unset or empty → allow all origins (`*`, backward compatible)
+- 环境变量 / Environment: `CORS_ORIGINS`（逗号/空格/分号分隔）/ comma, space, or semicolon separated
+
+示例 / Example:
+```yaml
+CORS_ORIGINS:
+  - "https://admin.your-domain.com"
+  - "http://localhost:5173"
+```
+
+注意 / Note:
+- 生产环境强烈建议配置具体来源，避免任意站点跨域访问管理接口
+- Strongly recommended to set explicit origins in production to prevent arbitrary sites from accessing admin endpoints
+
 #### HAPROXY_PROTOCOL
 
 是否启用 HAProxy PROXY Protocol 支持。
@@ -539,6 +560,27 @@ ADMIN_DATA_PATH: "/data/admin_data.json"
 - 房间级封禁用户列表
 - Room-level banned users
 
+#### ALLOW_TOKEN_IN_QUERY
+
+是否允许从 URL 查询参数（`?token=`）中提取管理员 Token。默认关闭，仅支持请求头方式传递 Token。
+
+Whether to allow extracting the admin token from the URL query parameter (`?token=`). Disabled by default; only header-based token passing is supported.
+
+- 类型 / Type: `boolean`
+- 默认值 / Default: `false`
+- 环境变量 / Environment: `ALLOW_TOKEN_IN_QUERY`
+
+示例 / Example:
+```yaml
+ALLOW_TOKEN_IN_QUERY: false
+```
+
+安全警告 / Security warning:
+- 启用后 Token 会出现在服务器日志、代理日志、浏览器历史中，存在泄露风险
+- When enabled, the token appears in server logs, proxy logs, and browser history, risking leakage
+- 仅当管理脚本无法自定义请求头时才建议启用
+- Only enable it when your admin client cannot send custom request headers
+
 ### 其他配置 / Other Configuration
 
 #### ROOM_LIST_TIP
@@ -625,6 +667,49 @@ SHARE_STATION:
 - 需要同时配置 `URL` 和 `TOKEN` 才能正常工作
 - Both `URL` and `TOKEN` must be configured to work properly
 
+#### HITOKOTO_API_URL
+
+一言 API 地址，用于欢迎消息中的随机句子。
+
+Hitokoto (one-liner) API endpoint, used for the random sentence in welcome messages.
+
+- 类型 / Type: `string`
+- 默认值 / Default: `"https://v1.hitokoto.cn/"`
+- 环境变量 / Environment: `HITOKOTO_API_URL`
+
+示例 / Example:
+```yaml
+HITOKOTO_API_URL: "https://v1.hitokoto.cn/"
+```
+
+#### REDIS
+
+Redis 缓存配置。启用后，所有本地缓存（谱面缓存、一言缓存等）将迁移到 Redis，不再使用本地内存和磁盘缓存。
+
+Redis cache configuration. When enabled, all local caches (chart cache, hitokoto cache, etc.) are migrated to Redis instead of local memory/disk.
+
+- 类型 / Type: `object`
+- 默认值 / Default: `undefined`（未配置，不启用 Redis）/ unset (Redis disabled)
+- 环境变量 / Environment: `REDIS_ENABLED`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`, `REDIS_DB`
+- 该项变更需要重启服务才能生效 / Changing this requires a server restart to take effect
+
+子配置项 / Sub-options:
+- `ENABLED` (boolean): 是否启用 Redis 缓存，默认 `false`
+- `HOST` (string): Redis 服务器地址，默认 `"127.0.0.1"`
+- `PORT` (number): Redis 服务器端口，默认 `6379`
+- `PASSWORD` (string): Redis 认证密码（可选）
+- `DB` (number): Redis 数据库号，默认 `0`
+
+示例 / Example:
+```yaml
+REDIS:
+  ENABLED: false
+  HOST: "127.0.0.1"
+  PORT: 6379
+  # PASSWORD: "your_redis_password"
+  DB: 0
+```
+
 ## 环境变量配置 / Environment Variable Configuration
 
 所有配置项均可通过环境变量设置，环境变量名与配置文件键名相同，均为全大写。语言项 `LANG` 在 ENV 中可用 `PHIRA_MP_LANG` 作为更明确的别名（优先于系统 `LANG`）。
@@ -666,7 +751,7 @@ Some configurations support command-line argument override.
 
 ```bash
 # 开发模式
-pnpm run dev:server --port 12346 --host 0.0.0.0
+pnpm run dev --port 12346 --host 0.0.0.0
 
 # 生产模式
 node dist/server/main.js --port 12346 --httpService true --httpPort 12347

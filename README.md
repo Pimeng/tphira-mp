@@ -49,7 +49,7 @@ https://bbs.07210700.xyz/c/7-category/7
 
 ## 🔨 安装与构建
 
-本项目使用 pnpm 作为包管理器，请先安装 pnpm 10.26.0 或以上版本
+本项目使用 pnpm 作为包管理器，请先安装 pnpm 10.29.3 或以上版本
 ```bash
 npm install -g pnpm
 ```
@@ -70,7 +70,7 @@ pnpm run build
 开发模式（从源代码运行）：
 
 ```bash
-pnpm run dev:server --port 12346
+pnpm run dev --port 12346
 ```
 
 生产模式（先编译再运行）：
@@ -155,8 +155,8 @@ pnpm run package:sea
 
 ## 📋 环境要求
 
-- Node.js >= 22
-- pnpm >= 10.26.0
+- Node.js >= 24
+- pnpm >= 10.29.3
 
 ## 🏗️ 项目架构
 
@@ -272,10 +272,10 @@ pnpm test:watch     # 监视模式运行测试
 
 ```bash
 # Windows PowerShell
-$env:LOG_LEVEL="DEBUG"; pnpm run dev:server
+$env:LOG_LEVEL="DEBUG"; pnpm run dev
 
 # Linux/macOS
-LOG_LEVEL=DEBUG pnpm run dev:server
+LOG_LEVEL=DEBUG pnpm run dev
 ```
 
 ## 🙏 致谢
