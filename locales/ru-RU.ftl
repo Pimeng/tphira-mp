@@ -72,6 +72,7 @@ user-banned-by-server = Вы заблокированы на этом серве
 
 room-already-in-room = Вы уже в комнате
 room-creation-disabled = Создание комнат отключено администратором
+rooms-limit-reached = Достигнут лимит комнат на сервере, попробуйте позже
 room-not-found = Комната не найдена
 room-no-room = Вы не в комнате
 room-banned = Вам запрещён вход в комнату { $id }

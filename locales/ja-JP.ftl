@@ -72,6 +72,7 @@ user-banned-by-server = あなたはこのサーバーから禁止されてお�
 
 room-already-in-room = 既にルームにいます
 room-creation-disabled = ルーム作成は管理者によって無効化されています
+rooms-limit-reached = サーバーのルーム数が上限に達しました。後でもう一度お試しください
 room-not-found = ルームが見つかりません
 room-no-room = ルームにいません
 room-banned = あなたはルーム { $id } から禁止されています

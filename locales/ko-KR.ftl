@@ -72,6 +72,7 @@ user-banned-by-server = 이 서버에서 차단되어 어떠한 작업도 수행
 
 room-already-in-room = 이미 방에 있습니다
 room-creation-disabled = 방 생성이 관리자에 의해 비활성화되었습니다
+rooms-limit-reached = 서버 방 수가 한도에 도달했습니다. 나중에 다시 시도해 주세요
 room-not-found = 방을 찾을 수 없습니다
 room-no-room = 방에 있지 않습니다
 room-banned = 방 { $id }에서 차단되었습니다

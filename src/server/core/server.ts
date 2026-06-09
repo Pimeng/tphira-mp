@@ -189,7 +189,7 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
   state = new ServerState(mergedCfg, logger, serverName, adminDataPath, configPath);
   await state.loadAdminData();
   state.startCleanup();
-  const replayCleanup = startReplayCleanup({ ttlDays: 4, logger });
+  const replayCleanup = startReplayCleanup({ getTtlDays: () => currentConfig.replay_ttl_days ?? 4, logger });
 
   const version = readAppVersion();
   const listenHost = mergedCfg.host ?? "::";
@@ -214,6 +214,15 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
   });
 
   const server = net.createServer(async (socket) => {
+    // 全服连接数硬上限：超过即拒绝（保护小内存机器，防连接洪水导致 OOM）。
+    // 读取 state.config 以支持热重载；未设置或 <1 表示不限制。
+    const maxConnections = state.config.max_connections;
+    if (typeof maxConnections === "number" && maxConnections >= 1 && activeSockets.size >= maxConnections) {
+      logger.debug(`Connection rejected: max connections (${maxConnections}) reached`);
+      socket.destroy();
+      return;
+    }
+
     activeSockets.add(socket);
     socket.once("close", () => activeSockets.delete(socket));
     const id = newUuid();

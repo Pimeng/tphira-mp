@@ -283,6 +283,45 @@ ROOM_MAX_USERS: 16
 - 此配置仅影响新创建的房间
 - This configuration only affects newly created rooms
 
+#### MAX_ROOMS
+
+全服同时存在的房间数上限。达到上限后，玩家创建房间会收到 `rooms-limit-reached` 提示，已存在的房间不受影响。
+
+Global cap on the number of rooms that can exist at once. When reached, creating a room returns the `rooms-limit-reached` notice; existing rooms are unaffected.
+
+- 类型 / Type: `number`
+- 默认值 / Default: 不限制 / unlimited（未设置或 `< 1`）
+- 环境变量 / Environment: `MAX_ROOMS`
+
+示例 / Example:
+```yaml
+MAX_ROOMS: 200
+```
+
+注意 / Note:
+- 支持配置热重载，无需重启 / Supports hot reload, no restart needed
+- 小内存机器建议设置，防止房间过多导致内存耗尽 / Recommended on low-memory hosts to prevent OOM
+
+#### MAX_CONNECTIONS
+
+全服同时在线的 TCP 连接数上限。达到上限后，新连接会在握手前被直接拒绝。
+
+Global cap on concurrent TCP connections. When reached, new connections are rejected before handshake.
+
+- 类型 / Type: `number`
+- 默认值 / Default: 不限制 / unlimited（未设置或 `< 1`）
+- 环境变量 / Environment: `MAX_CONNECTIONS`
+
+示例 / Example:
+```yaml
+MAX_CONNECTIONS: 2000
+```
+
+注意 / Note:
+- 支持配置热重载，无需重启 / Supports hot reload, no restart needed
+- 与单 IP 限速互补：`MAX_CONNECTIONS` 控制全局总量，连接速率限制器控制单 IP 突发
+- Complements per-IP rate limiting: `MAX_CONNECTIONS` caps the global total, the rate limiter caps per-IP bursts
+
 #### REPLAY_ENABLED
 
 是否启用回放录制功能。
@@ -327,6 +366,28 @@ Base directory for replay recording files.
 ```yaml
 REPLAY_BASE_DIR: "./record"
 ```
+
+#### REPLAY_TTL_DAYS
+
+回放文件保留天数。超过该天数的 `.phirarec` 文件会在每天凌晨自动清理。
+
+Replay file retention in days. `.phirarec` files older than this are automatically cleaned up every midnight.
+
+- 类型 / Type: `number`
+- 默认值 / Default: `4`
+- 范围 / Range: `1-3650`
+- 环境变量 / Environment: `REPLAY_TTL_DAYS`
+
+示例 / Example:
+```yaml
+REPLAY_TTL_DAYS: 7
+```
+
+注意 / Note:
+- 支持配置热重载，修改后下一次清理即生效，无需重启
+- Supports hot reload; takes effect on the next cleanup run without restart
+- 磁盘空间紧张可调小，需要长期留存回放可调大
+- Lower it when disk space is tight, raise it to retain replays longer
 
 #### REPLAY_AUTO_UPLOAD
 

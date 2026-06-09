@@ -80,6 +80,31 @@ pnpm run build
 pnpm start --port 12346
 ```
 
+## 🛡️ 进程守护（生产环境强烈建议）
+
+服务端内置了进程级异常兜底：单个未捕获的 Promise 拒绝（`unhandledRejection`）只会记录日志、不会退出；而 `uncaughtException` 会在记录日志后**优雅关闭并以非零码退出**，把"是否拉起"交给外部守护进程。因此生产环境请务必在守护进程下运行，崩溃后即可自动恢复：
+
+- **Docker**：使用仓库根目录的 [`docker-compose.yml`](docker-compose.yml)（已带 `restart: unless-stopped`），或 `docker run --restart=unless-stopped ...`
+- **systemd**：
+
+  ```ini
+  # /etc/systemd/system/phira-mp.service
+  [Unit]
+  Description=Phira MP Server
+  After=network.target
+
+  [Service]
+  WorkingDirectory=/opt/phira-mp
+  ExecStart=/usr/bin/node dist/server/main.js --port 12346
+  Restart=always
+  RestartSec=3
+
+  [Install]
+  WantedBy=multi-user.target
+  ```
+
+- **pm2**：`pm2 start dist/server/main.js --name phira-mp -- --port 12346`
+
 ## 🔍 测试
 
 ```bash

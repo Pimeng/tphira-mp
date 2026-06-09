@@ -72,6 +72,7 @@ user-banned-by-server = 你已被服务器封禁，无法进行任何操作。
 
 room-already-in-room = 已在房间中
 room-creation-disabled = 房间创建功能已被管理员禁用
+rooms-limit-reached = 服务器房间数量已达上限，请稍后再试
 room-not-found = 房间不存在
 room-no-room = 你不在房间中
 room-banned = 你已被禁止进入房间 { $id }

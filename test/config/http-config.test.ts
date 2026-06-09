@@ -183,6 +183,26 @@ describe("HTTP和配置", () => {
     }
   });
 
+  test("MAX_ROOMS 生效：达到上限后无法再建房", async () => {
+    const running = await startServer({ port: 0, config: { monitors: [200], max_rooms: 1 } });
+    const port = running.address().port;
+
+    const alice = await Client.connect("127.0.0.1", port);
+    const bob = await Client.connect("127.0.0.1", port);
+
+    try {
+      await alice.authenticate("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+      await bob.authenticate("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+
+      await alice.createRoom("room1");
+      await expect(bob.createRoom("room2")).rejects.toThrow(/上限|limit/i);
+    } finally {
+      await alice.close();
+      await bob.close();
+      await running.close();
+    }
+  });
+
   test("CHAT_ENABLED=false 时替换玩家聊天内容", async () => {
     const running = await startServer({ port: 0, config: { monitors: [200], chat_enabled: false } });
     const port = running.address().port;

@@ -1,0 +1,35 @@
+# Phira MP 服务端 Docker Compose 示例
+# 用法：
+#   1. 复制 server_config.example.yml 为 server_config.yml 并按需修改
+#   2. docker compose up -d
+#   3. docker compose logs -f      # 查看日志
+#
+# 数据持久化说明：
+#   - ./server_config.yml  挂载为容器内配置文件
+#   - ./data               存放封禁数据(admin_data.json)与回放(record)，重启/升级不丢
+#
+# restart: unless-stopped —— 进程异常退出后自动拉起，配合服务端内置的
+# uncaughtException 兜底，实现崩溃后自动恢复（详见 README 的“进程守护”一节）。
+
+services:
+  phira-mp:
+    image: ghcr.io/pimeng/tphira-mp:latest
+    # 国内拉取慢可改用镜像源：
+    # image: ghcr.1ms.run/pimeng/tphira-mp:latest
+    container_name: phira-mp
+    restart: unless-stopped
+    ports:
+      - "12346:12346" # 游戏 TCP 端口
+      - "12347:12347" # HTTP / WebSocket 管理端口（需 HTTP_SERVICE=true）
+    environment:
+      PHIRA_MP_HOME: /app
+      HTTP_SERVICE: "true"
+      LOG_LEVEL: INFO
+      # 封禁数据与回放统一放到挂载的 /data 卷，便于备份
+      ADMIN_DATA_PATH: /data/admin_data.json
+      REPLAY_BASE_DIR: /data/record
+      # 管理接口鉴权 token，建议用强随机串（openssl rand -hex 32）
+      # ADMIN_TOKEN: "replace_me"
+    volumes:
+      - ./server_config.yml:/app/server_config.yml
+      - ./data:/data

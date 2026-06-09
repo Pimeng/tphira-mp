@@ -33,6 +33,8 @@ export type ServerConfig = {
   replay_enabled?: boolean;
   /** 回放录制基础目录，默认 process.cwd()/record */
   replay_base_dir?: string;
+  /** 回放文件保留天数，过期后自动清理，默认 4 */
+  replay_ttl_days?: number;
   admin_token?: string;
   admin_data_path?: string;
   room_list_tip?: string;
@@ -44,6 +46,10 @@ export type ServerConfig = {
   haproxy_protocol?: boolean;
   /** TCP 连接速率限制：每 10 秒窗口内允许的最大连接数（默认 30） */
   connection_rate_limit?: number;
+  /** 全服同时存在的房间数上限；未设置或 <1 表示不限制 */
+  max_rooms?: number;
+  /** 全服同时在线的 TCP 连接数上限；未设置或 <1 表示不限制 */
+  max_connections?: number;
   /** 服务端语言，影响日志/CLI/HTTP 默认输出语言，支持 zh-CN、en-US；未设置则按 PHIRA_MP_LANG / LANG 协商 */
   lang?: string;
   /** Phira API 端点地址，默认 https://phira.5wyxi.com */

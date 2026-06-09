@@ -12,7 +12,12 @@ function msUntilNextMidnight(nowMs: number): number {
   return Math.max(0, next - nowMs);
 }
 
-export function startReplayCleanup(opts: { baseDir?: string; ttlDays: number; logger?: Logger }): ReplayCleanupHandle {
+export function startReplayCleanup(opts: {
+  baseDir?: string;
+  /** 每次清理时读取的保留天数（getter 形式以支持配置热重载） */
+  getTtlDays: () => number;
+  logger?: Logger;
+}): ReplayCleanupHandle {
   const baseDir = opts.baseDir ?? defaultReplayBaseDir();
   let timer: NodeJS.Timeout | null = null;
   let stopped = false;
@@ -24,7 +29,7 @@ export function startReplayCleanup(opts: { baseDir?: string; ttlDays: number; lo
       if (stopped) return;
       void (async () => {
         try {
-          await cleanupExpiredReplays(baseDir, Date.now(), opts.ttlDays);
+          await cleanupExpiredReplays(baseDir, Date.now(), opts.getTtlDays());
         } catch (e) {
           opts.logger?.warn(String(e));
         } finally {

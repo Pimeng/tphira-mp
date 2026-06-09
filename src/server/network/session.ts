@@ -674,6 +674,10 @@ export class Session {
     const roomId = parseRoomId(id);
     await this.state.mutex.runExclusive(async () => {
       if (this.state.rooms.has(roomId)) throw new Error(user.lang.format("create-id-occupied"));
+      const maxRooms = this.state.config.max_rooms;
+      if (typeof maxRooms === "number" && maxRooms >= 1 && this.state.rooms.size >= maxRooms) {
+        throw new Error(user.lang.format("rooms-limit-reached"));
+      }
       const maxUsersRaw = this.state.config.room_max_users;
       const maxUsers =
         typeof maxUsersRaw === "number" && Number.isInteger(maxUsersRaw) ? Math.min(Math.max(maxUsersRaw, 1), 64) : 8;

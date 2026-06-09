@@ -47,6 +47,21 @@ export function parseRoomMaxUsersValue(value: unknown): number | undefined {
   return Math.min(v, 64);
 }
 
+function parseReplayTtlDaysValue(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  const v = Number(value);
+  if (!Number.isInteger(v) || v < 1) return undefined;
+  return Math.min(v, 3650);
+}
+
+/** 解析正整数（>=1）；用于全服房间数 / 连接数上限等。非法值返回 undefined（视为不限制） */
+function parsePositiveIntValue(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  const v = Number(value);
+  if (!Number.isInteger(v) || v < 1) return undefined;
+  return v;
+}
+
 function parseStringListValue(value: unknown): string[] | undefined {
   if (Array.isArray(value)) {
     const out = value.filter((it): it is string => typeof it === "string" && it.trim().length > 0);
@@ -133,9 +148,12 @@ const CONFIG_FIELDS: ReadonlyArray<ConfigField> = [
   field({ key: "http_service", envName: "HTTP_SERVICE", parse: parseBoolValue, startupOnly: true }),
   field({ key: "http_port", envName: "HTTP_PORT", parse: parsePortValue, startupOnly: true }),
   field({ key: "room_max_users", envName: "ROOM_MAX_USERS", parse: parseRoomMaxUsersValue }),
+  field({ key: "max_rooms", envName: "MAX_ROOMS", parse: parsePositiveIntValue }),
+  field({ key: "max_connections", envName: "MAX_CONNECTIONS", parse: parsePositiveIntValue }),
   field({ key: "chat_enabled", envName: "CHAT_ENABLED", parse: parseBoolValue }),
   field({ key: "replay_enabled", envName: "REPLAY_ENABLED", parse: parseBoolValue }),
   field({ key: "replay_base_dir", envName: "REPLAY_BASE_DIR", parse: parseStringValue }),
+  field({ key: "replay_ttl_days", envName: "REPLAY_TTL_DAYS", parse: parseReplayTtlDaysValue }),
   field({ key: "replay_auto_upload", envName: "REPLAY_AUTO_UPLOAD", parse: parseBoolValue }),
   field({ key: "admin_token", envName: "ADMIN_TOKEN", parse: parseStringValue }),
   field({ key: "admin_data_path", envName: "ADMIN_DATA_PATH", parse: parseStringValue, startupOnly: true }),

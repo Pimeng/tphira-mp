@@ -72,6 +72,7 @@ user-banned-by-server = You have been banned from this server and cannot perform
 
 room-already-in-room = Already in a room
 room-creation-disabled = Room creation has been disabled by administrator
+rooms-limit-reached = Server room limit reached, please try again later
 room-not-found = Room not found
 room-no-room = Not in a room
 room-banned = You are banned from room { $id }

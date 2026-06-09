@@ -119,17 +119,35 @@ async function main(): Promise<void> {
    * 优雅关闭服务器
    * 处理 SIGINT 和 SIGTERM 信号，确保资源正确释放
    */
-  const stop = async () => {
+  let stopping = false;
+  const stop = async (exitCode = 0): Promise<void> => {
+    if (stopping) return;
+    stopping = true;
     try {
       await running.close();
+    } catch (e) {
+      running.logger.error(`Error during shutdown: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
-      process.exit(0);
+      process.exit(exitCode);
     }
   };
 
   // 注册进程信号处理器
   process.once("SIGINT", () => void stop());
   process.once("SIGTERM", () => void stop());
+
+  // 进程级异常兜底：避免单个未捕获错误拖垮整个进程（导致所有房间 / 玩家一起掉线）。
+  // - unhandledRejection：多数源自单次异步操作失败，记录后继续运行，不退出；
+  // - uncaughtException：进程状态可能已不可靠，记录后优雅关闭并以非零码退出，
+  //   交由守护进程（systemd / docker restart / pm2）拉起，实现自动恢复。
+  process.on("unhandledRejection", (reason) => {
+    const msg = reason instanceof Error ? (reason.stack ?? reason.message) : String(reason);
+    running.logger.error(`[unhandledRejection] ${msg}`);
+  });
+  process.on("uncaughtException", (err) => {
+    running.logger.error(`[uncaughtException] ${err.stack ?? err.message}`);
+    void stop(1);
+  });
 }
 
 // 启动主程序，捕获未处理的异常
