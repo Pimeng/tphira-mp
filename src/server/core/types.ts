@@ -40,6 +40,10 @@ export type ServerConfig = {
   room_list_tip?: string;
   /** 日志等级：DEBUG、INFO、MARK、WARN、ERROR，默认 INFO */
   log_level?: string;
+  /** 日志压缩：历史日志超过该天数后按 gzip 压缩（日志重复率高，可大幅降低占用），0 表示关闭压缩，默认 14 */
+  log_compress_after_days?: number;
+  /** 日志目录总占用上限（MB）；超过后从最旧的日志开始删除，0 表示不限制，默认 500 */
+  log_max_total_mb?: number;
   /** 真实 IP 头名称，用于反向代理场景，默认 X-Forwarded-For */
   real_ip_header?: string;
   /** 是否启用 HAProxy PROXY Protocol 支持 */

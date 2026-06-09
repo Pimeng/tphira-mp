@@ -2,13 +2,14 @@
   "name": "tphira-mp",
   "author": "Pimeng",
   "license": "AGPL-3.0",
-  "version": "1.10.5",
+  "version": "1.10.6",
   "type": "module",
   "engines": {
     "node": ">=24"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "gen:locales": "node tools/gen-embedded-locales.mjs",
+    "build": "node tools/gen-embedded-locales.mjs && tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

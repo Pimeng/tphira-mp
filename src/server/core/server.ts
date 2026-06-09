@@ -9,7 +9,8 @@
  * - 优雅关闭
  */
 import net from "node:net";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, copyFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import yaml from "js-yaml";
 import { newUuid } from "../../common/uuid.js";
 import { decodePacket, encodePacket } from "../../common/binary.js";
@@ -26,6 +27,8 @@ import { readAppVersion } from "../core/version.js";
 import { startHttpService, type HttpService } from "../network/httpService.js";
 import { tl } from "../utils/l10n.js";
 import { startReplayCleanup } from "../replay/replayCleanup.js";
+import { startLogMaintenance } from "../utils/logMaintenance.js";
+import { ensureLocalesAvailable, fetchRemoteConfigExample } from "../utils/remoteAssets.js";
 import { parseProxyProtocol } from "../network/proxyProtocol.js";
 import { startCli } from "../cli/cli.js";
 import { parseRoomId, type RoomId } from "../../common/roomId.js";
@@ -50,6 +53,10 @@ export type StartServerOptions = {
   config?: Partial<ServerConfig>;
   configPath?: string;
   watchConfig?: boolean;
+  /** CLI 的 stop/shutdown 命令请求关闭服务时的回调（由入口 main.ts 提供，负责 close + 退出进程）。 */
+  onShutdownRequest?: () => void;
+  /** 配置文件缺失时是否自动生成默认配置（仅真实入口 main.ts 开启，避免测试污染仓库根目录）。 */
+  autoCreateConfig?: boolean;
 };
 
 /** 运行中的服务器实例 */
@@ -88,6 +95,46 @@ export function loadConfigFile(configPath: string): ServerConfig {
 function loadConfig(configPath: string): ServerConfig {
   if (!existsSync(configPath)) return { monitors: [2] };
   return loadConfigFile(configPath);
+}
+
+/** 自动生成默认配置时使用的兜底内容（仅当示例文件缺失，如某些精简打包场景）。 */
+const DEFAULT_CONFIG_YAML = `# Phira MP 服务端配置（首次启动自动生成）
+# 完整配置项说明见 server_config.example.yml 或 docs/configuration.md
+HOST: "::"
+PORT: 12346
+HTTP_SERVICE: false
+HTTP_PORT: 12347
+LOG_LEVEL: INFO
+ROOM_MAX_USERS: 12
+MONITORS:
+  - 2
+`;
+
+/**
+ * 首次运行未找到配置文件时，自动生成一份默认配置，避免服主在不知情下全程使用内存默认值。
+ * 来源优先级：本地带注释示例（源码运行）> 在线拉取 GitHub 完整示例 > 内置无注释最小模板。
+ * @returns 成功生成的路径；任何失败（如只读文件系统）返回 null，由调用方继续用内存默认值。
+ */
+async function ensureDefaultConfigFile(configPath: string, rootDir: string): Promise<string | null> {
+  try {
+    // 1. 本地完整示例（源码 / 开发运行时存在），离线且与当前工作副本一致
+    const example = join(rootDir, "server_config.example.yml");
+    if (existsSync(example)) {
+      copyFileSync(example, configPath);
+      return configPath;
+    }
+    // 2. 在线拉取完整带注释示例（CNB 镜像优先 / GitHub release 回退；精简打包不附带本地示例）
+    const remote = await fetchRemoteConfigExample();
+    if (remote) {
+      writeFileSync(configPath, remote, "utf8");
+      return configPath;
+    }
+    // 3. 兜底：内置无注释最小模板
+    writeFileSync(configPath, DEFAULT_CONFIG_YAML, "utf8");
+    return configPath;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -130,6 +177,19 @@ function formatNodeVersion(v: string): string {
 export async function startServer(options: StartServerOptions): Promise<RunningServer> {
   const paths = getAppPaths();
   const configPath = options.configPath ?? paths.configPath;
+
+  // 资源自动准备（仅 autoCreateConfig 开启时，即真实入口启动；测试不触发以免污染/联网）。
+  // 必须在 loadMergedConfig 及任何本地化输出之前完成，使其当次即生效。
+  let autoCreatedConfigPath: string | null = null;
+  let localesFetched = 0;
+  if (options.autoCreateConfig === true) {
+    // locales：缺失语言在线拉取写盘，失败由 l10n 嵌入兜底兜住
+    localesFetched = await ensureLocalesAvailable(paths.localesDir);
+    // 配置：缺失时本地示例 / 在线拉取 / 内置最小模板
+    if (!existsSync(configPath)) {
+      autoCreatedConfigPath = await ensureDefaultConfigFile(configPath, paths.rootDir);
+    }
+  }
 
   // CLI 参数配置（优先级最高）
   const cliCfg: Partial<ServerConfig> = {
@@ -190,6 +250,13 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
   await state.loadAdminData();
   state.startCleanup();
   const replayCleanup = startReplayCleanup({ getTtlDays: () => currentConfig.replay_ttl_days ?? 4, logger });
+  // 日志维护：历史日志压缩 + 目录容量上限（默认压缩 14 天前的日志、目录上限 500MB；0 表示关闭）
+  const logMaintenance = startLogMaintenance({
+    logsDir: paths.logsDir,
+    getCompressAfterDays: () => currentConfig.log_compress_after_days ?? 14,
+    getMaxTotalBytes: () => (currentConfig.log_max_total_mb ?? 500) * 1024 * 1024,
+    logger
+  });
 
   const version = readAppVersion();
   const listenHost = mergedCfg.host ?? "::";
@@ -390,6 +457,7 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
     // 启动失败：清理已分配的资源
     configWatcher?.close();
     replayCleanup.stop();
+    logMaintenance.stop();
     if (httpService) await httpService.close().catch(NOOP);
     if (server.listening) {
       await new Promise<void>((resolve) => {
@@ -418,10 +486,32 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
   }
   logger.mark(tl(state.serverLang, "log-server-name", { name: serverName }));
 
+  // 在线补齐了 locales 时给出提示
+  if (localesFetched > 0) {
+    logger.mark(tl(state.serverLang, "locales-fetched", { count: localesFetched }));
+  }
+  // 首次启动自动生成了配置文件时提示服主按需修改
+  if (autoCreatedConfigPath) {
+    logger.mark(tl(state.serverLang, "config-auto-created", { path: autoCreatedConfigPath }));
+  }
+  // 开了 HTTP 但未配置 ADMIN_TOKEN 时，/admin/* 会全部拒绝；提示可用 CLI 临时授权或设置 token
+  if (mergedCfg.http_service === true && !mergedCfg.admin_token?.trim()) {
+    logger.warn(tl(state.serverLang, "http-admin-token-missing"));
+  }
+
+  // 启动时立即执行一次日志维护，清理历史堆积（异步，不阻塞启动）
+  void logMaintenance.runOnce().catch(NOOP);
+
   // 启动 CLI 控制台（用于服务器管理命令）
   const broadcastRoomAll = (roomId: RoomId, cmd: ServerCommand): Promise<void> =>
     broadcastRoomAllImpl(state, roomId, cmd);
-  const stopCli = startCli({ state, logger, broadcastRoomAll, pickRandomUserId });
+  const stopCli = startCli({
+    state,
+    logger,
+    broadcastRoomAll,
+    pickRandomUserId,
+    requestShutdown: options.onShutdownRequest
+  });
 
   // 返回运行中的服务器实例
   return {
@@ -481,6 +571,7 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
           logger.warn(`Replay recorder closeAll failed: ${err instanceof Error ? err.message : String(err)}`);
         });
         replayCleanup.stop();
+        logMaintenance.stop();
         state.stopCleanup();
         logger.close();
       }

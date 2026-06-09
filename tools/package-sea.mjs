@@ -1,4 +1,4 @@
-import { mkdirSync, copyFileSync, existsSync, rmSync, cpSync, writeFileSync } from "node:fs";
+import { mkdirSync, copyFileSync, existsSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
 
@@ -77,14 +77,9 @@ if (process.platform === "darwin") {
   run("codesign", ["--force", "--deep", "--sign", "-", outBin]);
 }
 
-const localesSrc = "locales";
-if (existsSync(localesSrc)) {
-  cpSync(localesSrc, join("release", "locales"), { recursive: true, force: true });
-}
-
-const configExample = "server_config.example.yml";
-if (existsSync(configExample)) {
-  copyFileSync(configExample, join("release", "server_config.yml"));
-}
+// 不再随包附带 locales/ 与 server_config.yml：
+// - locales 已通过 gen:locales 嵌入二进制（embeddedLocales.ts），并支持运行时在线拉取覆盖；
+// - 配置文件在首次启动时自动生成（本地示例 / 在线拉取 / 内置最小模板）。
+// 因此发布产物仅为单个可执行文件。
 
 console.log(`打包完成：${outBin}`);

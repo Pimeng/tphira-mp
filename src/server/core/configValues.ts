@@ -62,6 +62,14 @@ function parsePositiveIntValue(value: unknown): number | undefined {
   return v;
 }
 
+/** 解析非负整数（>=0）；0 通常表示“关闭/不限制”，如日志压缩天数、日志容量上限。非法值返回 undefined */
+function parseNonNegativeIntValue(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  const v = Number(value);
+  if (!Number.isInteger(v) || v < 0) return undefined;
+  return v;
+}
+
 function parseStringListValue(value: unknown): string[] | undefined {
   if (Array.isArray(value)) {
     const out = value.filter((it): it is string => typeof it === "string" && it.trim().length > 0);
@@ -159,6 +167,8 @@ const CONFIG_FIELDS: ReadonlyArray<ConfigField> = [
   field({ key: "admin_data_path", envName: "ADMIN_DATA_PATH", parse: parseStringValue, startupOnly: true }),
   field({ key: "room_list_tip", envName: "ROOM_LIST_TIP", parse: parseStringValue }),
   field({ key: "log_level", envName: "LOG_LEVEL", parse: parseStringValue }),
+  field({ key: "log_compress_after_days", envName: "LOG_COMPRESS_AFTER_DAYS", parse: parseNonNegativeIntValue }),
+  field({ key: "log_max_total_mb", envName: "LOG_MAX_TOTAL_MB", parse: parseNonNegativeIntValue }),
   field({ key: "real_ip_header", envName: "REAL_IP_HEADER", parse: parseStringValue }),
   field({ key: "cors_origins", envName: "CORS_ORIGINS", parse: parseStringListValue }),
   field({ key: "haproxy_protocol", envName: "HAPROXY_PROTOCOL", parse: parseBoolValue }),

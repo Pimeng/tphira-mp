@@ -36,7 +36,8 @@ https://bbs.07210700.xyz/c/7-category/7
 建议优先使用镜像源而并非 ghcr.io
 
 > [!WARNING]
-> 如果容器内运行时工作目录不是项目根目录，请设置 `PHIRA_MP_HOME=/app`（指向包含 `locales/` 与 `server_config.yml` 的目录），避免本地化与配置读取失败。
+> `PHIRA_MP_HOME` 决定运行时读写配置 / 本地化 / 日志 / 数据的根目录。容器内若工作目录不是项目根目录，建议设置 `PHIRA_MP_HOME=/app`，保证这些文件落在稳定且可写的位置。
+> 即使该目录暂无 `locales/`，服务端也会优先在线拉取，失败时回退到嵌入二进制的本地化兜底；`server_config.yml` 缺失时会自动生成，因此离线也能启动。
 
 ## 🔧 服务端配置
 
@@ -141,7 +142,7 @@ pnpm run bench:gameplay -- --rooms 10 --players-per-room 4 --hz 20 --duration 60
 
 ## 🔧 编译为可执行文件（本地）
 
-本项目使用 Node 的 SEA（Single Executable Applications）方式打包为单个可执行文件，并将运行所需的资源（`locales/`、配置文件）一并放进 `release/` 目录。
+本项目使用 Node 的 SEA（Single Executable Applications）方式打包为**单个**可执行文件。本地化资源已嵌入二进制，配置文件在首次运行时自动生成，因此 `release/` 目录只有可执行文件本身。
 
 ```bash
 pnpm install
@@ -149,9 +150,13 @@ pnpm run package:sea
 ```
 
 输出目录：
-- `release/phira-mp-server(.exe)`：可执行文件
-- `release/locales/`：本地化资源
-- `release/server_config.yml`：配置文件（可修改）
+- `release/phira-mp-server(.exe)`：可执行文件（本地化资源已嵌入其中）
+
+**首次运行行为：**
+- `server_config.yml`：在可执行文件同目录自动生成。优先从 GitHub 拉取完整带注释示例，拉取失败则生成一份精简（无注释）配置。
+- 本地化文件：优先在线拉取到运行目录的 `locales/`，拉取失败则使用嵌入二进制的兜底版本，保证离线 / `raw.githubusercontent.com` 被墙时仍可正常运行。
+
+> 修改 `locales/*.ftl` 后，记得运行 `pnpm gen:locales` 重新生成嵌入的兜底（`build` / `package:sea` 已自动包含此步骤）。
 
 ## 📋 环境要求
 

@@ -49,32 +49,26 @@ jobs:
       - name: 构建可执行文件
         run: pnpm run package:sea
 
-      - name: 制作压缩包（Win）
+      - name: 命名可执行文件（Win）
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $os = "${{ runner.os }}".ToLowerInvariant()
           $arch = "${{ runner.arch }}".ToLowerInvariant()
-          $name = "phira-mp-$os-$arch.zip"
-          if (Test-Path $name) { Remove-Item $name -Force }
-          Compress-Archive -Path release\* -DestinationPath $name
+          Copy-Item release\phira-mp-server.exe "phira-mp-windows-${arch}.exe"
 
-      - name: 制作压缩包（Linux/macOS）
+      - name: 命名可执行文件（Linux/macOS）
         if: runner.os != 'Windows'
         shell: bash
         run: |
           os="$(printf "%s" "${{ runner.os }}" | tr '[:upper:]' '[:lower:]')"
           arch="$(printf "%s" "${{ runner.arch }}" | tr '[:upper:]' '[:lower:]')"
-          name="phira-mp-${os}-${arch}.zip"
-          rm -f "$name"
-          (cd release && zip -r "../$name" .)
+          cp release/phira-mp-server "phira-mp-${os}-${arch}"
 
-      - name: 上传压缩包
+      - name: 上传可执行文件
         uses: actions/upload-artifact@v4
         with:
           name: phira-mp-${{ runner.os }}-${{ runner.arch }}
-          path: |
-            phira-mp-*.zip
+          path: phira-mp-*
 
   build-freebsd:
     needs: [test]
@@ -88,18 +82,18 @@ jobs:
         with:
           usesh: true
           prepare: |
-            pkg install -y node22 npm-node22 zip
+            pkg install -y node22 npm-node22
             npm install -g pnpm@10.29.3
           run: |
             pnpm install --frozen-lockfile
             pnpm run package:sea
-            cd release && zip -r ../phira-mp-freebsd-x64.zip .
+            cp release/phira-mp-server phira-mp-freebsd-x64
 
-      - name: 上传压缩包
+      - name: 上传可执行文件
         uses: actions/upload-artifact@v4
         with:
           name: phira-mp-FreeBSD-X64
-          path: phira-mp-freebsd-x64.zip
+          path: phira-mp-freebsd-x64
 
   build-bundle:
     needs: [test]
@@ -117,9 +111,9 @@ jobs:
       - name: 制作压缩包
         shell: bash
         run: |
-          mkdir -p phira-mp-nodejs
+          mkdir -p phira-mp-nodejs/locales
           cp dist-bundle/server.cjs phira-mp-nodejs/server.js
-          cp -r locales phira-mp-nodejs/locales
+          cp locales.json phira-mp-nodejs/locales/
           cp server_config.example.yml phira-mp-nodejs/server_config.yml
           zip -r phira-mp-nodejs.zip phira-mp-nodejs
 
@@ -176,10 +170,20 @@ jobs:
 
           echo "提交列表：$COMMITS"
 
+          # 有的提交把多个 conventional 段塞进同一行（如 "feat: A refactor: B refactor: C"）。
+          # 在每个内嵌的 "<type>:" 前断行，让每段各自归类，避免整段被并入第一个类型（如全进“新增”）。
+          COMMITS=$(printf '%s\n' "$COMMITS" \
+            | sed -E 's/[[:space:]]+(feat|fix|perf|refactor|improvement|chore|i18n|docs|test|ci|build|style|revert)(\([^)]*\))?:[[:space:]]/\n\1\2: /gI')
+
+          echo "拆分归类后：$COMMITS"
+
           FEATURES=""
           FIXES=""
           IMPROVEMENTS=""
           OTHERS=""
+
+          # 类型前缀大小写不敏感（兼容 "Refactor:"、"Fix:" 等）
+          shopt -s nocasematch
 
           while IFS= read -r line; do
             [[ -z "$line" ]] && continue
@@ -188,12 +192,14 @@ jobs:
               FEATURES+="* ${BASH_REMATCH[2]}"$'\n'
             elif [[ $line =~ ^fix(\(.*\))?:\ (.*) ]]; then
               FIXES+="* ${BASH_REMATCH[2]}"$'\n'
-            elif [[ $line =~ ^(perf|refactor|improvement|chore)(\(.*\))?:\ (.*) ]]; then
+            elif [[ $line =~ ^(perf|refactor|improvement|chore|i18n)(\(.*\))?:\ (.*) ]]; then
               IMPROVEMENTS+="* ${BASH_REMATCH[3]}"$'\n'
             elif [[ ! $line =~ ^(docs|test|ci)(\(.*\))?:\ (.*) ]]; then
               OTHERS+="* $line"$'\n'
             fi
           done <<< "$COMMITS"
+
+          shopt -u nocasematch
 
           NOTES="## 更新"$'\n'
 
@@ -245,12 +251,14 @@ jobs:
         with:
           tag_name: v${{ steps.version.outputs.version }}
           files: |
-            artifacts/phira-mp-Linux-ARM64/*.zip
-            artifacts/phira-mp-Linux-X64/*.zip
-            artifacts/phira-mp-Windows-X64/*.zip
-            artifacts/phira-mp-macOS-ARM64/*.zip
-            artifacts/phira-mp-FreeBSD-X64/*.zip
+            artifacts/phira-mp-Linux-ARM64/phira-mp-linux-arm64
+            artifacts/phira-mp-Linux-X64/phira-mp-linux-x64
+            artifacts/phira-mp-Windows-X64/phira-mp-windows-x64.exe
+            artifacts/phira-mp-macOS-ARM64/phira-mp-macos-arm64
+            artifacts/phira-mp-FreeBSD-X64/phira-mp-freebsd-x64
             artifacts/phira-mp-nodejs-bundle/*.zip
+            locales.json
+            server_config.example.yml
           body: ${{ steps.notes.outputs.release_notes }}
           prerelease: ${{ inputs.prerelease }}
           make_latest: ${{ !inputs.prerelease }}

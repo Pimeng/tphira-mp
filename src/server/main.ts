@@ -102,8 +102,27 @@ async function main(): Promise<void> {
   const server_name = values.serverName?.trim() || undefined;
   const monitors = requireParse(values.monitors, parseIntegerListValue, "cli-invalid-monitors");
 
+  /**
+   * 优雅关闭服务器
+   * 处理 SIGINT / SIGTERM 信号以及 CLI 的 stop/shutdown 命令，确保资源正确释放。
+   * 前置声明，使其引用可作为 onShutdownRequest 传入 startServer。
+   */
+  let running: Awaited<ReturnType<typeof startServer>> | undefined;
+  let stopping = false;
+  const stop = async (exitCode = 0): Promise<void> => {
+    if (stopping) return;
+    stopping = true;
+    try {
+      await running?.close();
+    } catch (e) {
+      running?.logger.error(`Error during shutdown: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      process.exit(exitCode);
+    }
+  };
+
   // 启动服务器，将 CLI 参数作为配置传入
-  const running = await startServer({
+  running = await startServer({
     host,
     port,
     config: {
@@ -112,25 +131,12 @@ async function main(): Promise<void> {
       ...(room_max_users !== undefined ? { room_max_users } : {}),
       ...(server_name !== undefined ? { server_name } : {}),
       ...(monitors !== undefined ? { monitors } : {})
-    }
+    },
+    // CLI 输入 stop/shutdown 时走与信号一致的优雅关闭路径
+    onShutdownRequest: () => void stop(),
+    // 真实启动：配置文件缺失时自动生成默认配置
+    autoCreateConfig: true
   });
-
-  /**
-   * 优雅关闭服务器
-   * 处理 SIGINT 和 SIGTERM 信号，确保资源正确释放
-   */
-  let stopping = false;
-  const stop = async (exitCode = 0): Promise<void> => {
-    if (stopping) return;
-    stopping = true;
-    try {
-      await running.close();
-    } catch (e) {
-      running.logger.error(`Error during shutdown: ${e instanceof Error ? e.message : String(e)}`);
-    } finally {
-      process.exit(exitCode);
-    }
-  };
 
   // 注册进程信号处理器
   process.once("SIGINT", () => void stop());
@@ -142,10 +148,10 @@ async function main(): Promise<void> {
   //   交由守护进程（systemd / docker restart / pm2）拉起，实现自动恢复。
   process.on("unhandledRejection", (reason) => {
     const msg = reason instanceof Error ? (reason.stack ?? reason.message) : String(reason);
-    running.logger.error(`[unhandledRejection] ${msg}`);
+    running?.logger.error(`[unhandledRejection] ${msg}`);
   });
   process.on("uncaughtException", (err) => {
-    running.logger.error(`[uncaughtException] ${err.stack ?? err.message}`);
+    running?.logger.error(`[uncaughtException] ${err.stack ?? err.message}`);
     void stop(1);
   });
 }

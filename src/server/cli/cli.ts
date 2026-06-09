@@ -22,6 +22,8 @@ type CliContext = {
   logger: Logger;
   broadcastRoomAll: (roomId: RoomId, cmd: ServerCommand) => Promise<void>;
   pickRandomUserId: (ids: number[]) => number | null;
+  /** stop/shutdown 命令触发的关闭回调；未提供时回退为打印提示。 */
+  requestShutdown?: () => void;
 };
 
 export function startCli(ctx: CliContext): () => void {
@@ -125,7 +127,12 @@ export function startCli(ctx: CliContext): () => void {
           break;
         case "stop":
         case "shutdown":
-          printInfo(t("cli-stop-hint"));
+          if (ctx.requestShutdown) {
+            printInfo(t("cli-stopping"));
+            ctx.requestShutdown();
+          } else {
+            printInfo(t("cli-stop-hint"));
+          }
           break;
         default:
           printError(t("cli-unknown-command", { cmd: cmd ?? "" }));

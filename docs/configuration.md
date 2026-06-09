@@ -209,6 +209,36 @@ Log level, uniformly controls the minimum level for both log files and terminal 
 LOG_LEVEL: INFO
 ```
 
+#### LOG_COMPRESS_AFTER_DAYS
+
+历史日志保留多少天后自动 gzip 压缩。日志按天切分（`logs/YYYY-MM-DD.log`），重复率高，压缩可大幅降低占用。最近 N 天保持明文方便查看，更早的压缩为 `.log.gz`。当天正在写入的日志永不压缩。每日凌晨及服务启动时各执行一次。
+
+How many days before rotated logs are gzip-compressed. Recent logs stay plaintext for easy reading; older ones become `.log.gz`. The currently active log is never touched. Runs at midnight and once on startup.
+
+- 类型 / Type: `number`
+- 默认值 / Default: `14`
+- 特殊值 / Special: `0` 表示关闭压缩 / `0` disables compression
+- 环境变量 / Environment: `LOG_COMPRESS_AFTER_DAYS`
+- 支持热重载 / Hot-reloadable: 是 / Yes
+
+#### LOG_MAX_TOTAL_MB
+
+日志目录（含 `.log` 与 `.log.gz`）总占用上限（MB）。超过后从最旧的日志开始删除，直到回落到上限以下；当天正在写入的日志永不删除。用于防止长期运行把磁盘写满。
+
+Total size cap (MB) for the logs directory (both `.log` and `.log.gz`). When exceeded, the oldest logs are deleted first until back under the cap; the active log is never deleted.
+
+- 类型 / Type: `number`
+- 默认值 / Default: `500`
+- 特殊值 / Special: `0` 表示不限制 / `0` means unlimited
+- 环境变量 / Environment: `LOG_MAX_TOTAL_MB`
+- 支持热重载 / Hot-reloadable: 是 / Yes
+
+示例 / Example:
+```yaml
+LOG_COMPRESS_AFTER_DAYS: 14
+LOG_MAX_TOTAL_MB: 500
+```
+
 ### 网络配置 / Network Configuration
 
 #### REAL_IP_HEADER

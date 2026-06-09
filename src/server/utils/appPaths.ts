@@ -30,7 +30,7 @@ export function getAppPaths(): AppPaths {
     return cached;
   }
 
-  if (existsSync(join(cwd, "locales"))) {
+  if (existsSync(join(cwd, "locales.json"))) {
     cached = {
       rootDir: cwd,
       configPath: join(cwd, "server_config.yml"),
@@ -47,7 +47,7 @@ export function getAppPaths(): AppPaths {
   if (entryDir) {
     const nearCandidates = [join(entryDir, "..", ".."), join(entryDir, "..", "..", "..")];
     for (const rootDir of nearCandidates) {
-      if (!existsSync(join(rootDir, "locales"))) continue;
+      if (!existsSync(join(rootDir, "locales.json"))) continue;
       cached = {
         rootDir,
         configPath: join(rootDir, "server_config.yml"),
