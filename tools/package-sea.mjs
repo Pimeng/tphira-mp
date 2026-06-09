@@ -71,6 +71,15 @@ copyFileSync(nodePath(), outBin);
 
 runPnpm(["exec", ...postjectArgs(outBin, "dist-sea/sea-prep.blob")]);
 
+// UPX 压缩（可选，系统未安装 upx 或压缩失败时不中断构建）
+try {
+  console.log("正在使用 UPX 压缩可执行文件...");
+  run("upx", ["--best", outBin]);
+  console.log("UPX 压缩完成");
+} catch {
+  console.log("UPX 不可用或压缩失败，跳过压缩");
+}
+
 // macOS 代码签名
 if (process.platform === "darwin") {
   console.log("正在对可执行文件进行代码签名...");

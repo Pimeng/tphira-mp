@@ -46,6 +46,19 @@ jobs:
       - name: 准备 Node.js 和依赖
         uses: ./.github/actions/setup-node-pnpm
 
+      - name: 安装 UPX (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y upx-ucl
+
+      - name: 安装 UPX (macOS)
+        if: runner.os == 'macOS'
+        run: brew install upx
+
+      - name: 安装 UPX (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: choco install upx -y
+
       - name: 构建可执行文件
         run: pnpm run package:sea
 
@@ -82,7 +95,7 @@ jobs:
         with:
           usesh: true
           prepare: |
-            pkg install -y node22 npm-node22
+            pkg install -y node22 npm-node22 upx
             npm install -g pnpm@10.29.3
           run: |
             pnpm install --frozen-lockfile

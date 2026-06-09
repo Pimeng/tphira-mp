@@ -17,6 +17,7 @@ await build({
   define: {
     "process.env.PHIRA_MP_VERSION": JSON.stringify(version)
   },
+  minify: true,
   sourcemap: false,
   logLevel: "info"
 });
