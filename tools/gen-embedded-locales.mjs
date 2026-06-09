@@ -4,13 +4,11 @@
  * 嵌入二进制的本地化兜底：SEA / 精简发布不再随包附带 locales.json，
  * 运行时优先读磁盘（源码运行或在线拉取后的缓存），缺失时回退到这里嵌入的内容，
  * 保证离线 / raw.githubusercontent 被墙时服务端仍能输出本地化文本。
- *
- * 修改 locales.json 后需重新运行（`pnpm gen:locales`，已串入 build / package:sea）。
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const localesFile = "locales.json";
+const localesFile = join("locales", "locales.json");
 const outFile = join("src", "server", "utils", "embeddedLocales.ts");
 
 // 统一换行为 \n，避免 CRLF/LF 在不同平台检出导致嵌入内容与磁盘版本无谓差异

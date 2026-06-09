@@ -34,7 +34,7 @@ export async function sendWelcomeExtras(opts: {
     const sep = "=".repeat(73) + "\n";
 
     const parts: string[] = [];
-    parts.push("\n".repeat(10));
+    parts.push("\n".repeat(40));
     parts.push(lang.format("chat-welcome", { userName: user.name, serverName: state.serverName }) + "\n");
     parts.push(sep);
     parts.push(lang.format("chat-welcome-version", { version: state.version }) + "\n");
