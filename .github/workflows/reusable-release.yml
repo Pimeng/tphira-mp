@@ -126,7 +126,7 @@ jobs:
         run: |
           mkdir -p phira-mp-nodejs/locales
           cp dist-bundle/server.cjs phira-mp-nodejs/server.js
-          cp locales.json phira-mp-nodejs/locales/
+          node tools/emit-locales-json.mjs phira-mp-nodejs/locales/locales.json
           cp server_config.example.yml phira-mp-nodejs/server_config.yml
           zip -r phira-mp-nodejs.zip phira-mp-nodejs
 
@@ -258,6 +258,10 @@ jobs:
       - name: 列出 artifacts 目录结构
         shell: bash
         run: find artifacts -type f -name "*.zip" | head -20
+
+      - name: 由 ftl 生成 release 资产 locales.json
+        shell: bash
+        run: node tools/emit-locales-json.mjs locales.json
 
       - name: 发布到 Release
         uses: softprops/action-gh-release@v2

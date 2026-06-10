@@ -9,6 +9,7 @@
   },
   "scripts": {
     "gen:locales": "node tools/gen-embedded-locales.mjs",
+    "gen:locales-json": "node tools/emit-locales-json.mjs",
     "build": "node tools/gen-embedded-locales.mjs && tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "format": "prettier --write .",

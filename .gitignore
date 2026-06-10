@@ -5,6 +5,10 @@ dist-bundle/
 dist-sea/
 release/
 
+# 生成产物：locales.json 由 ftl 合并而来（构建 / 在线拉取产物），不入库、不进源码 locales/
+locales.json
+locales/locales.json
+
 package-lock.json
 
 # 用户插件（保留示例插件）

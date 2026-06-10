@@ -25,7 +25,7 @@ import { Logger } from "../utils/logger.js";
 import { getAppPaths } from "../utils/appPaths.js";
 import { readAppVersion } from "../core/version.js";
 import { startHttpService, type HttpService } from "../network/httpService.js";
-import { tl } from "../utils/l10n.js";
+import { detectLocaleOverrides, tl } from "../utils/l10n.js";
 import { startReplayCleanup } from "../replay/replayCleanup.js";
 import { startLogMaintenance } from "../utils/logMaintenance.js";
 import { ensureLocalesAvailable, fetchRemoteConfigExample } from "../utils/remoteAssets.js";
@@ -489,6 +489,10 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
   // 在线补齐了 locales 时给出提示
   if (localesFetched > 0) {
     logger.mark(tl(state.serverLang, "locales-fetched", { count: localesFetched }));
+  }
+  // 检测到 locales/<lang>.ftl 运行时覆盖时逐条提示（覆盖了多少个翻译键）
+  for (const { lang, count } of detectLocaleOverrides()) {
+    logger.mark(tl(state.serverLang, "locales-override-applied", { lang, count }));
   }
   // 首次启动自动生成了配置文件时提示服主按需修改
   if (autoCreatedConfigPath) {

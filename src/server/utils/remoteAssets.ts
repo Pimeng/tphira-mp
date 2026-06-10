@@ -59,11 +59,18 @@ export async function fetchRemoteConfigExample(): Promise<string | null> {
  * CNB 镜像优先、GitHub release 回退；全部失败时交由 l10n 的嵌入兜底处理。
  * 本函数永不抛出。
  *
- * @returns 是否成功写入（1=成功，0=失败或已存在）
+ * 跳过条件（均返回 0，不拉取也不写盘）：
+ *   - locales.json 已存在；
+ *   - localesDir 下已有 <语言>.ftl 源 / 覆盖文件——此时本地化由源码检出或服主手动管理，
+ *     不应被在线拉取覆盖，也避免污染开发环境的 locales/ 目录。
+ *
+ * @returns 是否成功写入（1=成功，0=失败 / 已存在 / 跳过）
  */
 export async function ensureLocalesAvailable(localesDir: string): Promise<number> {
   const jsonPath = join(localesDir, "locales.json");
   if (existsSync(jsonPath)) return 0;
+  // 存在任一受支持语言的 ftl 时，认为本地化由本地管理，跳过在线拉取。
+  if (SUPPORTED_LANGS.some((lang) => existsSync(join(localesDir, `${lang}.ftl`)))) return 0;
 
   const bundle = await fetchFirstAvailable(releaseAssetUrls("locales.json"));
   if (!bundle) return 0;

@@ -156,7 +156,20 @@ pnpm run package:sea
 - `server_config.yml`：在可执行文件同目录自动生成。优先从 GitHub 拉取完整带注释示例，拉取失败则生成一份精简（无注释）配置。
 - 本地化文件：优先在线拉取到运行目录的 `locales/`，拉取失败则使用嵌入二进制的兜底版本，保证离线 / `raw.githubusercontent.com` 被墙时仍可正常运行。
 
-> 修改 `locales/*.ftl` 后，记得运行 `pnpm gen:locales` 重新生成嵌入的兜底（`build` / `package:sea` 已自动包含此步骤）。
+### 自定义翻译（运行时覆盖）
+
+无需重新打包即可改翻译：在运行目录的 `locales/` 下新建 `<语言>.ftl`（如 `zh-CN.ftl`），**只写要修改的键**，服务端启动时会逐键覆盖二进制自带翻译（覆盖而非整体替换，未列出的键仍走内置）。例如：
+
+```ftl
+chat-welcome = 欢迎光临 { $serverName }！
+chat-disabled-by-server = 本服已关闭聊天
+```
+
+支持的语言：`en-US` `zh-CN` `zh-TW` `ja-JP` `ko-KR` `ru-RU`。启动日志会打印 `已应用 locales/<语言>.ftl 覆盖（N 个键）`。
+
+> i18n 的唯一手工编辑源是 `locales/*.ftl`。唯一**提交入库**的生成产物是 `src/server/utils/embeddedLocales.ts`（嵌入二进制 / 打进 bundle 的离线兜底）；修改任意 `.ftl` 后运行 `pnpm gen:locales` 重新生成（`build` / `package:sea` 已自动包含）。
+>
+> `locales.json`（合并后的 release 资产）**不入库、也不写进 `locales/`**——它由 `pnpm gen:locales-json` 按需生成到构建目录（默认 `dist-bundle/`），CI / Dockerfile 在发布时各自从 ftl 生成并附带。
 
 ## 📋 环境要求
 
@@ -248,7 +261,7 @@ https://t.phira.link/
 - `src/common/` - 共享代码，服务端和客户端共用
 - `test/` - 测试文件，使用 Vitest 测试框架
 - `docs/` - 文档目录
-- `locales/` - 本地化字符串（运行时需要）
+- `locales/` - 本地化 ftl 源（`<语言>.ftl`，唯一手工编辑源；运行时也可放局部 ftl 覆盖）
 
 ### 添加新命令
 

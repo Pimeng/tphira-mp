@@ -87,7 +87,8 @@ if (process.platform === "darwin") {
 }
 
 // 不再随包附带 locales/ 与 server_config.yml：
-// - locales 已通过 gen:locales 嵌入二进制（embeddedLocales.ts），并支持运行时在线拉取覆盖；
+// - locales 已通过 gen:locales 嵌入二进制（embeddedLocales.ts），并支持运行时在线拉取，
+//   以及在运行目录 locales/<语言>.ftl 放局部 ftl 逐键覆盖（见 l10n.ts / README）；
 // - 配置文件在首次启动时自动生成（本地示例 / 在线拉取 / 内置最小模板）。
 // 因此发布产物仅为单个可执行文件。
 

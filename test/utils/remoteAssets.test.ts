@@ -15,9 +15,7 @@ function makeTempDir(name: string): string {
 }
 
 function makeLocalesJson(langs: readonly string[]): string {
-  return JSON.stringify(
-    Object.fromEntries(langs.map((l) => [l, { [`key-${l}`]: `value-${l}` }]))
-  );
+  return JSON.stringify(Object.fromEntries(langs.map((l) => [l, { [`key-${l}`]: `value-${l}` }])));
 }
 
 afterEach(() => {
@@ -28,17 +26,26 @@ afterEach(() => {
 
 describe("fetchRemoteText", () => {
   test("2xx 返回正文", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("hello", { status: 200 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("hello", { status: 200 }))
+    );
     expect(await fetchRemoteText("https://example.com/x")).toBe("hello");
   });
 
   test("非 2xx 返回 null", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("nope", { status: 404 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("nope", { status: 404 }))
+    );
     expect(await fetchRemoteText("https://example.com/x")).toBeNull();
   });
 
   test("空正文返回 null", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("   \n", { status: 200 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("   \n", { status: 200 }))
+    );
     expect(await fetchRemoteText("https://example.com/x")).toBeNull();
   });
 
@@ -84,6 +91,18 @@ describe("ensureLocalesAvailable", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  test("存在 <语言>.ftl 源 / 覆盖文件时跳过拉取（不污染本地、不覆盖本地管理的本地化）", async () => {
+    const dir = makeTempDir("has-ftl");
+    writeFileSync(join(dir, "zh-CN.ftl"), "join-room-full = 满了\n");
+    const fetchSpy = vi.fn(async () => new Response(makeLocalesJson(["en-US"]), { status: 200 }));
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const count = await ensureLocalesAvailable(dir);
+    expect(count).toBe(0);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(existsSync(join(dir, "locales.json"))).toBe(false);
+  });
+
   test("优先 CNB 镜像：第一个候选成功就不再请求后续", async () => {
     const dir = makeTempDir("cnb-first");
     const fetchSpy = vi.fn(async (_input?: unknown) => new Response(makeLocalesJson(["en-US"]), { status: 200 }));
@@ -111,7 +130,10 @@ describe("ensureLocalesAvailable", () => {
 
   test("全部候选失败时返回 0，不抛异常（交由嵌入兜底）", async () => {
     const dir = makeTempDir("all-fail");
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("nope", { status: 404 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("nope", { status: 404 }))
+    );
 
     const count = await ensureLocalesAvailable(dir);
     expect(count).toBe(0);

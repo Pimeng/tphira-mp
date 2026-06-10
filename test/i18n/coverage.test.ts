@@ -2,11 +2,13 @@ import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+// i18n 源是 locales/*.ftl；用与 gen:locales 同一套解析器还原成结构化数据。
+import { buildLocaleMap } from "../../tools/gen-embedded-locales.mjs";
 
 /**
  * i18n 覆盖测试。
  *
- * 本地化数据存储在 locales.json（结构化 JSON：lang -> messageId -> body），
+ * 本地化源是 locales/<语言>.ftl（解析为 lang -> messageId -> body），
  * 代码里通过以下方式引用翻译键：
  *   - tl(lang, "key", args)           显式翻译调用
  *   - lang.format("key", args)        Language.format 直调
@@ -19,14 +21,13 @@ import { fileURLToPath } from "node:url";
  *
  * 该测试做三件事：
  *   1. locale 一致性：各语言的键集合必须完全相同。
- *   2. 缺失翻译：代码里在 i18n 调用点（tl/format/t）用到的键，必须在 locales.json 中有定义
+ *   2. 缺失翻译：代码里在 i18n 调用点（tl/format/t）用到的键，必须在 ftl 中有定义
  *      （否则运行时 Language.format 会抛 "缺少翻译" 错误）。
- *   3. 无用翻译：locales.json 里定义的键，必须在源码中以字符串字面量形式被提及（否则是死翻译）。
+ *   3. 无用翻译：ftl 里定义的键，必须在源码中以字符串字面量形式被提及（否则是死翻译）。
  */
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, "..", "..");
-const localesFile = join(repoRoot, "locales", "locales.json");
 const srcDir = join(repoRoot, "src");
 
 const SUPPORTED_LANGS = ["en-US", "zh-CN", "zh-TW", "ja-JP", "ko-KR", "ru-RU"] as const;
@@ -34,10 +35,7 @@ const SUPPORTED_LANGS = ["en-US", "zh-CN", "zh-TW", "ja-JP", "ko-KR", "ru-RU"] a
 /** kebab/标识符风格的翻译键，例如 join-room-full、cli-invalid-port。 */
 const KEY = "[a-z][a-zA-Z0-9_-]*";
 
-const localesData = JSON.parse(readFileSync(localesFile, "utf8")) as Record<
-  string,
-  Record<string, string>
->;
+const localesData = buildLocaleMap() as Record<string, Record<string, string>>;
 
 /** 递归收集 src 下所有 .ts 文件。 */
 function collectSourceFiles(dir: string): string[] {
@@ -83,9 +81,7 @@ function extractReferencedKeys(sources: { file: string; text: string }[]): Map<s
   return refs;
 }
 
-const localeKeys = new Map(
-  SUPPORTED_LANGS.map((lang) => [lang, new Set(Object.keys(localesData[lang] ?? {}))])
-);
+const localeKeys = new Map(SUPPORTED_LANGS.map((lang) => [lang, new Set(Object.keys(localesData[lang] ?? {}))]));
 const sources = collectSourceFiles(srcDir).map((file) => ({ file, text: readFileSync(file, "utf8") }));
 const referenced = extractReferencedKeys(sources);
 
@@ -115,7 +111,7 @@ describe("i18n 覆盖", () => {
     }
   });
 
-  it("代码引用的每个翻译键都有对应的 locales.json 定义", () => {
+  it("代码引用的每个翻译键都有对应的 ftl 定义", () => {
     const missing: string[] = [];
     for (const [key, files] of referenced) {
       for (const [locale, keys] of localeKeys) {
@@ -127,7 +123,7 @@ describe("i18n 覆盖", () => {
     expect(missing.sort()).toEqual([]);
   });
 
-  it("每个 locales.json 翻译键都在源码中被使用", () => {
+  it("每个 ftl 翻译键都在源码中被使用", () => {
     // 以第一个 locale 为基准；上一个用例已保证各 locale 键集合一致。
     const allKeys = localeKeys.get(SUPPORTED_LANGS[0])!;
     const unused = [...allKeys].filter((key) => !isMentionedInSource(key)).sort();

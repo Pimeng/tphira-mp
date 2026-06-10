@@ -1,8 +1,8 @@
 import { describe, expect, test } from "vitest";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { EMBEDDED_LOCALES } from "../../src/server/utils/embeddedLocales.js";
 import { SUPPORTED_LANGS } from "../../src/server/utils/l10n.js";
+// 用与 gen:locales 同一套解析器从 ftl 还原，作为嵌入产物的对照基准。
+import { buildLocaleMap } from "../../tools/gen-embedded-locales.mjs";
 
 describe("嵌入式 locales 兜底", () => {
   test("覆盖全部受支持语言且非空", () => {
@@ -13,15 +13,11 @@ describe("嵌入式 locales 兜底", () => {
     }
   });
 
-  test("嵌入内容与磁盘 locales.json 的 message id 完全一致（防止忘记 pnpm gen:locales）", () => {
-    const diskData = JSON.parse(readFileSync(join("locales", "locales.json"), "utf8")) as Record<
-      string,
-      Record<string, string>
-    >;
+  test("嵌入内容与 locales/*.ftl 完全一致（防止忘记 pnpm gen:locales）", () => {
+    const parsed = buildLocaleMap() as Record<string, Record<string, string>>;
     for (const lang of SUPPORTED_LANGS) {
-      const diskIds = Object.keys(diskData[lang] ?? {}).sort();
-      const embeddedIds = Object.keys(EMBEDDED_LOCALES[lang] ?? {}).sort();
-      expect(embeddedIds, `${lang} 的嵌入内容已过期，请运行 pnpm gen:locales`).toEqual(diskIds);
+      // toEqual 比较对象内容（忽略键顺序：嵌入按字典序、ftl 按源顺序）。
+      expect(EMBEDDED_LOCALES[lang], `${lang} 的嵌入内容已过期，请运行 pnpm gen:locales`).toEqual(parsed[lang]);
     }
   });
 });

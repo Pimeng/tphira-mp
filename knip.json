@@ -1,4 +1,5 @@
 {
   "entry": ["src/**/index.ts", "bench/micro-hotpath.ts"],
-  "ignoreDependencies": ["postject", "ts-prune"]
+  "ignoreDependencies": ["postject", "ts-prune"],
+  "ignore": ["tools/gen-embedded-locales.d.mts"]
 }

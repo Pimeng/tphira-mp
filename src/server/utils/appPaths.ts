@@ -12,6 +12,15 @@ export type AppPaths = {
 
 let cached: AppPaths | null = null;
 
+/**
+ * 判断某根目录是否带有本地化资源目录，用作识别「源码 / 部署根目录」的哨兵。
+ * 命中条件：locales/ 下存在 locales.json（部署的 nodejs bundle / 在线拉取后）
+ * 或 en-US.ftl（源码检出 / 服主放置的 ftl 覆盖）。
+ */
+function hasLocales(rootDir: string): boolean {
+  return existsSync(join(rootDir, "locales", "locales.json")) || existsSync(join(rootDir, "locales", "en-US.ftl"));
+}
+
 export function getAppPaths(): AppPaths {
   if (cached) return cached;
 
@@ -30,7 +39,7 @@ export function getAppPaths(): AppPaths {
     return cached;
   }
 
-  if (existsSync(join(cwd, "locales", "locales.json"))) {
+  if (hasLocales(cwd)) {
     cached = {
       rootDir: cwd,
       configPath: join(cwd, "server_config.yml"),
@@ -47,7 +56,7 @@ export function getAppPaths(): AppPaths {
   if (entryDir) {
     const nearCandidates = [join(entryDir, "..", ".."), join(entryDir, "..", "..", "..")];
     for (const rootDir of nearCandidates) {
-      if (!existsSync(join(rootDir, "locales", "locales.json"))) continue;
+      if (!hasLocales(rootDir)) continue;
       cached = {
         rootDir,
         configPath: join(rootDir, "server_config.yml"),

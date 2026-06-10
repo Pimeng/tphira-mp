@@ -1,5 +1,5 @@
 // 本文件由 tools/gen-embedded-locales.mjs 自动生成，请勿手动编辑。
-// 修改 locales.json 后运行 `pnpm gen:locales` 重新生成。
+// 修改 locales/*.ftl 后运行 `pnpm gen:locales` 重新生成。
 /* eslint-disable */
 export const EMBEDDED_LOCALES: Record<string, Record<string, string>> = {
   "en-US": {
@@ -162,6 +162,7 @@ export const EMBEDDED_LOCALES: Record<string, Record<string, string>> = {
       "join-room-locked": " Room is locked",
       "label-monitor-suffix": " (monitor)",
       "locales-fetched": " Fetched { $count } locale file(s) online",
+      "locales-override-applied": " Applied locales/{ $lang }.ftl override ({ $count } key(s))",
       "log-admin-broadcast": " Admin broadcast: { $message } (sent to { $rooms } rooms)",
       "log-admin-room-message": " Admin sent message to room \"{ $room }\": { $message }",
       "log-auth-failed": " Auth failed. id={ $id }, reason={ $reason }",
@@ -427,6 +428,7 @@ export const EMBEDDED_LOCALES: Record<string, Record<string, string>> = {
       "join-room-locked": " ルームがロックされています",
       "label-monitor-suffix": " （観戦者）",
       "locales-fetched": " { $count } 個の言語ファイルをオンラインで取得しました",
+      "locales-override-applied": " locales/{ $lang }.ftl の上書きを適用しました（{ $count } 件）",
       "log-admin-broadcast": " 管理者ブロードキャスト：{ $message }（{ $rooms } ルームに送信）",
       "log-admin-room-message": " 管理者がルーム「{ $room }」にメッセージを送信しました：{ $message }",
       "log-auth-failed": " 認証失敗。id={ $id }、reason={ $reason }",
@@ -692,6 +694,7 @@ export const EMBEDDED_LOCALES: Record<string, Record<string, string>> = {
       "join-room-locked": " 방이 잠겨 있습니다",
       "label-monitor-suffix": " （관전자）",
       "locales-fetched": " { $count }개의 언어 파일을 온라인으로 가져왔습니다",
+      "locales-override-applied": " locales/{ $lang }.ftl 재정의를 적용했습니다 ({ $count }개 키)",
       "log-admin-broadcast": " 관리자 브로드캐스트: { $message } ({ $rooms }개 방에 전송)",
       "log-admin-room-message": " 관리자가 방 \"{ $room }\"에 메시지를 보냈습니다: { $message }",
       "log-auth-failed": " 인증 실패. id={ $id }, reason={ $reason }",
@@ -957,6 +960,7 @@ export const EMBEDDED_LOCALES: Record<string, Record<string, string>> = {
       "join-room-locked": " Комната заблокирована",
       "label-monitor-suffix": " (наблюдатель)",
       "locales-fetched": " Загружено { $count } языковых файлов онлайн",
+      "locales-override-applied": " Применено переопределение locales/{ $lang }.ftl ({ $count } ключ(ей))",
       "log-admin-broadcast": " Рассылка администратора: { $message } (отправлено в { $rooms } комнат)",
       "log-admin-room-message": " Администратор отправил сообщение в комнату «{ $room }»: { $message }",
       "log-auth-failed": " Ошибка аутентификации. id={ $id }, reason={ $reason }",
@@ -1222,6 +1226,7 @@ export const EMBEDDED_LOCALES: Record<string, Record<string, string>> = {
       "join-room-locked": " 房间已锁定",
       "label-monitor-suffix": " （观战者）",
       "locales-fetched": " 已在线补齐 { $count } 个语言文件",
+      "locales-override-applied": " 已应用 locales/{ $lang }.ftl 覆盖（{ $count } 个键）",
       "log-admin-broadcast": " 管理员全服广播：{ $message }（发送到 { $rooms } 个房间）",
       "log-admin-room-message": " 管理员向房间 \"{ $room }\" 发送消息：{ $message }",
       "log-auth-failed": " 连接ID：{ $id } 认证失败：{ $reason }",
@@ -1487,6 +1492,7 @@ export const EMBEDDED_LOCALES: Record<string, Record<string, string>> = {
       "join-room-locked": " 房間已鎖定",
       "label-monitor-suffix": " （觀戰者）",
       "locales-fetched": " 已在線補齊 { $count } 個語言檔",
+      "locales-override-applied": " 已套用 locales/{ $lang }.ftl 覆寫（{ $count } 個鍵）",
       "log-admin-broadcast": " 管理員全服廣播：{ $message }（傳送到 { $rooms } 個房間）",
       "log-admin-room-message": " 管理員向房間 \"{ $room }\" 傳送訊息：{ $message }",
       "log-auth-failed": " 連線ID：{ $id } 認證失敗：{ $reason }",
