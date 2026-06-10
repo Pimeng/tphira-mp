@@ -1,6 +1,6 @@
 import { FluentBundle, FluentResource, type FluentVariable } from "@fluent/bundle";
 import { negotiateLanguages } from "@fluent/langneg";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { getAppPaths } from "../utils/appPaths.js";
 import { EMBEDDED_LOCALES } from "./embeddedLocales.js";
@@ -19,6 +19,24 @@ function assembleFtl(messages: Record<string, string>): string {
   return parts.join("\n\n");
 }
 
+// 解析后的磁盘 locales.json 按文件路径缓存：构建多个语言 bundle 时不再重复读盘 + JSON.parse
+// 同一个（部署包里可达上百 KB 的）大文件，缺失路径也只触发一次 ENOENT。值为 null 表示
+// 文件不存在 / 不可读 / 非法 JSON。
+const localesJsonCache = new Map<string, Record<string, Record<string, string>> | null>();
+
+function loadLocalesJson(file: string): Record<string, Record<string, string>> | null {
+  const cached = localesJsonCache.get(file);
+  if (cached !== undefined) return cached;
+  let parsed: Record<string, Record<string, string>> | null = null;
+  try {
+    parsed = JSON.parse(readFileSync(file, "utf8")) as Record<string, Record<string, string>>;
+  } catch {
+    // 文件不存在 / 不可读 / JSON 解析失败 → 视为缺失，走下一个来源
+  }
+  localesJsonCache.set(file, parsed);
+  return parsed;
+}
+
 /**
  * 读取某语言的 .ftl 源文本。优先磁盘（源码根目录或 locales 缓存目录下的 locales.json），
  * 缺失或为空时回退到嵌入二进制的内容，保证离线时仍可用。
@@ -26,20 +44,16 @@ function assembleFtl(messages: Record<string, string>): string {
 function readLocaleSource(lang: SupportedLang): string {
   const paths = getAppPaths();
   for (const base of [paths.rootDir, paths.localesDir]) {
-    try {
-      const data = JSON.parse(readFileSync(join(base, "locales.json"), "utf8")) as Record<
-        string,
-        Record<string, string>
-      >;
-      const messages = data[lang];
-      if (messages && Object.keys(messages).length > 0) return assembleFtl(messages);
-    } catch {
-      // 文件不存在 / 不可读 / JSON 解析失败，继续尝试下一个
-    }
+    const messages = loadLocalesJson(join(base, "locales.json"))?.[lang];
+    if (messages && Object.keys(messages).length > 0) return assembleFtl(messages);
   }
   const embedded = EMBEDDED_LOCALES[lang];
   return embedded ? assembleFtl(embedded) : "";
 }
+
+// locales/<lang>.ftl 覆盖源按语言缓存：detectLocaleOverrides（启动时全量探测）与
+// getBundle（首次格式化时分层）共享，避免对同一文件读两遍。值为 null 表示无 / 为空 / 不可读。
+const overrideCache = new Map<SupportedLang, string | null>();
 
 /**
  * 读取运行时覆盖文件 locales/<lang>.ftl 的源文本。
@@ -49,14 +63,17 @@ function readLocaleSource(lang: SupportedLang): string {
  * ——它覆盖全部键，等价于「直接按 ftl 解析」。文件不存在 / 为空 / 不可读时返回 null。
  */
 function readLocaleOverride(lang: SupportedLang): string | null {
-  const path = join(getAppPaths().localesDir, `${lang}.ftl`);
-  if (!existsSync(path)) return null;
+  const cached = overrideCache.get(lang);
+  if (cached !== undefined) return cached;
+  let result: string | null = null;
   try {
-    const text = readFileSync(path, "utf8");
-    return text.trim() ? text : null;
+    const text = readFileSync(join(getAppPaths().localesDir, `${lang}.ftl`), "utf8");
+    result = text.trim() ? text : null;
   } catch {
-    return null;
+    // 文件不存在 / 不可读 → 无覆盖
   }
+  overrideCache.set(lang, result);
+  return result;
 }
 
 /** 统计一段 .ftl 源里定义了多少个消息键（顶格的 `id =` 行）。 */
@@ -69,14 +86,21 @@ function countFtlMessages(text: string): number {
 }
 
 /**
- * 探测各受支持语言是否存在 locales/<lang>.ftl 覆盖文件及其键数，供启动日志提示。
- * 纯只读，不构建 bundle、不抛错。
+ * 探测各受支持语言的 locales/<lang>.ftl 覆盖文件，返回【部分覆盖】的语言及其键数，供启动日志提示。
+ *
+ * 只上报「键数少于内置全集」的部分覆盖——这正是服主「只改若干键」的典型用法。
+ * 当 ftl 覆盖了全量键时（源码检出自带的全量 locales/*.ftl、或服主整套重译），它等价于
+ * 「源/整套翻译」而非局部覆盖，不再每次启动刷屏提示。纯只读，不构建 bundle、不抛错。
  */
 export function detectLocaleOverrides(): { lang: SupportedLang; count: number }[] {
   const result: { lang: SupportedLang; count: number }[] = [];
   for (const lang of SUPPORTED_LANGS) {
     const text = readLocaleOverride(lang);
-    if (text) result.push({ lang, count: countFtlMessages(text) });
+    if (!text) continue;
+    const count = countFtlMessages(text);
+    const builtinCount = Object.keys(EMBEDDED_LOCALES[lang] ?? {}).length;
+    // 全量集合（>= 内置全集）视为源/整套翻译而非部分覆盖，跳过提示
+    if (count > 0 && count < builtinCount) result.push({ lang, count });
   }
   return result;
 }
