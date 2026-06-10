@@ -125,7 +125,16 @@ describe("ensureLocalesAvailable", () => {
 
     const count = await ensureLocalesAvailable(dir);
     expect(count).toBe(1);
-    expect(fetchSpy.mock.calls.some((c) => String(c[0]).includes("github.com"))).toBe(true);
+    expect(
+      fetchSpy.mock.calls.some((c) => {
+        try {
+          const url = new URL(String(c[0]));
+          return url.hostname === "github.com" || url.hostname.endsWith(".github.com");
+        } catch {
+          return false;
+        }
+      })
+    ).toBe(true);
   });
 
   test("全部候选失败时返回 0，不抛异常（交由嵌入兜底）", async () => {
