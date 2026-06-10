@@ -207,7 +207,7 @@ export function setupMockFetch() {
       return new Response(
         JSON.stringify({
           id,
-          player: playerMap[token] ?? 100,
+          player: id === 2 ? 200 : (playerMap[token] ?? 100),
           score: 999999,
           perfect: 1,
           good: 0,
