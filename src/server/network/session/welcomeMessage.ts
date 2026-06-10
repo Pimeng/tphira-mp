@@ -8,7 +8,7 @@ import type { ServerState } from "../../core/state.js";
 import type { User } from "../../game/user.js";
 import { getAvailableRoomsText } from "./roomListCache.js";
 
-type HitokotoValue = { quote: string; from: string };
+export type HitokotoValue = { quote: string; from: string };
 
 /**
  * 生成并发送欢迎消息(系统聊天)

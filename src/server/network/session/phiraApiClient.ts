@@ -29,7 +29,7 @@ type PhiraApiOptions = {
 };
 
 /** /me 接口返回的用户信息 */
-type PhiraUserInfo = {
+export type PhiraUserInfo = {
   id: number;
   name: string;
   language: string;

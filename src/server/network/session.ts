@@ -27,7 +27,7 @@ import { refreshRoomLive as refreshRoomLiveState } from "../game/roomUtils.js";
 import type { ServerState } from "../core/state.js";
 import type { Chart, RecordData } from "../core/types.js";
 import { User } from "../game/user.js";
-import { tl, type Language } from "../utils/l10n.js";
+import { Language, tl } from "../utils/l10n.js";
 import { chartCache, recordCache } from "../utils/cache.js";
 import { logRoomInfo, logRoomMark, logRoomWarn } from "../utils/logUtils.js";
 import { MonitorBuffer } from "./session/monitorBuffer.js";
@@ -35,9 +35,10 @@ import {
   DEFAULT_PHIRA_API_ENDPOINT,
   fetchPhiraChart,
   fetchPhiraRecord,
-  fetchPhiraUserInfo
+  fetchPhiraUserInfo,
+  type PhiraUserInfo
 } from "./session/phiraApiClient.js";
-import { sendWelcomeExtras } from "./session/welcomeMessage.js";
+import { sendWelcomeExtras, type HitokotoValue } from "./session/welcomeMessage.js";
 import { getHitokotoCached } from "../utils/hitokotoCache.js";
 import { processClientCommand, type RoomCallbacks } from "./session/commandRouter.js";
 import { prepareServerCommand, type PreparedServerCommand } from "./serverCommandTransport.js";
@@ -389,12 +390,15 @@ export class Session {
   }
 
   private async handleAuthenticate(token: string): Promise<void> {
+    let me: PhiraUserInfo | null = null;
+    let hitokoto: HitokotoValue | null = null;
+
     try {
       // 校验 token 合法性：长度需小于 32 字符，否则拒绝（在发起 API 请求前快速失败）
       if (token.length > 32) throw new Error("auth-invalid-token");
 
       // 并行发起 Phira API 认证和一言预热，减少总延迟
-      const [me, hitokoto] = await Promise.all([
+      const results = await Promise.all([
         fetchPhiraUserInfo({
           endpoint: this.getPhiraApiEndpoint(),
           token,
@@ -402,7 +406,23 @@ export class Session {
         }),
         getHitokotoCached(this.state.config.outbound_proxy, this.state.config.hitokoto_api_url).catch(() => null)
       ]);
+      me = results[0];
+      hitokoto = results[1];
+    } catch (e) {
+      // API 阶段失败：尚无用户信息，使用服务端默认语言
+      const localized = this.localizeError(this.state.serverLang, e instanceof Error ? e : new Error("auth-failed"));
+      this.state.logger.warn(
+        tl(this.state.serverLang, "log-auth-failed", { id: this.id, reason: localized }),
+        undefined,
+        { ip: this.remoteIp, isConnectionLog: true }
+      );
+      await this.trySend({ type: "Authenticate", result: err(localized) });
+      this.panicked = true;
+      await this.markLost();
+      return;
+    }
 
+    try {
       // Don't reject banned users at auth time - allow them to connect
       // They will be blocked from operations later
 
@@ -489,7 +509,9 @@ export class Session {
         hitokoto
       }).catch(NOOP);
     } catch (e) {
-      const localized = this.localizeError(this.state.serverLang, e instanceof Error ? e : new Error("auth-failed"));
+      // 认证后阶段失败：已有用户信息，使用玩家 API 返回的语言
+      const userLang = me ? new Language(me.language) : this.state.serverLang;
+      const localized = this.localizeError(userLang, e instanceof Error ? e : new Error("auth-failed"));
       this.state.logger.warn(
         tl(this.state.serverLang, "log-auth-failed", { id: this.id, reason: localized }),
         undefined,
