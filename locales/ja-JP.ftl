@@ -10,6 +10,7 @@ start-no-chart-selected = 譜面が選択されていません
 
 http-not-found = 見つかりません
 http-internal-error = 内部エラー
+http-rate-limited = リクエストが多すぎます。しばらくしてからお試しください
 
 bad-enabled = enabled パラメータがありません
 auth-unauthorized = 認証されていません

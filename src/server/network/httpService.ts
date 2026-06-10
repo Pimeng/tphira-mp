@@ -16,6 +16,7 @@ import type { AutoUploadHandlerWithCleanup } from "../replay/autoUpload.js";
 import { startWebSocketService, type WebSocketService } from "./websocketService.js";
 import { cleanupExpiringMaps, verifyUserTokenViaApi } from "./httpHelpers.js";
 import { checkAdminAuth } from "./routes/auth.js";
+import { HttpRateLimiter } from "../utils/httpRateLimiter.js";
 import type { RequestContext, ServerServices } from "./routes/types.js";
 import { tryHandlePublicRoutes } from "./routes/publicRoutes.js";
 import { tryHandleReplayPublicRoutes } from "./routes/replayPublicRoutes.js";
@@ -25,6 +26,7 @@ import { tryHandleAdminRoomRoutes } from "./routes/adminRoomRoutes.js";
 import { tryHandleAdminUserRoutes } from "./routes/adminUserRoutes.js";
 import { tryHandleAdminContestRoutes } from "./routes/adminContestRoutes.js";
 import { tryHandleAdminLogRoutes } from "./routes/adminLogRoutes.js";
+import { tryHandleAdminMetricsRoutes } from "./routes/adminMetricsRoutes.js";
 
 export type HttpService = {
   server: http.Server;
@@ -35,6 +37,8 @@ export type HttpService = {
   handleGameEndAutoUpload: (userId: number, chartId: number, timestamp: number, recordId: number) => void;
   /** 自动上传清理函数 */
   cleanupAutoUpload: () => void;
+  /** HTTP 请求速率限制器（用于监控） */
+  httpRateLimiter: HttpRateLimiter;
 };
 
 /** 依次尝试 admin 路由模块，匹配到任何一个就返回 true */
@@ -44,6 +48,7 @@ async function tryHandleAdminRoutes(ctx: RequestContext): Promise<boolean> {
   if (await tryHandleAdminUserRoutes(ctx)) return true;
   if (await tryHandleAdminContestRoutes(ctx)) return true;
   if (await tryHandleAdminLogRoutes(ctx)) return true;
+  if (await tryHandleAdminMetricsRoutes(ctx)) return true;
   return false;
 }
 
@@ -64,6 +69,12 @@ export async function startHttpService(opts: { state: ServerState; host: string;
     otpBannedSsids: new Map()
   };
 
+  const httpRateLimiter = new HttpRateLimiter({
+    maxRequests: state.config.http_rate_limit_max_requests ?? 100,
+    windowMs: state.config.http_rate_limit_window_ms ?? 60_000,
+    banDurationMs: 120_000
+  });
+
   const server = http.createServer((req, res) => {
     void (async () => {
       const lang = req.headers["accept-language"]
@@ -76,6 +87,15 @@ export async function startHttpService(opts: { state: ServerState; host: string;
 
       if (req.method === "OPTIONS") {
         handleOptionsRequest(res);
+        return;
+      }
+
+      // HTTP 请求速率限制检查
+      if (!httpRateLimiter.check(clientIp)) {
+        res.statusCode = 429;
+        res.setHeader("content-type", "application/json; charset=utf-8");
+        res.setHeader("retry-after", String(Math.ceil((state.config.http_rate_limit_window_ms ?? 60_000) / 1000)));
+        res.end(JSON.stringify({ ok: false, error: "rate-limited", message: tl(lang, "http-rate-limited") }));
         return;
       }
 
@@ -192,6 +212,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
       });
     },
     handleGameEndAutoUpload: autoUpload.handler,
-    cleanupAutoUpload: autoUpload.close
+    cleanupAutoUpload: autoUpload.close,
+    httpRateLimiter
   };
 }

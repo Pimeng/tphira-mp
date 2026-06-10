@@ -10,6 +10,7 @@ start-no-chart-selected = 尚未選擇譜面
 
 http-not-found = 找不到
 http-internal-error = 伺服器內部錯誤
+http-rate-limited = 請求過於頻繁，請稍後重試
 
 bad-enabled = 缺少 enabled 參數
 auth-unauthorized = 未授權

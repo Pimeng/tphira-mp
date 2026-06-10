@@ -54,6 +54,10 @@ export type ServerConfig = {
   max_rooms?: number;
   /** 全服同时在线的 TCP 连接数上限；未设置或 <1 表示不限制 */
   max_connections?: number;
+  /** HTTP 请求速率限制：每窗口允许的最大请求数（默认 100） */
+  http_rate_limit_max_requests?: number;
+  /** HTTP 请求速率限制：时间窗口长度（毫秒，默认 60000 = 1分钟） */
+  http_rate_limit_window_ms?: number;
   /** 服务端语言，影响日志/CLI/HTTP 默认输出语言，支持 zh-CN、en-US；未设置则按 PHIRA_MP_LANG / LANG 协商 */
   lang?: string;
   /** Phira API 端点地址，默认 https://phira.5wyxi.com */

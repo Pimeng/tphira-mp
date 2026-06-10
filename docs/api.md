@@ -1070,3 +1070,84 @@ curl -X POST -H "Content-Type: application/json" \
 export TEMP_TOKEN=yyy-yyy-yyy
 curl -H "X-Admin-Token: $TEMP_TOKEN" "$HOST/admin/rooms"
 ```
+
+---
+
+## 监控指标 / Metrics
+
+`GET /admin/metrics`
+
+返回服务器进程性能与业务运行指标，**仅管理员可访问**。
+
+### 请求示例
+
+```bash
+curl -H "X-Admin-Token: $ADMIN_TOKEN" \
+  "http://127.0.0.1:12347/admin/metrics"
+```
+
+### 响应示例
+
+```json
+{
+  "ok": true,
+  "timestamp": 1735689600000,
+  "process": {
+    "pid": 12345,
+    "uptime": 3600.5,
+    "nodeVersion": "v24.0.0",
+    "platform": "linux",
+    "arch": "x64"
+  },
+  "memory": {
+    "rss": 67108864,
+    "heapTotal": 33554432,
+    "heapUsed": 16777216,
+    "external": 2097152,
+    "arrayBuffers": 1048576
+  },
+  "business": {
+    "activeSessions": 42,
+    "onlineUsers": 38,
+    "activeRooms": 5,
+    "wsConnections": 12,
+    "serverBannedUsers": 3,
+    "roomBannedUsers": 7,
+    "tempAdminTokens": 2,
+    "replayEnabled": true,
+    "roomCreationEnabled": true
+  }
+}
+```
+
+### 字段说明
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `timestamp` | `number` | 指标采集时间戳（毫秒） |
+| `process.pid` | `number` | Node.js 进程 ID |
+| `process.uptime` | `number` | 进程运行时间（秒） |
+| `process.nodeVersion` | `string` | Node.js 版本 |
+| `process.platform` | `string` | 操作系统平台 |
+| `process.arch` | `string` | CPU 架构 |
+| `memory.rss` | `number` | 进程常驻内存大小（字节） |
+| `memory.heapTotal` | `number` | V8 堆内存总大小（字节） |
+| `memory.heapUsed` | `number` | V8 堆内存已使用大小（字节） |
+| `memory.external` | `number` | 外部内存使用（字节） |
+| `memory.arrayBuffers` | `number` | ArrayBuffer 内存使用（字节） |
+| `business.activeSessions` | `number` | 当前活跃 TCP 会话数 |
+| `business.onlineUsers` | `number` | 当前在线用户数 |
+| `business.activeRooms` | `number` | 当前活跃房间数 |
+| `business.wsConnections` | `number` | 当前 WebSocket 连接数（HTTP 服务启用时） |
+| `business.serverBannedUsers` | `number` | 服务器级封禁用户数 |
+| `business.roomBannedUsers` | `number` | 房间级封禁用户总数 |
+| `business.tempAdminTokens` | `number` | 当前有效的临时管理员 Token 数 |
+| `business.replayEnabled` | `boolean` | 回放录制是否启用 |
+| `business.roomCreationEnabled` | `boolean` | 是否允许创建新房间 |
+
+### 使用场景
+
+- **性能监控**：结合 `memory.*` 和 `process.uptime` 监控服务器资源消耗
+- **容量规划**：通过 `activeSessions`、`onlineUsers`、`activeRooms` 评估当前负载
+- **告警触发**：当 `memory.heapUsed / memory.heapTotal` 超过阈值时触发告警
+- **业务统计**：统计不同时段的在线人数和房间数，生成运营报表

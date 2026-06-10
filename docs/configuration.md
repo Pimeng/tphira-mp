@@ -373,6 +373,42 @@ MAX_CONNECTIONS: 2000
 - 与单 IP 限速互补：`MAX_CONNECTIONS` 控制全局总量，连接速率限制器控制单 IP 突发
 - Complements per-IP rate limiting: `MAX_CONNECTIONS` caps the global total, the rate limiter caps per-IP bursts
 
+#### HTTP_RATE_LIMIT_MAX_REQUESTS
+
+每个 IP 在每个时间窗口内允许的最大 HTTP 请求数。超出后会返回 `429 Too Many Requests` 并在响应头中包含 `Retry-After`。
+
+Maximum HTTP requests per IP per time window. Exceeding returns `429 Too Many Requests` with `Retry-After` header.
+
+- 类型 / Type: `number`
+- 默认值 / Default: `100`
+- 环境变量 / Environment: `HTTP_RATE_LIMIT_MAX_REQUESTS`
+
+示例 / Example:
+```yaml
+HTTP_RATE_LIMIT_MAX_REQUESTS: 200
+```
+
+#### HTTP_RATE_LIMIT_WINDOW_MS
+
+HTTP 请求速率限制的时间窗口长度（毫秒）。
+
+Time window length for HTTP request rate limiting (milliseconds).
+
+- 类型 / Type: `number`
+- 默认值 / Default: `60000`（1 分钟）
+- 环境变量 / Environment: `HTTP_RATE_LIMIT_WINDOW_MS`
+
+示例 / Example:
+```yaml
+HTTP_RATE_LIMIT_WINDOW_MS: 60000
+```
+
+注意 / Note:
+- 限流对**所有 HTTP 端点**生效（包括公开接口和管理员接口）
+- Applies to **all HTTP endpoints** (public and admin)
+- 被限流的 IP 默认封禁 2 分钟（窗口时长的 2 倍）
+- Banned IPs are blocked for 2 minutes by default (2x window duration)
+
 #### REPLAY_ENABLED
 
 是否启用回放录制功能。

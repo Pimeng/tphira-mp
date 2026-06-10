@@ -10,6 +10,7 @@ start-no-chart-selected = No chart selected
 
 http-not-found = Not found
 http-internal-error = Internal error
+http-rate-limited = Too many requests. Please try again later
 
 bad-enabled = Missing enabled parameter
 auth-unauthorized = Unauthorized

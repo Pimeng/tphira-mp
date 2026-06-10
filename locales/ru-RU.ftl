@@ -10,6 +10,7 @@ start-no-chart-selected = Карта не выбрана
 
 http-not-found = Не найдено
 http-internal-error = Внутренняя ошибка
+http-rate-limited = Слишком много запросов. Пожалуйста, повторите попытку позже
 
 bad-enabled = Отсутствует параметр enabled
 auth-unauthorized = Не авторизован

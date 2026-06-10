@@ -1,4 +1,4 @@
-
+﻿
 create-id-occupied = 방 ID가 이미 사용 중입니다
 
 join-game-ongoing = 게임이 진행 중입니다
@@ -10,6 +10,7 @@ start-no-chart-selected = 선택된 채보가 없습니다
 
 http-not-found = 찾을 수 없음
 http-internal-error = 내부 오류
+http-rate-limited = 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요
 
 bad-enabled = enabled 파라미터가 없습니다
 auth-unauthorized = 인증되지 않음
