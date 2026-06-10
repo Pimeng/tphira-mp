@@ -1,0 +1,60 @@
+# 校验 PR 中每一条 commit 的信息是否符合 Conventional Commits 规范。
+# 规则与 reusable-release.yml 生成 release note 时解析的 type 列表保持一致，
+# 确保「能通过校验的 commit」一定能被 release note 正确归类。
+name: PR Commit 规范校验
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  lint-commits:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 校验每条 commit message
+        shell: bash
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch --no-tags --depth=200 origin "$BASE_REF"
+
+          # 允许的 type 与 reusable-release.yml 中 release note 的解析列表一致
+          types='feat|fix|perf|refactor|improvement|chore|i18n|docs|test|ci|build|style|revert'
+          # <type>(可选 scope)(可选 !): <非空描述>，type 大小写不敏感（与 note 解析的 nocasematch 行为一致）
+          pattern="^(${types})(\([^)]+\))?!?: .+"
+
+          failed=0
+          checked=0
+
+          # --no-merges：跳过 merge commit（其信息天然不符合规范，也不会进 release note）
+          while IFS= read -r sha; do
+            [ -z "$sha" ] && continue
+            checked=$((checked + 1))
+            subject=$(git log -1 --format=%s "$sha")
+            if printf '%s' "$subject" | grep -qiE "$pattern"; then
+              echo "OK   ${sha:0:8}  $subject"
+            else
+              echo "::error::不规范的 commit ${sha:0:8}: $subject"
+              failed=1
+            fi
+          done < <(git rev-list --no-merges "origin/${BASE_REF}..HEAD")
+
+          if [ "$checked" -eq 0 ]; then
+            echo "本 PR 没有需要校验的非 merge commit。"
+          fi
+
+          if [ "$failed" -ne 0 ]; then
+            echo ""
+            echo "提交信息需符合: <type>(可选 scope): <描述>"
+            echo "允许的 type: feat fix perf refactor improvement chore i18n docs test ci build style revert"
+            echo "示例: feat(room): 支持房主转移 / fix: 修复 late-join 丢帧"
+            exit 1
+          fi
