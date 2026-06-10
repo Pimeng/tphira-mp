@@ -14,9 +14,9 @@ on:
         type: boolean
         default: false
 
+# 顶层取最小只读基线；仅 release-and-docker 在 job 级提权到发布所需的写权限。
 permissions:
-  contents: write
-  packages: write
+  contents: read
 
 jobs:
   test:
@@ -144,6 +144,10 @@ jobs:
     needs: [build, build-freebsd, build-bundle]
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    # 发 GitHub Release 需 contents:write；推送 GHCR 镜像需 packages:write。
+    permissions:
+      contents: write
+      packages: write
     steps:
       - name: 检出代码
         uses: actions/checkout@v4

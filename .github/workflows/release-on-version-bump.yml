@@ -19,6 +19,9 @@ jobs:
   check-version:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # 仅 checkout + 读 package.json 比对版本，只读即可（写权限留给 release 复用流）。
+    permissions:
+      contents: read
     outputs:
       should_release: ${{ steps.check.outputs.should_release }}
       version: ${{ steps.check.outputs.version }}
