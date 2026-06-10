@@ -307,12 +307,13 @@ jobs:
 
           tags=()
           tags+=("${image}:${version_tag}")
-          if [[ "$version_lc" =~ ^([0-9]+)\.([0-9]+)\.0$ ]]; then
-            tags+=("${image}:v${BASH_REMATCH[1]}.${BASH_REMATCH[2]}")
-          fi
 
+          # 仅正式版打滚动标签：latest 指向最新正式版，vX.Y 指向该系列最新补丁（不限 patch）
           if [ "${{ inputs.prerelease }}" != "true" ]; then
             tags+=("${image}:latest")
+            if [[ "$version_lc" =~ ^([0-9]+)\.([0-9]+)\.[0-9]+$ ]]; then
+              tags+=("${image}:v${BASH_REMATCH[1]}.${BASH_REMATCH[2]}")
+            fi
           fi
 
           printf "tags=%s\n" "$(IFS=, ; echo "${tags[*]}")" >> "$GITHUB_OUTPUT"
