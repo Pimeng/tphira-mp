@@ -220,9 +220,9 @@ describe("Phira Multiplayer Protocol & State Machine", () => {
             expect(host.roomState()?.type).toBe("SelectChart");
 
             // 在未开始的时段恶意注入触控帧与判定信息
-            const maliciousTouches = [{ time: 10, points: [[1, { x: 0, y: 1 }]] }];
+            const maliciousTouches = [{ time: 10, points: [[1, { x: 0, y: 1 }]] as [number, { x: number; y: number }][] }];
             await player.sendTouches(maliciousTouches);
-            await player.sendJudges([{ time: 10, judge: 1 }]);
+            await player.sendJudges([{ time: 10, line_id: 0, note_id: 0, judgement: 1 }]);
 
             await new Promise(r => setTimeout(r, 200));
 
