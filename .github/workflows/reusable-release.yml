@@ -21,6 +21,7 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
@@ -38,6 +39,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
 
     steps:
       - name: 检出代码
@@ -86,6 +88,7 @@ jobs:
   build-freebsd:
     needs: [test]
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
@@ -111,6 +114,7 @@ jobs:
   build-bundle:
     needs: [test]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
@@ -331,10 +335,3 @@ jobs:
           pull: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      - name: 清理构建缓存
-        if: always()
-        shell: bash
-        run: |
-          docker builder prune -af || true
-          docker system prune -af || true

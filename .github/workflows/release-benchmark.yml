@@ -23,6 +23,7 @@ concurrency:
 jobs:
   prepare:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       scenarios: ${{ steps.set-matrix.outputs.scenarios }}
     steps:
@@ -41,6 +42,7 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -57,6 +59,7 @@ jobs:
   benchmark:
     needs: [prepare, build]
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     permissions:
       contents: read
     strategy:
@@ -240,6 +243,7 @@ jobs:
     needs: benchmark
     if: always()
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
@@ -365,6 +369,7 @@ jobs:
     needs: report
     if: github.event_name == 'release' && always() && needs.report.result != 'cancelled'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:

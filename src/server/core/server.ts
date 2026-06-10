@@ -183,12 +183,18 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
   let autoCreatedConfigPath: string | null = null;
   let localesFetched = 0;
   if (options.autoCreateConfig === true) {
-    // locales：缺失语言在线拉取写盘，失败由 l10n 嵌入兜底兜住
-    localesFetched = await ensureLocalesAvailable(paths.localesDir);
-    // 配置：缺失时本地示例 / 在线拉取 / 内置最小模板
-    if (!existsSync(configPath)) {
-      autoCreatedConfigPath = await ensureDefaultConfigFile(configPath, paths.rootDir);
-    }
+    // locales 与默认配置是两笔互相独立、各自可能在线拉取（CNB→GitHub，各 5s 超时）的准备工作：
+    // 写不同文件、互不依赖、均不抛错。并行执行，避免冷启动（打包二进制首启 + 网络慢）时
+    // 两次拉取串行叠加最坏约 20s 的等待。两者仍都在此处 await 完成，保证当次即生效。
+    const needConfig = !existsSync(configPath);
+    const [fetched, createdPath] = await Promise.all([
+      // locales：缺失语言在线拉取写盘，失败由 l10n 嵌入兜底兜住
+      ensureLocalesAvailable(paths.localesDir),
+      // 配置：缺失时本地示例 / 在线拉取 / 内置最小模板
+      needConfig ? ensureDefaultConfigFile(configPath, paths.rootDir) : Promise.resolve(null)
+    ]);
+    localesFetched = fetched;
+    autoCreatedConfigPath = createdPath;
   }
 
   // CLI 参数配置（优先级最高）

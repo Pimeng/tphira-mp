@@ -18,6 +18,7 @@ jobs:
   # 与测试并行运行，互不阻塞。
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
     - name: 检出代码
       uses: actions/checkout@v4
@@ -28,6 +29,15 @@ jobs:
     - name: 类型检查（含测试代码）
       run: pnpm run typecheck
 
+    - name: 校验 embeddedLocales.ts 与 locales/*.ftl 同步
+      run: |
+        pnpm run gen:locales
+        if ! git diff --quiet -- src/server/utils/embeddedLocales.ts; then
+          echo "::error::embeddedLocales.ts 与 locales/*.ftl 不同步，请本地运行 pnpm gen:locales 后提交"
+          git diff -- src/server/utils/embeddedLocales.ts
+          exit 1
+        fi
+
     - name: 构建产物
       run: pnpm run build
 
@@ -35,6 +45,7 @@ jobs:
   # perf（零断言手动脚本）与 memory-leak（需 --expose-gc）已由 vitest.config.ts 全局排除。
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
     - name: 检出代码
       uses: actions/checkout@v4
@@ -65,6 +76,7 @@ jobs:
   # 内存泄漏回归测试（需 --expose-gc，专用串行配置，最慢）。与其他 job 并行运行。
   memory-leak:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
     - name: 检出代码
       uses: actions/checkout@v4
