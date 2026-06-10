@@ -225,10 +225,15 @@ src/
 │   │   ├── replayCleanup.ts   # 过期回放清理
 │   │   └── autoUpload.ts      # 自动上传逻辑
 │   ├── cli/             # 命令行管理界面
-│   │   ├── cli.ts       # CLI 主程序
+│   │   ├── cli.ts       # CLI 主程序（命令分发，GUI 控制台共用）
 │   │   └── cliHelpers.ts    # CLI 辅助函数
+│   ├── gui/             # 服务端 GUI
+│   │   ├── guiPage.ts   # 嵌入式管理面板页面（/gui）
+│   │   └── guiWindow.ts # GUI 窗口启动器（浏览器应用模式）
 │   └── utils/           # 工具模块
 │       ├── logger.ts    # 日志系统（限流、黑名单）
+│       ├── consoleHub.ts    # 控制台日志中心（GUI 实时日志流）
+│       ├── processStats.ts  # CPU/内存采样器（GUI 性能图表）
 │       ├── l10n.ts      # 国际化/本地化
 │       ├── cache.ts     # 谱面缓存
 │       ├── mutex.ts     # 互斥锁
@@ -262,6 +267,16 @@ src/
 - [ ] 谱面回放播放客户端/网页端
 - [ ] 完善服务端，添加更多功能
 - [ ] 等待~~画饼~~添加
+
+## 🖥️ 服务端 GUI
+
+类似 Minecraft 服务端 GUI：配置 `GUI: true` 或加启动参数 `--gui`，服务器启动时自动弹出独立的 GUI 程序窗口（基于系统浏览器应用模式，自动登录，零额外依赖）：
+
+- CPU / 内存实时曲线（约 10 分钟历史）与在线玩家、房间等业务计数
+- 房间 / 玩家列表实时推送（状态、谱面、房主、观战者）
+- 与终端一致的实时日志控制台，可直接执行全部 CLI 命令（`help`、`kick`、`broadcast`、`stop` 等）
+
+也可作为网页从其他机器访问（`http://服务器地址:HTTP端口/gui`，用 `ADMIN_TOKEN` 登录）。详见 [GUI 文档](docs/gui.md)。
 
 ## 📚 文档 / Documentation
 

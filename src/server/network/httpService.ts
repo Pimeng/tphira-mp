@@ -17,6 +17,7 @@ import { startWebSocketService, type WebSocketService } from "./websocketService
 import { cleanupExpiringMaps, verifyUserTokenViaApi } from "./httpHelpers.js";
 import { checkAdminAuth } from "./routes/auth.js";
 import { HttpRateLimiter } from "../utils/httpRateLimiter.js";
+import { startProcessStatsSampler } from "../utils/processStats.js";
 import type { RequestContext, ServerServices } from "./routes/types.js";
 import { tryHandlePublicRoutes } from "./routes/publicRoutes.js";
 import { tryHandleReplayPublicRoutes } from "./routes/replayPublicRoutes.js";
@@ -27,6 +28,8 @@ import { tryHandleAdminUserRoutes } from "./routes/adminUserRoutes.js";
 import { tryHandleAdminContestRoutes } from "./routes/adminContestRoutes.js";
 import { tryHandleAdminLogRoutes } from "./routes/adminLogRoutes.js";
 import { tryHandleAdminMetricsRoutes } from "./routes/adminMetricsRoutes.js";
+import { tryHandleAdminConsoleRoutes } from "./routes/adminConsoleRoutes.js";
+import { tryHandleGuiRoutes } from "./routes/guiRoutes.js";
 
 export type HttpService = {
   server: http.Server;
@@ -49,6 +52,7 @@ async function tryHandleAdminRoutes(ctx: RequestContext): Promise<boolean> {
   if (await tryHandleAdminContestRoutes(ctx)) return true;
   if (await tryHandleAdminLogRoutes(ctx)) return true;
   if (await tryHandleAdminMetricsRoutes(ctx)) return true;
+  if (await tryHandleAdminConsoleRoutes(ctx)) return true;
   return false;
 }
 
@@ -59,6 +63,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
     ADMIN_MAX_FAILED_ATTEMPTS_PER_IP: 5,
     REPLAY_SESSION_TTL_MS: 30 * 60 * 1000,
     OTP_MAX_ATTEMPTS: 3,
+    processStats: startProcessStatsSampler(),
     adminFailedAttemptsByIp: new Map(),
     adminBannedIps: new Map(),
     replaySessions: new Map(),
@@ -120,6 +125,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
       };
 
       // 公开路由
+      if (tryHandleGuiRoutes(ctx)) return;
       if (await tryHandlePublicRoutes(ctx)) return;
       if (await tryHandleReplayPublicRoutes(ctx)) return;
       if (await tryHandleOtpRoutes(ctx)) return;
@@ -202,6 +208,7 @@ export async function startHttpService(opts: { state: ServerState; host: string;
     address: () => server.address() as net.AddressInfo,
     close: async () => {
       clearInterval(cleanupAttemptsTimer);
+      services.processStats.stop();
       autoUpload.close();
       await ws.close();
       await new Promise<void>((resolve, reject) => {

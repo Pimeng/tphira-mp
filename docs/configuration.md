@@ -37,6 +37,9 @@ HTTP_SERVICE: false
 # HTTP 服务监听端口
 HTTP_PORT: 12347
 
+# 是否在启动时打开服务端 GUI 窗口（自动开启 HTTP 服务），默认 false
+# GUI: true
+
 # 日志等级（DEBUG, INFO, MARK, WARN, ERROR），默认 INFO
 LOG_LEVEL: INFO
 
@@ -182,6 +185,22 @@ HTTP service listening port.
 示例 / Example:
 ```yaml
 HTTP_PORT: 12347
+```
+
+#### GUI
+
+是否在启动时打开服务端 GUI 窗口（类似 Minecraft 服务端 GUI，含性能监控、房间数据和控制台）。启用时自动开启 HTTP 服务；窗口通过本机专用令牌自动登录，无需输入 ADMIN_TOKEN。详见 [GUI 文档](./gui.md)。
+
+Whether to open the server GUI window on startup (Minecraft-server-style, with performance charts, room data, and console). Implies HTTP service; the window logs in automatically with a loopback-only token. See [GUI docs](./gui.md).
+
+- 类型 / Type: `boolean`
+- 默认值 / Default: `false`
+- 环境变量 / Environment: `GUI`
+- 命令行 / CLI: `--gui`
+
+示例 / Example:
+```yaml
+GUI: true
 ```
 
 ### 日志配置 / Logging Configuration

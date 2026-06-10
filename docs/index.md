@@ -20,6 +20,7 @@ Welcome to the Phira MP server documentation hub! Here you'll find everything yo
 ### 管理文档 / Administration
 
 - [命令文档](./commands.md) - 服务器控制台命令 / Server console commands
+- [服务端 GUI](./gui.md) - 网页版管理面板（性能监控、房间数据、控制台） / Web admin panel (performance, rooms, console)
 
 ## 🎯 按使用场景查找 / Find by Use Case
 

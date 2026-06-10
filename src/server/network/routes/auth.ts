@@ -1,3 +1,4 @@
+import { isLoopbackIp } from "../../../common/http.js";
 import type { RequestContext } from "./types.js";
 
 /**
@@ -48,6 +49,11 @@ export function checkAdminAuth(ctx: RequestContext): boolean {
       return true;
     }
     state.logger.debug("Temp token not found in map");
+  }
+
+  // 检查本机 GUI 窗口专用 token（仅回环地址可用，GUI 窗口模式启动时生成）
+  if (state.guiLocalToken && reqAdminToken === state.guiLocalToken && isLoopbackIp(clientIp)) {
+    return true;
   }
 
   // 检查永久管理员 TOKEN

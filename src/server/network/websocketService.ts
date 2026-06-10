@@ -3,7 +3,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import type { ServerState } from "../core/state.js";
 import type { RoomId } from "../../common/roomId.js";
 import { roomIdToString, parseRoomId } from "../../common/roomId.js";
-import { getClientIp } from "../../common/http.js";
+import { getClientIp, isLoopbackIp } from "../../common/http.js";
 import { tl } from "../utils/l10n.js";
 import {
   buildAdminRoomsData,
@@ -11,6 +11,7 @@ import {
   type AdminRoomData,
   type RoomUpdateData
 } from "../game/adminViews.js";
+import type { ConsoleLine } from "../utils/consoleHub.js";
 
 type WebSocketClient = {
   ws: WebSocket;
@@ -21,6 +22,7 @@ type WebSocketClient = {
   adminToken: string | null;
   lastAdminSnapshot: string | null; // 用于比较变化
   clientIp: string; // 客户端 IP 地址
+  isConsole: boolean; // 是否订阅了控制台日志流（GUI）
 };
 
 export type WebSocketService = {
@@ -37,7 +39,9 @@ type WebSocketMessage =
   | { type: "unsubscribe" }
   | { type: "ping" }
   | { type: "admin_subscribe"; token: string }
-  | { type: "admin_unsubscribe" };
+  | { type: "admin_unsubscribe" }
+  | { type: "console_subscribe"; token: string }
+  | { type: "console_unsubscribe" };
 
 type WebSocketResponse =
   | { type: "error"; message: string }
@@ -48,7 +52,10 @@ type WebSocketResponse =
   | { type: "room_log"; data: { message: string; timestamp: number } }
   | { type: "admin_subscribed" }
   | { type: "admin_unsubscribed" }
-  | { type: "admin_update"; data: AdminUpdateData };
+  | { type: "admin_update"; data: AdminUpdateData }
+  | { type: "console_subscribed"; data: { lines: ConsoleLine[] } }
+  | { type: "console_unsubscribed" }
+  | { type: "console_log"; data: ConsoleLine };
 
 type AdminUpdateData = {
   timestamp: number;
@@ -87,6 +94,29 @@ export function startWebSocketService(opts: { httpServer: http.Server; state: Se
 
   // 管理员客户端索引, 避免广播时遍历所有客户端
   const adminClients = new Set<WebSocket>();
+
+  // 控制台日志订阅客户端（GUI），并按需挂接 ConsoleHub
+  const consoleClients = new Set<WebSocket>();
+  let unsubscribeConsoleHub: (() => void) | null = null;
+
+  const ensureConsoleHubSubscription = (): void => {
+    if (unsubscribeConsoleHub) return;
+    unsubscribeConsoleHub = state.consoleHub.subscribe((line) => {
+      if (consoleClients.size === 0) return;
+      const message = JSON.stringify({ type: "console_log", data: line } satisfies WebSocketResponse);
+      for (const ws of consoleClients) {
+        if (ws.readyState === WebSocket.OPEN) ws.send(message);
+      }
+    });
+  };
+
+  const dropConsoleClient = (ws: WebSocket): void => {
+    consoleClients.delete(ws);
+    if (consoleClients.size === 0 && unsubscribeConsoleHub) {
+      unsubscribeConsoleHub();
+      unsubscribeConsoleHub = null;
+    }
+  };
 
   // Admin 更新防抖定时器
   let adminUpdateTimer: NodeJS.Timeout | null = null;
@@ -127,7 +157,8 @@ export function startWebSocketService(opts: { httpServer: http.Server; state: Se
       isAdmin: false,
       adminToken: null,
       lastAdminSnapshot: null,
-      clientIp
+      clientIp,
+      isConsole: false
     };
     clients.set(ws, client);
 
@@ -212,6 +243,30 @@ export function startWebSocketService(opts: { httpServer: http.Server; state: Se
           sendResponse(ws, { type: "admin_unsubscribed" });
           return;
         }
+
+        if (msg.type === "console_subscribe") {
+          // 与 admin_subscribe 相同的管理员鉴权
+          const isAuthorized = await verifyAdminToken(msg.token, client.clientIp);
+          if (!isAuthorized) {
+            sendResponse(ws, { type: "error", message: "unauthorized" });
+            return;
+          }
+
+          client.isConsole = true;
+          consoleClients.add(ws);
+          ensureConsoleHubSubscription();
+
+          // 订阅成功时回填最近的日志缓冲
+          sendResponse(ws, { type: "console_subscribed", data: { lines: state.consoleHub.getRecent() } });
+          return;
+        }
+
+        if (msg.type === "console_unsubscribe") {
+          client.isConsole = false;
+          dropConsoleClient(ws);
+          sendResponse(ws, { type: "console_unsubscribed" });
+          return;
+        }
       } catch {
         sendResponse(ws, { type: "error", message: "invalid-message" });
       }
@@ -227,6 +282,7 @@ export function startWebSocketService(opts: { httpServer: http.Server; state: Se
       client.lastAdminSnapshot = null;
       client.adminToken = null;
       adminClients.delete(ws);
+      dropConsoleClient(ws);
       clients.delete(ws);
       state.logger.debug(tl(state.serverLang, "log-websocket-disconnected", { total: String(clients.size) }));
     });
@@ -242,6 +298,11 @@ export function startWebSocketService(opts: { httpServer: http.Server; state: Se
 
     // 检查永久管理员 Token
     if (adminToken && token === adminToken) {
+      return true;
+    }
+
+    // 检查本机 GUI 窗口专用 token（仅回环地址可用）
+    if (state.guiLocalToken && token === state.guiLocalToken && isLoopbackIp(clientIp)) {
       return true;
     }
 
@@ -318,6 +379,7 @@ export function startWebSocketService(opts: { httpServer: http.Server; state: Se
         c.adminToken = null;
       }
       adminClients.delete(ws);
+      dropConsoleClient(ws);
       clients.delete(ws);
     }
   }, 30000); // 30秒心跳
@@ -394,6 +456,11 @@ export function startWebSocketService(opts: { httpServer: http.Server; state: Se
       for (const [ws] of clients) ws.close();
       clients.clear();
       adminClients.clear();
+      consoleClients.clear();
+      if (unsubscribeConsoleHub) {
+        unsubscribeConsoleHub();
+        unsubscribeConsoleHub = null;
+      }
       roomSubscribers.clear();
       wss.close();
     }

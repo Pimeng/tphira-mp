@@ -155,6 +155,7 @@ const CONFIG_FIELDS: ReadonlyArray<ConfigField> = [
   field({ key: "port", envName: "PORT", parse: parsePortValue, startupOnly: true }),
   field({ key: "http_service", envName: "HTTP_SERVICE", parse: parseBoolValue, startupOnly: true }),
   field({ key: "http_port", envName: "HTTP_PORT", parse: parsePortValue, startupOnly: true }),
+  field({ key: "gui", envName: "GUI", parse: parseBoolValue, startupOnly: true }),
   field({ key: "room_max_users", envName: "ROOM_MAX_USERS", parse: parseRoomMaxUsersValue }),
   field({ key: "max_rooms", envName: "MAX_ROOMS", parse: parsePositiveIntValue }),
   field({ key: "max_connections", envName: "MAX_CONNECTIONS", parse: parsePositiveIntValue }),

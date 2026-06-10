@@ -1079,6 +1079,8 @@ curl -H "X-Admin-Token: $TEMP_TOKEN" "$HOST/admin/rooms"
 
 返回服务器进程性能与业务运行指标，**仅管理员可访问**。
 
+可选查询参数：`?history=1` 时额外返回最近约 10 分钟的 CPU / 内存历史采样（每 2 秒一个点，最多 300 个），供图表回填使用。
+
 ### 请求示例
 
 ```bash
@@ -1092,6 +1094,10 @@ curl -H "X-Admin-Token: $ADMIN_TOKEN" \
 {
   "ok": true,
   "timestamp": 1735689600000,
+  "server": {
+    "name": "Phira MP",
+    "version": "1.11.0"
+  },
   "process": {
     "pid": 12345,
     "uptime": 3600.5,
@@ -1104,7 +1110,12 @@ curl -H "X-Admin-Token: $ADMIN_TOKEN" \
     "heapTotal": 33554432,
     "heapUsed": 16777216,
     "external": 2097152,
-    "arrayBuffers": 1048576
+    "arrayBuffers": 1048576,
+    "systemTotal": 17179869184
+  },
+  "cpu": {
+    "percent": 3.2,
+    "cores": 8
   },
   "business": {
     "activeSessions": 42,
@@ -1125,6 +1136,8 @@ curl -H "X-Admin-Token: $ADMIN_TOKEN" \
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `timestamp` | `number` | 指标采集时间戳（毫秒） |
+| `server.name` | `string` | 服务器显示名称 |
+| `server.version` | `string` | 服务端版本 |
 | `process.pid` | `number` | Node.js 进程 ID |
 | `process.uptime` | `number` | 进程运行时间（秒） |
 | `process.nodeVersion` | `string` | Node.js 版本 |
@@ -1135,6 +1148,10 @@ curl -H "X-Admin-Token: $ADMIN_TOKEN" \
 | `memory.heapUsed` | `number` | V8 堆内存已使用大小（字节） |
 | `memory.external` | `number` | 外部内存使用（字节） |
 | `memory.arrayBuffers` | `number` | ArrayBuffer 内存使用（字节） |
+| `memory.systemTotal` | `number` | 系统总内存（字节） |
+| `cpu.percent` | `number` | 进程 CPU 占用率（整机口径，0-100） |
+| `cpu.cores` | `number` | CPU 核心数 |
+| `history` | `array` | 仅 `?history=1` 时返回；元素为 `{ timestamp, cpuPercent, rss, heapUsed, heapTotal }` |
 | `business.activeSessions` | `number` | 当前活跃 TCP 会话数 |
 | `business.onlineUsers` | `number` | 当前在线用户数 |
 | `business.activeRooms` | `number` | 当前活跃房间数 |
@@ -1151,3 +1168,78 @@ curl -H "X-Admin-Token: $ADMIN_TOKEN" \
 - **容量规划**：通过 `activeSessions`、`onlineUsers`、`activeRooms` 评估当前负载
 - **告警触发**：当 `memory.heapUsed / memory.heapTotal` 超过阈值时触发告警
 - **业务统计**：统计不同时段的在线人数和房间数，生成运营报表
+
+## GUI 控制台接口
+
+服务端 GUI（见 [GUI 文档](./gui.md)）使用的接口，**仅管理员可访问**。
+
+### 在线用户列表
+
+`GET /admin/users`
+
+返回全部在线用户（包括未进入任何房间的大厅玩家，以及断线重连窗口内的用户）。
+
+```json
+{
+  "ok": true,
+  "total": 2,
+  "users": [
+    {
+      "id": 1902111,
+      "name": "玩家名",
+      "monitor": false,
+      "connected": true,
+      "room": "ABCD12",
+      "banned": false
+    }
+  ]
+}
+```
+
+`room` 为 `null` 表示在大厅（未进房间）；`connected` 为 `false` 表示处于断线重连窗口。
+
+### 获取最近控制台日志
+
+`GET /admin/console/logs?limit=200`
+
+返回最近的控制台日志行（内存环形缓冲，最多 500 条），`limit` 取值 1-500，默认 200。
+主要作为 WebSocket `console_subscribe`（见 [WebSocket API](./websocket.md)）不可用时的回退。
+
+```json
+{
+  "ok": true,
+  "lines": [{ "level": "INFO", "message": "……", "timestamp": 1735689600000 }]
+}
+```
+
+### 执行控制台命令
+
+`POST /admin/console/command`
+
+执行一条与终端 CLI 完全相同的控制台命令（见 [命令文档](./commands.md)），并返回捕获到的输出。
+每次调用都会在服务器日志中留下一条 INFO 级审计记录。
+
+```bash
+curl -X POST -H "X-Admin-Token: $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"command":"list"}' \
+  "http://127.0.0.1:12347/admin/console/command"
+```
+
+响应：
+
+```json
+{
+  "ok": true,
+  "lines": [{ "kind": "out", "text": "……" }]
+}
+```
+
+| 字段 | 说明 |
+|------|------|
+| `lines[].kind` | 输出类型：`out`（普通）、`error`（错误）、`success`（成功）、`info`（提示） |
+| `lines[].text` | 输出文本（单行） |
+
+错误码：`bad-command`（命令为空）、`command-too-long`（超过 500 字符）、`console-not-ready`（服务尚未完成启动）、`command-failed`（执行异常）。
+
+> 注意：`stop` / `shutdown` 命令同样有效，会优雅关闭服务器进程，请谨慎使用。

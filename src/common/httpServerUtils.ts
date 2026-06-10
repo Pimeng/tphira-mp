@@ -12,6 +12,16 @@ export function getClientIp(req: http.IncomingMessage, headerName: string = "X-F
 }
 
 /**
+ * 判断 IP 是否为本机回环地址（127.0.0.0/8 或 ::1）。
+ * 输入应为 getClientIp 的输出（IPv4 映射地址已剥离 ::ffff: 前缀）。
+ */
+export function isLoopbackIp(ip: string): boolean {
+  if (!ip) return false;
+  if (ip === "::1") return true;
+  return ip.startsWith("127.");
+}
+
+/**
  * 设置 CORS 响应头
  *
  * @param allowedOrigins - 允许的源列表；空数组时只允许同域（不设置 allow-origin）

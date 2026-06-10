@@ -30,7 +30,9 @@ import { startReplayCleanup } from "../replay/replayCleanup.js";
 import { startLogMaintenance } from "../utils/logMaintenance.js";
 import { ensureLocalesAvailable, fetchRemoteConfigExample } from "../utils/remoteAssets.js";
 import { parseProxyProtocol } from "../network/proxyProtocol.js";
-import { startCli } from "../cli/cli.js";
+import { dispatchCliCommand, makeCommandCtx, startCli } from "../cli/cli.js";
+import { makeCapturePrinter } from "../cli/cliHelpers.js";
+import { launchGuiWindow } from "../gui/guiWindow.js";
 import { parseRoomId, type RoomId } from "../../common/roomId.js";
 import { broadcastRoomAll as broadcastRoomAllImpl, pickRandomUserId } from "../network/httpHelpers.js";
 import { initRedisCache, getRedisClient } from "../utils/cache.js";
@@ -208,10 +210,17 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
    * 加载合并配置
    * 优先级：CLI 参数 > 环境变量 > 配置文件
    */
+  let httpServiceForcedByGui = false;
   const loadMergedConfig = (): ServerConfig => {
     const fileCfg = loadConfig(configPath);
     const envCfg = loadEnvConfig();
-    return mergeConfig(mergeConfig(fileCfg, envCfg), cliCfg);
+    const merged = mergeConfig(mergeConfig(fileCfg, envCfg), cliCfg);
+    // GUI 窗口依赖 HTTP 服务：启用 GUI 时自动开启（在加载阶段统一隐含，热重载同样适用）
+    if (merged.gui === true && merged.http_service !== true) {
+      merged.http_service = true;
+      httpServiceForcedByGui = true;
+    }
+    return merged;
   };
   const mergedCfg = loadMergedConfig();
   let currentConfig = mergedCfg;
@@ -225,6 +234,10 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
     testAccountIds: mergedCfg.test_account_ids ?? [1739989],
     enableRateLimiting: true,
     onLog: (level, message, timestamp, context) => {
+      // 喂入控制台日志中心（GUI 控制台与终端共享同一套等级过滤）
+      if (state && logger.isLevelEnabled(level)) {
+        state.consoleHub.append(level, message, timestamp.getTime());
+      }
       if (level === "DEBUG") return;
       if (!context?.roomId) return;
       let roomId: RoomId;
@@ -508,6 +521,10 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
   if (mergedCfg.http_service === true && !mergedCfg.admin_token?.trim()) {
     logger.warn(tl(state.serverLang, "http-admin-token-missing"));
   }
+  // GUI 隐含开启了 HTTP 服务时给出提示
+  if (httpServiceForcedByGui) {
+    logger.mark(tl(state.serverLang, "log-gui-http-forced"));
+  }
 
   // 启动时立即执行一次日志维护，清理历史堆积（异步，不阻塞启动）
   void logMaintenance.runOnce().catch(NOOP);
@@ -522,6 +539,35 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
     pickRandomUserId,
     requestShutdown: options.onShutdownRequest
   });
+
+  // 注册 GUI 控制台命令执行器：与终端 CLI 共用同一套命令分发，输出捕获后回传调用方。
+  // 每条命令记录一条审计日志（终端与 GUI 控制台都能看到）。
+  state.consoleExecutor = async (line: string) => {
+    const { printer, lines } = makeCapturePrinter();
+    logger.info(tl(state.serverLang, "log-gui-console-command", { command: line }));
+    await dispatchCliCommand(
+      makeCommandCtx({ state, logger, broadcastRoomAll, pickRandomUserId }, printer),
+      line,
+      options.onShutdownRequest
+    );
+    return lines;
+  };
+
+  // GUI 窗口模式：生成本机回环专用 token 并弹出独立窗口（类似 Minecraft 服务端 GUI）。
+  // token 仅接受来自回环地址的请求，通过 URL 片段（#）传入页面——片段不会出现在请求与日志中。
+  if (currentConfig.gui === true && httpService) {
+    state.guiLocalToken = newUuid();
+    const guiBaseUrl = `http://127.0.0.1:${httpService.address().port}/gui`;
+    const guiWindowUrl = `${guiBaseUrl}#token=${state.guiLocalToken}`;
+    void launchGuiWindow(guiWindowUrl).then((opened) => {
+      if (opened) {
+        logger.mark(tl(state.serverLang, "log-gui-window-launched", { url: guiBaseUrl }));
+      } else {
+        // 打开失败时输出带 token 的完整地址，便于在本机手动打开（日志仅本机可读）
+        logger.warn(tl(state.serverLang, "log-gui-window-failed", { url: guiWindowUrl }));
+      }
+    });
+  }
 
   // 返回运行中的服务器实例
   return {

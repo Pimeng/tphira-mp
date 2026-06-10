@@ -8,6 +8,11 @@ HTTP_SERVICE: false
 # HTTP 服务监听端口
 HTTP_PORT: 12347
 
+# 是否在启动时打开服务端 GUI 窗口（类似 Minecraft 服务端 GUI）
+# 含性能监控、房间/玩家数据和可执行命令的控制台；启用时自动开启 HTTP 服务
+# 也可通过启动参数 --gui 开启；窗口自动登录，无需输入 ADMIN_TOKEN
+# GUI: true
+
 # HTTP CORS 允许的来源列表
 # 配置后，只有列表中的来源才能通过浏览器访问 HTTP API
 # 不配置或为空数组时，向后兼容允许所有来源（*）

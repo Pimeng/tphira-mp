@@ -2,12 +2,16 @@ import type http from "node:http";
 import type { ServerState } from "../../core/state.js";
 import type { FluentVariable } from "@fluent/bundle";
 import type { Language } from "../../utils/l10n.js";
+import type { ProcessStatsSampler } from "../../utils/processStats.js";
 
 /** Per-server 状态：HTTP 服务级别的会话/封禁映射 */
 export type ServerServices = {
   readonly ADMIN_MAX_FAILED_ATTEMPTS_PER_IP: number;
   readonly REPLAY_SESSION_TTL_MS: number;
   readonly OTP_MAX_ATTEMPTS: number;
+
+  /** 进程 CPU/内存采样器（供 /admin/metrics 与 GUI 图表使用） */
+  processStats: ProcessStatsSampler;
 
   adminFailedAttemptsByIp: Map<string, { count: number; lastAttempt: number }>;
   adminBannedIps: Map<string, number>; // IP -> bannedAt timestamp

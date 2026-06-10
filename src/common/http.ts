@@ -3,6 +3,7 @@ export {
   extractAdminToken,
   getClientIp,
   handleOptionsRequest,
+  isLoopbackIp,
   readJson,
   writeJson
 } from "./httpServerUtils.js";

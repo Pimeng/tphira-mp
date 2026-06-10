@@ -55,6 +55,7 @@ function resolveStartupLang(): Language {
  *   -p, --port      监听端口
  *   --httpService   是否启用 HTTP 服务 (true/false)
  *   --httpPort      HTTP 服务端口
+ *   --gui           启动时打开服务端 GUI 窗口（自动开启 HTTP 服务）
  *   --roomMaxUsers  房间最大用户数
  *   --serverName    服务器名称
  *   --monitors      观战权限用户 ID 列表（逗号分隔）
@@ -68,6 +69,7 @@ async function main(): Promise<void> {
       port: { type: "string", short: "p" },
       httpService: { type: "string" },
       httpPort: { type: "string" },
+      gui: { type: "boolean" },
       roomMaxUsers: { type: "string" },
       serverName: { type: "string" },
       monitors: { type: "string" }
@@ -128,6 +130,7 @@ async function main(): Promise<void> {
     config: {
       ...(http_service !== undefined ? { http_service } : {}),
       ...(http_port !== undefined ? { http_port } : {}),
+      ...(values.gui === true ? { gui: true } : {}),
       ...(room_max_users !== undefined ? { room_max_users } : {}),
       ...(server_name !== undefined ? { server_name } : {}),
       ...(monitors !== undefined ? { monitors } : {})

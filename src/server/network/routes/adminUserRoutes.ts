@@ -9,11 +9,28 @@ import type { RequestContext } from "./types.js";
 
 /**
  * 处理 admin 用户管理路由：
- * /admin/users/:id (GET)、/admin/users/:id/disconnect、/admin/users/:id/move
+ * /admin/users (GET 在线用户列表)、/admin/users/:id (GET)、/admin/users/:id/disconnect、/admin/users/:id/move
  * /admin/ban/user、/admin/ban/room
  */
 export async function tryHandleAdminUserRoutes(ctx: RequestContext): Promise<boolean> {
   const { req, res, url, state, write, read } = ctx;
+
+  // 全部在线用户列表（含未进房间的大厅玩家与 dangling 重连窗口内的用户）
+  if (req.method === "GET" && url.pathname === "/admin/users") {
+    const users = await state.mutex.runExclusive(async () =>
+      [...state.users.values()].map((u) => ({
+        id: u.id,
+        name: u.name,
+        monitor: u.monitor,
+        connected: Boolean(u.session),
+        room: u.room ? roomIdToString(u.room.id) : null,
+        banned: state.bannedUsers.has(u.id)
+      }))
+    );
+    users.sort((a, b) => a.id - b.id);
+    write(200, { ok: true, total: users.length, users });
+    return true;
+  }
 
   const mUser = /^\/admin\/users\/(\d+)$/.exec(url.pathname);
   if (req.method === "GET" && mUser) {

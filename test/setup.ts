@@ -1,4 +1,16 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { setupMockFetch } from "./helpers.js";
+
+// 测试环境隔离：把应用主目录（配置 / 日志 / 数据 / locales）指向一次性临时目录。
+// 否则 getAppPaths() 会落到仓库根目录——只要服主在根目录真实运行过一次服务端，
+// 自动生成的 server_config.yml（ROOM_MAX_USERS / CORS_ORIGINS 等）就会渗入测试，
+// 测试日志也会写进仓库的 logs/ 与 data/。
+// 必须在任何 getAppPaths() 调用之前设置（其结果按 worker 缓存）；
+// 须在下方 originalEnv 快照之前设置，使 restoreTrackedEnv() 恢复到隔离值而非真实环境。
+// 临时目录下没有 locales 时，l10n 回退到嵌入式翻译（与 ftl 内容一致，由 embeddedLocales.test 保证）。
+process.env.PHIRA_MP_HOME = mkdtempSync(join(tmpdir(), "phira-mp-test-home-"));
 
 // 保存原始环境变量，以便测试间恢复
 const originalEnv: Record<string, string | undefined> = {};

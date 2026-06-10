@@ -27,6 +27,8 @@ export type ServerConfig = {
   port?: number;
   http_service?: boolean;
   http_port?: number;
+  /** 是否在启动时打开服务端 GUI 窗口（基于系统浏览器应用模式）；启用时自动开启 http_service */
+  gui?: boolean;
   room_max_users?: number;
   /** 是否启用玩家聊天，默认启用 */
   chat_enabled?: boolean;

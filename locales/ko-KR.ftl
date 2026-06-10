@@ -201,6 +201,10 @@ log-contest-game-results = 대회 방 "{ $room }" 결과: chart={ $chart } resul
 log-room-host-changed-cycle = 방 "{ $room }" 방장 변경 (순환): { $old } -> { $next }
 
 log-admin-broadcast = 관리자 브로드캐스트: { $message } ({ $rooms }개 방에 전송)
+log-gui-console-command = GUI 콘솔 명령 실행: { $command }
+log-gui-http-forced = GUI가 활성화되어 HTTP 서비스가 자동으로 켜졌습니다
+log-gui-window-launched = GUI 창이 열렸습니다: { $url }
+log-gui-window-failed = GUI 창을 자동으로 열 수 없습니다. 로컬 브라우저에서 여세요: { $url }
 log-admin-room-message = 관리자가 방 "{ $room }"에 메시지를 보냈습니다: { $message }
 log-room-disbanded-by-admin = 방 "{ $room }"가 관리자에 의해 해산되었습니다
 

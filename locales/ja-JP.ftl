@@ -201,6 +201,10 @@ log-contest-game-results = 大会ルーム「{ $room }」の結果：chart={ $ch
 log-room-host-changed-cycle = ルーム「{ $room }」のホストが変更されました（サイクル）：{ $old } -> { $next }
 
 log-admin-broadcast = 管理者ブロードキャスト：{ $message }（{ $rooms } ルームに送信）
+log-gui-console-command = GUI コンソールでコマンドを実行：{ $command }
+log-gui-http-forced = GUI が有効のため、HTTP サービスを自動的に開始しました
+log-gui-window-launched = GUI ウィンドウを開きました：{ $url }
+log-gui-window-failed = GUI ウィンドウを自動的に開けませんでした。ローカルブラウザで開いてください：{ $url }
 log-admin-room-message = 管理者がルーム「{ $room }」にメッセージを送信しました：{ $message }
 log-room-disbanded-by-admin = ルーム「{ $room }」が管理者によって解散されました
 

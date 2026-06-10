@@ -24,6 +24,8 @@ import { Language } from "../utils/l10n.js";
 import { ReplayRecorder } from "../replay/replayRecorder.js";
 import { defaultReplayBaseDir } from "../replay/replayStorage.js";
 import type { WebSocketService } from "../network/websocketService.js";
+import type { ConsoleOutputLine } from "../cli/cliHelpers.js";
+import { ConsoleHub } from "../utils/consoleHub.js";
 import { readAppVersion } from "./version.js";
 
 /** 管理员数据文件结构 */
@@ -112,6 +114,13 @@ export class ServerState {
 
   /** WebSocket 服务引用（仅在 HTTP 服务启用时存在） */
   wsService: WebSocketService | null = null;
+  /** 控制台日志中心：缓存最近日志并向 GUI 订阅者实时推送（由 server.ts 的 Logger onLog 喂入） */
+  readonly consoleHub = new ConsoleHub();
+  /**
+   * GUI 控制台命令执行器（由 server.ts 在 CLI 启动后注册）。
+   * 输入一行命令文本，返回捕获到的输出行；null 表示尚未就绪。
+   */
+  consoleExecutor: ((line: string) => Promise<ConsoleOutputLine[]>) | null = null;
   /** 自动上传回调函数（由 HttpService 设置，用于游戏结束后触发回放上传） */
   autoUploadCallback: ((userId: number, chartId: number, timestamp: number, recordId: number) => void) | null = null;
 
@@ -119,6 +128,12 @@ export class ServerState {
 
   /** 临时管理员 TOKEN 表（TOKEN -> { ip, expiresAt, banned }） */
   readonly tempAdminTokens = new Map<string, { ip: string; expiresAt: number; banned: boolean }>();
+
+  /**
+   * 本机 GUI 窗口专用 token（GUI 窗口模式启动时生成，服务器运行期间有效）。
+   * 仅当请求来自回环地址时被鉴权接受，用于 GUI 窗口免输入自动登录。
+   */
+  guiLocalToken: string | null = null;
 
   /** CLI 提权批准会话表（sessionKey -> 批准状态） */
   readonly cliApprovalSessions = new Map<

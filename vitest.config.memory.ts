@@ -13,6 +13,8 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["test/memory-leak/**/*.test.ts"],
+    // 与主配置一致：隔离应用主目录，避免读到仓库根目录的真实 server_config.yml
+    setupFiles: ["./test/setup.ts"],
     // 内存测试必须串行，不能并行
     fileParallelism: false,
     sequence: {

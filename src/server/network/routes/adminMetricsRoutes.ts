@@ -5,7 +5,7 @@ import type { RequestContext } from "./types.js";
  * 仅管理员可访问。
  */
 export async function tryHandleAdminMetricsRoutes(ctx: RequestContext): Promise<boolean> {
-  const { req, url, state, write } = ctx;
+  const { req, url, state, services, write } = ctx;
 
   if (req.method !== "GET" || url.pathname !== "/admin/metrics") {
     return false;
@@ -13,6 +13,9 @@ export async function tryHandleAdminMetricsRoutes(ctx: RequestContext): Promise<
 
   const mem = process.memoryUsage();
   const uptime = process.uptime();
+  const stats = services.processStats;
+  // ?history=1 时附带 CPU/内存历史采样（GUI 图表回填用）
+  const includeHistory = url.searchParams.get("history") === "1";
 
   // 业务指标
   const activeSessions = state.sessions.size;
@@ -33,6 +36,10 @@ export async function tryHandleAdminMetricsRoutes(ctx: RequestContext): Promise<
   write(200, {
     ok: true,
     timestamp: Date.now(),
+    server: {
+      name: state.serverName,
+      version: state.version
+    },
     process: {
       pid: process.pid,
       uptime,
@@ -45,8 +52,14 @@ export async function tryHandleAdminMetricsRoutes(ctx: RequestContext): Promise<
       heapTotal: mem.heapTotal,
       heapUsed: mem.heapUsed,
       external: mem.external,
-      arrayBuffers: mem.arrayBuffers
+      arrayBuffers: mem.arrayBuffers,
+      systemTotal: stats.systemTotalMem()
     },
+    cpu: {
+      percent: stats.current()?.cpuPercent ?? 0,
+      cores: stats.cpuCount()
+    },
+    ...(includeHistory ? { history: stats.history() } : {}),
     business: {
       activeSessions,
       onlineUsers,

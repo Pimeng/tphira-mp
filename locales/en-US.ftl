@@ -201,6 +201,10 @@ log-contest-game-results = Contest room "{ $room }" results: chart={ $chart } re
 log-room-host-changed-cycle = Room "{ $room }" host changed (cycle): { $old } -> { $next }
 
 log-admin-broadcast = Admin broadcast: { $message } (sent to { $rooms } rooms)
+log-gui-console-command = GUI console command executed: { $command }
+log-gui-http-forced = GUI enabled, HTTP service was turned on automatically
+log-gui-window-launched = GUI window opened: { $url }
+log-gui-window-failed = Failed to open the GUI window automatically. Open this URL in a local browser: { $url }
 log-admin-room-message = Admin sent message to room "{ $room }": { $message }
 log-room-disbanded-by-admin = Room "{ $room }" disbanded by admin
 

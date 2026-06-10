@@ -427,6 +427,51 @@ if __name__ == "__main__":
 
 这样既保证了数据的完整性，又避免了不必要的网络传输。
 
+## 控制台日志订阅（GUI）
+
+服务端 GUI（见 [GUI 文档](./gui.md)）使用的实时日志流。鉴权方式与 `admin_subscribe` 相同（永久或临时管理员 Token）。
+
+### 订阅控制台日志
+
+```json
+{
+  "type": "console_subscribe",
+  "token": "管理员Token"
+}
+```
+
+订阅成功后服务器立即回填最近的日志缓冲（最多 500 条）：
+
+```json
+{
+  "type": "console_subscribed",
+  "data": {
+    "lines": [{ "level": "INFO", "message": "……", "timestamp": 1234567890000 }]
+  }
+}
+```
+
+之后每产生一条新日志（与终端控制台同等级过滤）实时推送：
+
+```json
+{
+  "type": "console_log",
+  "data": { "level": "WARN", "message": "……", "timestamp": 1234567890000 }
+}
+```
+
+`level` 取值：`DEBUG`、`INFO`、`MARK`、`WARN`、`ERROR`。
+
+### 取消订阅
+
+```json
+{
+  "type": "console_unsubscribe"
+}
+```
+
+响应 `{ "type": "console_unsubscribed" }`。
+
 ### 管理员使用示例
 
 ```javascript

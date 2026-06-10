@@ -201,6 +201,10 @@ log-contest-game-results = Результаты турнирной комнат�
 log-room-host-changed-cycle = Хост комнаты «{ $room }» изменён (ротация): { $old } -> { $next }
 
 log-admin-broadcast = Рассылка администратора: { $message } (отправлено в { $rooms } комнат)
+log-gui-console-command = Команда из GUI-консоли: { $command }
+log-gui-http-forced = GUI включён, HTTP-сервис запущен автоматически
+log-gui-window-launched = Окно GUI открыто: { $url }
+log-gui-window-failed = Не удалось автоматически открыть окно GUI. Откройте в локальном браузере: { $url }
 log-admin-room-message = Администратор отправил сообщение в комнату «{ $room }»: { $message }
 log-room-disbanded-by-admin = Комната «{ $room }» распущена администратором
 

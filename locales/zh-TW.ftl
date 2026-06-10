@@ -201,6 +201,10 @@ log-contest-game-results = 比賽房間 「{ $room }」 成績：chart={ $chart 
 log-room-host-changed-cycle = 房間 「{ $room }」 房主變更（輪轉）：{ $old } -> { $next }
 
 log-admin-broadcast = 管理員全服廣播：{ $message }（傳送到 { $rooms } 個房間）
+log-gui-console-command = GUI 控制台執行命令：{ $command }
+log-gui-http-forced = 已啟用 GUI，HTTP 服務已自動開啟
+log-gui-window-launched = GUI 視窗已開啟：{ $url }
+log-gui-window-failed = 無法自動開啟 GUI 視窗，請在本機瀏覽器開啟：{ $url }
 log-admin-room-message = 管理員向房間 "{ $room }" 傳送訊息：{ $message }
 log-room-disbanded-by-admin = 房間 "{ $room }" 已被管理員解散
 

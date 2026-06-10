@@ -19,6 +19,33 @@ export function makePrinter(): Printer {
   };
 }
 
+/** GUI 控制台命令执行后捕获到的一行输出 */
+export type ConsoleOutputLine = {
+  kind: "out" | "error" | "success" | "info";
+  text: string;
+};
+
+/**
+ * 捕获式 Printer：输出不写终端，而是收集到 lines 数组，
+ * 供 GUI 控制台把命令结果回传给请求方。
+ */
+export function makeCapturePrinter(): { printer: Printer; lines: ConsoleOutputLine[] } {
+  const lines: ConsoleOutputLine[] = [];
+  const push = (kind: ConsoleOutputLine["kind"]) => (msg: string) => {
+    // 多行输出（如 help、列表）拆成独立行，便于前端逐行渲染
+    for (const text of msg.split("\n")) lines.push({ kind, text });
+  };
+  return {
+    printer: {
+      print: push("out"),
+      printError: push("error"),
+      printSuccess: push("success"),
+      printInfo: push("info")
+    },
+    lines
+  };
+}
+
 /** 解析正整数参数；非法时调用 printError 并返回 null。 */
 export function parseUserIdArg(
   arg: string | undefined,
