@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { EMBEDDED_LOCALES } from "../../src/server/utils/embeddedLocales.js";
 import { SUPPORTED_LANGS } from "../../src/server/utils/l10n.js";
 
@@ -13,7 +14,7 @@ describe("嵌入式 locales 兜底", () => {
   });
 
   test("嵌入内容与磁盘 locales.json 的 message id 完全一致（防止忘记 pnpm gen:locales）", () => {
-    const diskData = JSON.parse(readFileSync("locales.json", "utf8")) as Record<
+    const diskData = JSON.parse(readFileSync(join("locales", "locales.json"), "utf8")) as Record<
       string,
       Record<string, string>
     >;

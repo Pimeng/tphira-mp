@@ -26,7 +26,7 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, "..", "..");
-const localesFile = join(repoRoot, "locales.json");
+const localesFile = join(repoRoot, "locales", "locales.json");
 const srcDir = join(repoRoot, "src");
 
 const SUPPORTED_LANGS = ["en-US", "zh-CN", "zh-TW", "ja-JP", "ko-KR", "ru-RU"] as const;
