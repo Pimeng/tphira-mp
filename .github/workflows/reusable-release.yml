@@ -48,14 +48,8 @@ jobs:
       - name: 准备 Node.js 和依赖
         uses: ./.github/actions/setup-node-pnpm
 
-      - name: 安装 UPX (Linux)
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y upx-ucl
-
-      - name: 安装 UPX (macOS)
-        if: runner.os == 'macOS'
-        run: brew install upx
-
+      # UPX 仅在 Windows 上安装：postject 注入后的 ELF/macOS 二进制 UPX 无法打包，
+      # 详见 tools/package-sea.mjs 中的说明。
       - name: 安装 UPX (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -71,13 +65,15 @@ jobs:
           $arch = "${{ runner.arch }}".ToLowerInvariant()
           Copy-Item release\phira-mp-server.exe "phira-mp-windows-${arch}.exe"
 
-      - name: 命名可执行文件（Linux/macOS）
+      # 裸二进制打成 tar.xz（实测比 gzip 小约 1/3：26.5MB vs 39.6MB）；解压后是统一命名的 phira-mp-server。
+      - name: 打包可执行文件（Linux/macOS）
         if: runner.os != 'Windows'
         shell: bash
         run: |
           os="$(printf "%s" "${{ runner.os }}" | tr '[:upper:]' '[:lower:]')"
           arch="$(printf "%s" "${{ runner.arch }}" | tr '[:upper:]' '[:lower:]')"
-          cp release/phira-mp-server "phira-mp-${os}-${arch}"
+          command -v xz >/dev/null 2>&1 || brew install xz
+          tar -cf - -C release phira-mp-server | xz -9 -T0 > "phira-mp-${os}-${arch}.tar.xz"
 
       - name: 上传可执行文件
         uses: actions/upload-artifact@v4
@@ -98,18 +94,19 @@ jobs:
         with:
           usesh: true
           prepare: |
-            pkg install -y node22 npm-node22 upx
+            pkg install -y node22 npm-node22
             npm install -g pnpm@10.29.3
           run: |
             pnpm install --frozen-lockfile
             pnpm run package:sea
-            cp release/phira-mp-server phira-mp-freebsd-x64
+            # VM 内存有限，xz 单线程压缩（-9 多线程每线程峰值内存约 700MB）
+            tar -cf - -C release phira-mp-server | xz -9 > phira-mp-freebsd-x64.tar.xz
 
       - name: 上传可执行文件
         uses: actions/upload-artifact@v4
         with:
           name: phira-mp-FreeBSD-X64
-          path: phira-mp-freebsd-x64
+          path: phira-mp-freebsd-x64.tar.xz
 
   build-bundle:
     needs: [test]
@@ -244,8 +241,21 @@ jobs:
             NOTES+="$OTHERS"
           fi
 
+          # 获取当前版本（用于生成对比链接）
+          input_version="${{ inputs.version }}"
+          if [ -n "$input_version" ]; then
+            current_version="$input_version"
+          else
+            current_version=$(node -p "require('./package.json').version")
+          fi
+          CURRENT_TAG="v${current_version}"
+
           NOTES+="***"$'\n'
-          NOTES+="完整更新日志"
+          if [ -n "$PREVIOUS_VERSION" ]; then
+            NOTES+="[完整更新日志](https://github.com/${{ github.repository }}/compare/${PREVIOUS_VERSION}...${CURRENT_TAG})"
+          else
+            NOTES+="完整更新日志"
+          fi
 
           echo "release_notes<<EOF" >> $GITHUB_OUTPUT
           echo "$NOTES" >> $GITHUB_OUTPUT
@@ -276,11 +286,11 @@ jobs:
         with:
           tag_name: v${{ steps.version.outputs.version }}
           files: |
-            artifacts/phira-mp-Linux-ARM64/phira-mp-linux-arm64
-            artifacts/phira-mp-Linux-X64/phira-mp-linux-x64
+            artifacts/phira-mp-Linux-ARM64/phira-mp-linux-arm64.tar.xz
+            artifacts/phira-mp-Linux-X64/phira-mp-linux-x64.tar.xz
             artifacts/phira-mp-Windows-X64/phira-mp-windows-x64.exe
-            artifacts/phira-mp-macOS-ARM64/phira-mp-macos-arm64
-            artifacts/phira-mp-FreeBSD-X64/phira-mp-freebsd-x64
+            artifacts/phira-mp-macOS-ARM64/phira-mp-macos-arm64.tar.xz
+            artifacts/phira-mp-FreeBSD-X64/phira-mp-freebsd-x64.tar.xz
             artifacts/phira-mp-nodejs-bundle/*.zip
             locales.json
             server_config.example.yml

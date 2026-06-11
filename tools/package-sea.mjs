@@ -69,15 +69,33 @@ run(process.execPath, ["--experimental-sea-config", "dist-sea/sea-config.json"])
 const outBin = join("release", binName());
 copyFileSync(nodePath(), outBin);
 
+// 注入前 strip 符号表与调试节（实测 Linux 约省 17MB、macOS 约省 25MB）。
+// 必须在 postject 之前做：注入后 ELF 已被 LIEF 重写，再 strip 有损坏风险。
+// macOS 用 -x 仅删本地符号（保留导出符号，脚本结尾会重新 ad-hoc 签名）；
+// FreeBSD pkg 的 node 本身已 strip，此步为空操作；strip 缺失或失败时跳过不中断构建。
+if (process.platform !== "win32") {
+  try {
+    console.log("正在 strip 可执行文件...");
+    run("strip", process.platform === "darwin" ? ["-x", outBin] : [outBin]);
+    console.log("strip 完成");
+  } catch {
+    console.log("strip 不可用或失败，跳过");
+  }
+}
+
 runPnpm(["exec", ...postjectArgs(outBin, "dist-sea/sea-prep.blob")]);
 
-// UPX 压缩（可选，系统未安装 upx 或压缩失败时不中断构建）
-try {
-  console.log("正在使用 UPX 压缩可执行文件...");
-  run("upx", ["--best", outBin]);
-  console.log("UPX 压缩完成");
-} catch {
-  console.log("UPX 不可用或压缩失败，跳过压缩");
+// UPX 压缩仅 Windows 可用：postject(LIEF) 注入会把 ELF 程序头表挪到文件末尾，
+// UPX 见到非常规 e_phoff 直接拒绝（bad e_phoff）；现代 macOS 二进制 UPX 已不支持。
+// PE 注入不改动头部布局，故仅在 Windows 上压缩（可选，未安装或失败时不中断构建）。
+if (process.platform === "win32") {
+  try {
+    console.log("正在使用 UPX 压缩可执行文件...");
+    run("upx", ["--best", outBin]);
+    console.log("UPX 压缩完成");
+  } catch {
+    console.log("UPX 不可用或压缩失败，跳过压缩");
+  }
 }
 
 // macOS 代码签名

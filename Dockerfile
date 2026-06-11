@@ -12,6 +12,9 @@ COPY tools ./tools
 # 避免与 lockfile 生成版本不一致（corepack install 读取本地 package.json，无需硬编码版本）
 RUN corepack enable && corepack install
 
+# binutils 提供 strip，供 package:sea 注入前去掉符号表减小二进制（镜像同步受益）
+RUN apk add --no-cache binutils
+
 RUN pnpm install --frozen-lockfile
 RUN pnpm run package:sea
 # 由 ftl 生成 release 资产 locales.json（落在构建阶段根目录，不污染源码 locales/）。
