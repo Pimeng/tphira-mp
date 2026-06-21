@@ -73,6 +73,13 @@ export class ServerState {
   replayEnabled: boolean;
   /** 是否允许创建新房间 */
   roomCreationEnabled: boolean;
+  /**
+   * 维护模式：开启后拒绝新连接与新建/加入房间，仅放行仍在房间内（dangling）的用户重连，
+   * 让当前对局自然结束。纯内存状态，重启后自动复位。
+   */
+  maintenance = false;
+  /** 维护模式自定义提示（服主在 `maintenance on <message>` 指定），用于拒绝新连接时的回包；为空时用默认文案 */
+  maintenanceMessage: string | null = null;
   /** 服务器版本 */
   version: string;
 

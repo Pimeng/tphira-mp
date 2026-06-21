@@ -93,6 +93,14 @@ command-rate-limited = 操作が頻繁すぎます。しばらくしてから再
 
 chart-fetch-failed = 譜面の取得に失敗しました
 
+server-maintenance = サーバーはメンテナンス中のため、現在参加できません
+log-auth-rejected-maintenance = メンテナンスモード：新規接続「{ $user }」を拒否しました
+chat-maintenance-enabled = ⚙️ サーバーがメンテナンスモードに入りました。新規参加を停止します。現在の対局を早めに終了してください
+chat-maintenance-disabled = ✅ サーバーのメンテナンスが終了し、通常状態に戻りました
+chat-server-stopping = ⚠️ サーバーはまもなくメンテナンスのため停止します。対局終了後に切断されます
+cli-maintenance-status = メンテナンスモード：{ $state }
+cli-usage-maintenance = 使い方：maintenance <on|off|status> [お知らせメッセージ]
+
 net-connection-closed = 接続が閉じられました
 net-send-timeout = 送信タイムアウト
 net-unsupported-protocol-version = サポートされていないプロトコルバージョン：{ $version }
@@ -252,6 +260,7 @@ cli-help =
     disband <roomId>              - ルームを解散
     replay <on|off|status>        - リプレイ録画の切り替え
     roomcreation <on|off|status>  - ルーム作成の切り替え
+    maintenance <on|off|status> [メッセージ]  - メンテナンスモード切り替え（新規参加を停止）
     contest <roomId> <subcommand> - 大会ルーム管理
       contest <roomId> enable [userIds...]    - 大会モードを有効化
       contest <roomId> disable                - 大会モードを無効化

@@ -656,10 +656,45 @@ reject a1b2c3d4
 
 ## 服务器控制 / Server Control
 
-### stop / shutdown
-提示如何停止服务器。
+### maintenance
+切换维护模式：暂停新玩家加入（拒绝新连接与新建/加入房间），让当前对局自然结束，并向所有房间广播通知。
 
-Shows how to stop the server.
+Toggle maintenance mode: pause new players (reject new connections and room create/join), let current games finish, and broadcast a notice to all rooms.
+
+**用法 / Usage:**
+```
+maintenance <on|off|status> [提示消息]
+```
+
+**参数 / Parameters:**
+- `on`：进入维护模式；其余参数作为自定义提示消息（可选）/ Enter maintenance; remaining args form an optional custom notice
+- `off`：退出维护模式 / Exit maintenance
+- `status`：查看当前状态 / Show current state
+
+**示例 / Examples:**
+```
+maintenance on
+maintenance on 服务器将进行更新，请尽快结束当前对局
+maintenance off
+maintenance status
+```
+
+**注意 / Notes:**
+- 维护期间仍在房间内（断线挂起）的用户**允许重连**回原房间完成对局，只拦截全新连接
+- Users still in a room (dangling) are **allowed to reconnect** to finish their game; only brand-new connections are blocked
+- 已在线用户不会被踢，但在维护期间无法新建或加入房间
+- Online users are not kicked, but cannot create or join rooms while maintenance is on
+- 维护状态仅存于内存，重启后自动复位
+- Maintenance state is in-memory and resets on restart
+
+典型流程 / Typical flow：`maintenance on` → 用 `list` 观察对局结束 → `stop`。
+
+---
+
+### stop / shutdown
+优雅停止服务器：先进入维护模式并向所有房间广播关停通知，再关闭服务、释放资源后退出。
+
+Gracefully stop the server: enter maintenance mode and broadcast a shutdown notice to all rooms, then close services, release resources, and exit.
 
 **用法 / Usage:**
 ```
@@ -668,10 +703,12 @@ shutdown
 ```
 
 **注意 / Notes:**
-- 使用 Ctrl+C 来优雅地停止服务器
-- Use Ctrl+C to gracefully stop the server
-- 服务器会等待所有连接关闭后再退出
-- Server will wait for all connections to close before exiting
+- 关停前会广播通知，玩家不会被静默断开
+- A notice is broadcast before shutdown, so players are not disconnected silently
+- 等待 TCP 连接关闭（最长 10 秒）后强制结束剩余连接，并落盘封禁数据、收尾回放录制
+- Waits for TCP connections to close (up to 10s) then force-closes the rest, persisting ban data and finalizing replay recording
+- 发送 SIGINT（Ctrl+C）/ SIGTERM 也会触发同一套优雅关闭
+- Sending SIGINT (Ctrl+C) / SIGTERM triggers the same graceful shutdown
 
 ---
 

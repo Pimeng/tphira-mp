@@ -93,6 +93,14 @@ command-rate-limited = Слишком много запросов, пожалу�
 
 chart-fetch-failed = Не удалось получить карту
 
+server-maintenance = Сервер на техническом обслуживании, подключение временно недоступно
+log-auth-rejected-maintenance = Режим обслуживания: новое подключение «{ $user }» отклонено
+chat-maintenance-enabled = ⚙️ Сервер перешёл в режим обслуживания, новые игроки приостановлены. Пожалуйста, скорее завершите текущую игру
+chat-maintenance-disabled = ✅ Обслуживание сервера завершено, работа в обычном режиме
+chat-server-stopping = ⚠️ Сервер скоро остановится на обслуживание; вы будете отключены после текущей игры
+cli-maintenance-status = Режим обслуживания: { $state }
+cli-usage-maintenance = Использование: maintenance <on|off|status> [текст уведомления]
+
 net-connection-closed = Соединение закрыто
 net-send-timeout = Тайм-аут отправки
 net-unsupported-protocol-version = Неподдерживаемая версия протокола: { $version }
@@ -252,6 +260,7 @@ cli-help =
     disband <roomId>              - Распустить комнату
     replay <on|off|status>        - Переключение записи повтора
     roomcreation <on|off|status>  - Переключение создания комнат
+    maintenance <on|off|status> [сообщение]  - Режим обслуживания (пауза новых игроков)
     contest <roomId> <subcommand> - Управление турнирной комнатой
       contest <roomId> enable [userIds...]    - Включить турнирный режим
       contest <roomId> disable                - Выключить турнирный режим

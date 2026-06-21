@@ -93,6 +93,14 @@ command-rate-limited = 操作過於頻繁，請稍後再試
 
 chart-fetch-failed = 取得譜面失敗
 
+server-maintenance = 伺服器正在維護中，暫時無法加入
+log-auth-rejected-maintenance = 維護模式：已拒絕新連線 “{ $user }”
+chat-maintenance-enabled = ⚙️ 伺服器已進入維護模式，暫停新玩家加入，請盡快結束當前對局
+chat-maintenance-disabled = ✅ 伺服器維護已結束，恢復正常
+chat-server-stopping = ⚠️ 伺服器即將關閉維護，對局結束後連線將斷開
+cli-maintenance-status = 維護模式：{ $state }
+cli-usage-maintenance = 用法：maintenance <on|off|status> [提示訊息]
+
 net-connection-closed = 連線已關閉
 net-send-timeout = 傳送逾時
 net-unsupported-protocol-version = 不支援的協定版本：{ $version }
@@ -252,6 +260,7 @@ cli-help =
     disband <roomId>              - 解散房間
     replay <on|off|status>        - 回放錄製開關
     roomcreation <on|off|status>  - 房間建立開關
+    maintenance <on|off|status> [訊息]  - 維護模式開關（暫停新玩家加入）
     contest <roomId> <subcommand> - 比賽房間管理
       contest <roomId> enable [userIds...]    - 啟用比賽模式
       contest <roomId> disable                - 停用比賽模式

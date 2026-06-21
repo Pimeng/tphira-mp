@@ -93,6 +93,14 @@ command-rate-limited = 요청이 너무 많습니다. 잠시 후 다시 시도�
 
 chart-fetch-failed = 채보를 가져오지 못했습니다
 
+server-maintenance = 서버가 점검 중이라 지금은 참가할 수 없습니다
+log-auth-rejected-maintenance = 점검 모드: 새 연결 "{ $user }"을(를) 거부했습니다
+chat-maintenance-enabled = ⚙️ 서버가 점검 모드로 전환되어 신규 참가가 중단됩니다. 현재 게임을 곧 마쳐 주세요
+chat-maintenance-disabled = ✅ 서버 점검이 끝나 정상으로 돌아왔습니다
+chat-server-stopping = ⚠️ 서버가 곧 점검을 위해 종료됩니다. 현재 게임이 끝나면 연결이 끊깁니다
+cli-maintenance-status = 점검 모드: { $state }
+cli-usage-maintenance = 사용법: maintenance <on|off|status> [안내 메시지]
+
 net-connection-closed = 연결이 닫혔습니다
 net-send-timeout = 전송 시간 초과
 net-unsupported-protocol-version = 지원되지 않는 프로토콜 버전: { $version }
@@ -252,6 +260,7 @@ cli-help =
     disband <roomId>              - 방 해산
     replay <on|off|status>        - 리플레이 녹화 전환
     roomcreation <on|off|status>  - 방 생성 전환
+    maintenance <on|off|status> [메시지]  - 점검 모드 전환 (신규 참가 중단)
     contest <roomId> <subcommand> - 대회 방 관리
       contest <roomId> enable [userIds...]    - 대회 모드 활성화
       contest <roomId> disable                - 대회 모드 비활성화

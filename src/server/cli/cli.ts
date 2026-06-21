@@ -13,6 +13,7 @@ import { handleKick, handleListUsers, handleUserInfo } from "./commands/users.js
 import { handleBan, handleBanList, handleBanRoom, handleUnban, handleUnbanRoom } from "./commands/bans.js";
 import { handleBroadcast } from "./commands/broadcast.js";
 import { handleReplay, handleRoomCreation } from "./commands/toggles.js";
+import { handleMaintenance, handleStop } from "./commands/maintenance.js";
 import { handleContest } from "./commands/contest.js";
 import { handleIpBlacklist } from "./commands/ipBlacklist.js";
 import { handleApprove, handleDeny, handlePending } from "./commands/approval.js";
@@ -55,7 +56,7 @@ export async function dispatchCliCommand(
   input: string,
   requestShutdown?: () => void
 ): Promise<void> {
-  const { print, printError, printInfo } = cmdCtx.printer;
+  const { print, printError } = cmdCtx.printer;
   const t = cmdCtx.t;
 
   const parts = input.split(/\s+/);
@@ -113,6 +114,9 @@ export async function dispatchCliCommand(
     case "roomcreation":
       await handleRoomCreation(cmdCtx, args);
       break;
+    case "maintenance":
+      await handleMaintenance(cmdCtx, args);
+      break;
     case "contest":
       await handleContest(cmdCtx, args);
       break;
@@ -131,12 +135,7 @@ export async function dispatchCliCommand(
       break;
     case "stop":
     case "shutdown":
-      if (requestShutdown) {
-        printInfo(t("cli-stopping"));
-        requestShutdown();
-      } else {
-        printInfo(t("cli-stop-hint"));
-      }
+      await handleStop(cmdCtx, requestShutdown);
       break;
     default:
       printError(t("cli-unknown-command", { cmd: cmd ?? "" }));

@@ -93,6 +93,14 @@ command-rate-limited = 操作过于频繁，请稍后再试
 
 chart-fetch-failed = 获取谱面失败
 
+server-maintenance = 服务器正在维护中，暂时无法加入
+log-auth-rejected-maintenance = 维护模式：已拒绝新连接 “{ $user }”
+chat-maintenance-enabled = ⚙️ 服务器已进入维护模式，暂停新玩家加入，请尽快结束当前对局
+chat-maintenance-disabled = ✅ 服务器维护已结束，恢复正常
+chat-server-stopping = ⚠️ 服务器即将关闭维护，对局结束后连接将断开
+cli-maintenance-status = 维护模式：{ $state }
+cli-usage-maintenance = 用法：maintenance <on|off|status> [提示消息]
+
 net-connection-closed = 连接已关闭
 net-send-timeout = 发送超时
 net-unsupported-protocol-version = 不支持的协议版本：{ $version }
@@ -252,6 +260,7 @@ cli-help =
     disband <roomId>              - 解散房间
     replay <on|off|status>        - 回放录制开关
     roomcreation <on|off|status>  - 房间创建开关
+    maintenance <on|off|status> [消息]  - 维护模式开关（暂停新玩家加入）
     contest <roomId> <subcommand> - 比赛房间管理
       contest <roomId> enable [userIds...]    - 启用比赛模式
       contest <roomId> disable                - 禁用比赛模式

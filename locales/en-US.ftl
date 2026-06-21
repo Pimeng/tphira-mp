@@ -93,6 +93,14 @@ command-rate-limited = Too many requests, please slow down
 
 chart-fetch-failed = Failed to fetch chart
 
+server-maintenance = The server is under maintenance and cannot be joined right now
+log-auth-rejected-maintenance = Maintenance mode: rejected new connection "{ $user }"
+chat-maintenance-enabled = ⚙️ The server has entered maintenance mode; new players are paused. Please finish the current game soon
+chat-maintenance-disabled = ✅ Server maintenance is over; back to normal
+chat-server-stopping = ⚠️ The server is shutting down for maintenance; you will be disconnected after the current game
+cli-maintenance-status = Maintenance mode: { $state }
+cli-usage-maintenance = Usage: maintenance <on|off|status> [notice message]
+
 net-connection-closed = Connection closed
 net-send-timeout = Send timeout
 net-unsupported-protocol-version = Unsupported protocol version: { $version }
@@ -252,6 +260,7 @@ cli-help =
     disband <roomId>              - Disband room
     replay <on|off|status>        - Replay recording toggle
     roomcreation <on|off|status>  - Room creation toggle
+    maintenance <on|off|status> [msg]  - Maintenance mode toggle (pause new players)
     contest <roomId> <subcommand> - Contest room management
       contest <roomId> enable [userIds...]    - Enable contest mode
       contest <roomId> disable                - Disable contest mode

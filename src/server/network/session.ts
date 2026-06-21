@@ -471,6 +471,21 @@ export class Session {
     }
 
     try {
+      // 维护模式：拒绝新连接，但放行仍在线/挂起（dangling）的用户重连，让其能回到原房间完成对局
+      if (this.state.maintenance && !this.state.users.has(me.id)) {
+        const userLang = new Language(me.language);
+        const reason = this.state.maintenanceMessage?.trim() || userLang.format("server-maintenance");
+        this.state.logger.info(
+          tl(this.state.serverLang, "log-auth-rejected-maintenance", { user: me.name }),
+          undefined,
+          { ip: this.remoteIp, isConnectionLog: true }
+        );
+        await this.trySend({ type: "Authenticate", result: err(reason) });
+        this.panicked = true;
+        await this.markLost();
+        return;
+      }
+
       // Don't reject banned users at auth time - allow them to connect
       // They will be blocked from operations later
 
@@ -739,6 +754,7 @@ export class Session {
 
   private async processCreateRoom(user: User, id: string): Promise<Record<never, never>> {
     if (await this.checkAndHandleBan(user)) throw new Error(user.lang.format("user-banned-by-server"));
+    if (this.state.maintenance) throw new Error(user.lang.format("server-maintenance"));
     if (!this.state.roomCreationEnabled) throw new Error(user.lang.format("room-creation-disabled"));
     if (user.room) throw new Error(user.lang.format("room-already-in-room"));
     const roomId = parseRoomId(id);
@@ -772,6 +788,7 @@ export class Session {
 
   private async processJoinRoom(user: User, roomIdStr: string, monitor: boolean): Promise<JoinRoomResponse> {
     if (await this.checkAndHandleBan(user)) throw new Error(user.lang.format("user-banned-by-server"));
+    if (this.state.maintenance) throw new Error(user.lang.format("server-maintenance"));
     if (user.room) throw new Error(user.lang.format("room-already-in-room"));
 
     const roomId = parseRoomId(roomIdStr);
