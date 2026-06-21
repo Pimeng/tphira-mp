@@ -56,6 +56,8 @@ export type ServerConfig = {
   max_rooms?: number;
   /** 全服同时在线的 TCP 连接数上限；未设置或 <1 表示不限制 */
   max_connections?: number;
+  /** 是否启用会话级命令限流（防刷屏/防对上游 API 放大），默认启用；设为 false 关闭（如内网/比赛） */
+  command_rate_limit?: boolean;
   /** HTTP 请求速率限制：每窗口允许的最大请求数（默认 100） */
   http_rate_limit_max_requests?: number;
   /** HTTP 请求速率限制：时间窗口长度（毫秒，默认 60000 = 1分钟） */
@@ -88,6 +90,12 @@ export type Chart = {
 export type RecordData = {
   id: number;
   player: number;
+  /**
+   * 该成绩对应的谱面 ID（Phira API /record/:id 返回时携带）。
+   * 用于在 Played 时校验成绩与房间当前谱面是否一致，防止用别的（更简单的）谱面成绩冒充。
+   * 旧客户端 / API 未返回时为 undefined，此时跳过校验（fail-open，避免误伤正常玩家）。
+   */
+  chart?: number;
   score: number;
   perfect: number;
   good: number;

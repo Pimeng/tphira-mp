@@ -87,6 +87,9 @@ room-game-aborted = 게임이 중단되었습니다
 record-invalid = 잘못된 기록
 record-already-uploaded = 기록이 이미 업로드되었습니다
 record-fetch-failed = 기록을 가져오지 못했습니다
+record-chart-mismatch = 기록이 현재 차트와 일치하지 않습니다
+
+command-rate-limited = 요청이 너무 많습니다. 잠시 후 다시 시도하세요
 
 chart-fetch-failed = 채보를 가져오지 못했습니다
 

@@ -87,6 +87,9 @@ room-game-aborted = Игра прервана
 record-invalid = Недействительная запись
 record-already-uploaded = Запись уже загружена
 record-fetch-failed = Не удалось получить запись
+record-chart-mismatch = Запись не соответствует текущей карте
+
+command-rate-limited = Слишком много запросов, пожалуйста, помедленнее
 
 chart-fetch-failed = Не удалось получить карту
 

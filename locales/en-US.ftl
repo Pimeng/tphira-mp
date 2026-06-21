@@ -87,6 +87,9 @@ room-game-aborted = Game aborted
 record-invalid = Invalid record
 record-already-uploaded = Record already uploaded
 record-fetch-failed = Failed to fetch record
+record-chart-mismatch = Record does not match the current chart
+
+command-rate-limited = Too many requests, please slow down
 
 chart-fetch-failed = Failed to fetch chart
 

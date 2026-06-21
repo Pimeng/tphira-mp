@@ -87,6 +87,9 @@ room-game-aborted = ゲームが中止されました
 record-invalid = 記録が不正です
 record-already-uploaded = 記録は既にアップロードされています
 record-fetch-failed = 記録の取得に失敗しました
+record-chart-mismatch = 記録が現在の譜面と一致しません
+
+command-rate-limited = 操作が頻繁すぎます。しばらくしてから再試行してください
 
 chart-fetch-failed = 譜面の取得に失敗しました
 

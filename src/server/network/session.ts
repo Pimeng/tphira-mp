@@ -41,6 +41,7 @@ import {
 import { sendWelcomeExtras, type HitokotoValue } from "./session/welcomeMessage.js";
 import { getHitokotoCached } from "../utils/hitokotoCache.js";
 import { processClientCommand, type RoomCallbacks } from "./session/commandRouter.js";
+import { CommandRateLimiter, categorize } from "./session/commandRateLimiter.js";
 import { prepareServerCommand, type PreparedServerCommand } from "./serverCommandTransport.js";
 
 /** 观战数据聚合间隔（毫秒） */
@@ -232,6 +233,13 @@ export class Session {
    */
   private readonly monitorBuffer: MonitorBuffer;
 
+  /**
+   * 命令级令牌桶限流器（每会话独立）。
+   * 防止已认证客户端刷屏聊天或借大量不同 chart/record id 放大对 Phira API 的请求。
+   * 实时游戏数据（Touches/Judges）与心跳（Ping）不参与限流。
+   */
+  private readonly commandRateLimiter = new CommandRateLimiter();
+
   /** 关联的用户实例（认证成功后设置） */
   user: User | null = null;
   /** RoomCallbacks 缓存（按 Room 实例复用，避免高频游戏中重复创建对象） */
@@ -375,10 +383,50 @@ export class Session {
       return;
     }
 
+    // 命令级限流：放行心跳与实时游戏数据（categorize 返回 null），挡下异常高频的
+    // 聊天 / 房间 / 触发上游 API 的命令。可由 COMMAND_RATE_LIMIT=false 关闭（如内网/比赛）。
+    if (this.state.config.command_rate_limit !== false) {
+      const category = categorize(cmd.type);
+      if (category && !this.commandRateLimiter.allow(category)) {
+        this.state.logger.debug(`[${this.id}] command rate-limited: ${cmd.type}`, undefined, {
+          userId: this.user?.id
+        });
+        const resp = this.rateLimitedResponse(cmd);
+        if (resp) await this.trySend(resp);
+        return;
+      }
+    }
+
     const t0 = Session._profilerStart?.();
     const resp = await this.process(cmd);
     if (resp) await this.trySend(resp);
     Session._profilerEnd?.(t0 ?? 0, cmd.type);
+  }
+
+  /**
+   * 为被限流的命令构造一条「操作过于频繁」的错误响应，避免客户端因收不到响应而挂起等待。
+   * 仅对「请求-响应」型命令（形如 `{ type, result }`）返回错误；其余返回 null（不回复）。
+   */
+  private rateLimitedResponse(cmd: ClientCommand): ServerCommand | null {
+    const lang = this.user?.lang ?? this.state.serverLang;
+    const message = this.localizeMessage(lang, "command-rate-limited");
+    switch (cmd.type) {
+      case "Chat":
+      case "CreateRoom":
+      case "JoinRoom":
+      case "LeaveRoom":
+      case "LockRoom":
+      case "CycleRoom":
+      case "SelectChart":
+      case "RequestStart":
+      case "Ready":
+      case "CancelReady":
+      case "Played":
+      case "Abort":
+        return { type: cmd.type, result: err(message) } as ServerCommand;
+      default:
+        return null;
+    }
   }
 
   /** Profiler hooks */

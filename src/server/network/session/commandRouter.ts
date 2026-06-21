@@ -361,6 +361,11 @@ export async function processClientCommand(ctx: CommandContext, cmd: ClientComma
           const room = ctx.requireRoom(user);
           const record = await ctx.fetchRecord(user, cmd.id);
           if (record.player !== user.id) throw new Error(user.lang.format("record-invalid"));
+          // 反作弊：成绩必须对应本房间当前谱面，防止提交别的（更简单的）谱面成绩冒充。
+          // record.chart 缺失（API/旧客户端未返回）时跳过校验，避免误伤正常玩家。
+          if (room.chart && typeof record.chart === "number" && record.chart !== room.chart.id) {
+            throw new Error(user.lang.format("record-chart-mismatch"));
+          }
           logRoomMark(
             state.logger,
             state.serverLang,

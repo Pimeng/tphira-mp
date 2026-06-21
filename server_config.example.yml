@@ -55,6 +55,12 @@ ROOM_MAX_USERS: 12
 # 用于防止连接洪水/资源耗尽（与单 IP 限速 CONNECTION_RATE_LIMIT 互补）
 # MAX_CONNECTIONS: 2000
 
+# 是否启用会话级命令限流，默认启用
+# 对已认证连接内的聊天/房间/选谱/上报成绩等命令做令牌桶限流，防止刷屏聊天淹没房间、
+# 或借大量不同谱面/成绩 ID 放大对 Phira API 的请求。实时游戏数据(触控/判定)与心跳不受限。
+# 默认阈值刻意宽松，正常游玩不会触发；内网或比赛等可信场景可设为 false 关闭。
+# COMMAND_RATE_LIMIT: true
+
 # 是否启用聊天，默认开启；关闭后玩家聊天会替换为安全提示
 CHAT_ENABLED: true
 

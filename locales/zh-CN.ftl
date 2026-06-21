@@ -87,6 +87,9 @@ room-game-aborted = 对局已中止
 record-invalid = 记录不合法
 record-already-uploaded = 已上传记录
 record-fetch-failed = 获取记录失败
+record-chart-mismatch = 成绩与当前谱面不匹配
+
+command-rate-limited = 操作过于频繁，请稍后再试
 
 chart-fetch-failed = 获取谱面失败
 
