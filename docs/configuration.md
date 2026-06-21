@@ -389,8 +389,30 @@ MAX_CONNECTIONS: 2000
 
 注意 / Note:
 - 支持配置热重载，无需重启 / Supports hot reload, no restart needed
-- 与单 IP 限速互补：`MAX_CONNECTIONS` 控制全局总量，连接速率限制器控制单 IP 突发
-- Complements per-IP rate limiting: `MAX_CONNECTIONS` caps the global total, the rate limiter caps per-IP bursts
+- 与单 IP 限速互补：`MAX_CONNECTIONS` 控制全局总量，`CONNECTION_RATE_LIMIT` 控制单 IP 突发
+- Complements per-IP rate limiting: `MAX_CONNECTIONS` caps the global total, `CONNECTION_RATE_LIMIT` caps per-IP bursts
+
+#### CONNECTION_RATE_LIMIT
+
+单个 IP 在每个 10 秒滑动窗口内允许的新建 TCP 连接数。超过后该 IP 会被临时封禁 30 秒，用于抵御来自单一来源的连接洪水。
+
+Number of new TCP connections allowed per IP within each 10-second sliding window. Exceeding it temporarily bans that IP for 30 seconds, mitigating connection floods from a single source.
+
+- 类型 / Type: `number`
+- 默认值 / Default: `30`
+- 环境变量 / Environment: `CONNECTION_RATE_LIMIT`
+- 支持热重载 / Hot-reloadable: 是 / Yes
+
+示例 / Example:
+```yaml
+CONNECTION_RATE_LIMIT: 30
+```
+
+注意 / Note:
+- 窗口固定为 10 秒、超限封禁固定为 30 秒；本项只调整每窗口的连接数阈值
+- The window is fixed at 10s and the ban at 30s; this option only tunes the per-window connection threshold
+- 与 `MAX_CONNECTIONS` 互补：本项限制单 IP 的连接**速率**，`MAX_CONNECTIONS` 限制全服**并发总量**
+- Complements `MAX_CONNECTIONS`: this caps a single IP's connection **rate**, while `MAX_CONNECTIONS` caps the global **concurrent total**
 
 #### COMMAND_RATE_LIMIT
 

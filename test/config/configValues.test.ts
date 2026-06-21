@@ -304,3 +304,24 @@ describe("keepStartupOnlyConfig", () => {
     expect(config.host).toBe("0.0.0.0");
   });
 });
+
+describe("CONNECTION_RATE_LIMIT 配置接线", () => {
+  it("从 yaml/env 记录解析为正整数", () => {
+    expect(buildConfigFromRecord({ CONNECTION_RATE_LIMIT: "50" }).connection_rate_limit).toBe(50);
+    expect(buildConfigFromRecord({ CONNECTION_RATE_LIMIT: 80 }).connection_rate_limit).toBe(80);
+  });
+
+  it("非正整数视为未设置（回退默认 30）", () => {
+    expect(buildConfigFromRecord({ CONNECTION_RATE_LIMIT: 0 }).connection_rate_limit).toBeUndefined();
+    expect(buildConfigFromRecord({ CONNECTION_RATE_LIMIT: -5 }).connection_rate_limit).toBeUndefined();
+  });
+
+  it("可热重载：变更被检测且不要求重启", () => {
+    const prev = buildConfigFromRecord({ CONNECTION_RATE_LIMIT: "30" });
+    const next = buildConfigFromRecord({ CONNECTION_RATE_LIMIT: "60" });
+    expect(changedConfigKeys(prev, next)).toContain("CONNECTION_RATE_LIMIT");
+    const { config, restartRequiredKeys } = keepStartupOnlyConfig(prev, next);
+    expect(restartRequiredKeys).not.toContain("CONNECTION_RATE_LIMIT");
+    expect(config.connection_rate_limit).toBe(60);
+  });
+});

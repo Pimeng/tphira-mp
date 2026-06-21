@@ -428,6 +428,9 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
     });
     currentConfig = effectiveConfig;
 
+    // 单 IP 连接限速：热重载新阈值（限速器实例常驻，仅更新阈值，不重置已有窗口/封禁）
+    connectionLimiter.setMaxConnections(effectiveConfig.connection_rate_limit ?? 30);
+
     if (changedKeys.length > 0) {
       logger.mark(`Config reloaded: ${changedKeys.join(", ")}`);
     }

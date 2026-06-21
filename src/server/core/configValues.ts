@@ -159,6 +159,7 @@ const CONFIG_FIELDS: ReadonlyArray<ConfigField> = [
   field({ key: "room_max_users", envName: "ROOM_MAX_USERS", parse: parseRoomMaxUsersValue }),
   field({ key: "max_rooms", envName: "MAX_ROOMS", parse: parsePositiveIntValue }),
   field({ key: "max_connections", envName: "MAX_CONNECTIONS", parse: parsePositiveIntValue }),
+  field({ key: "connection_rate_limit", envName: "CONNECTION_RATE_LIMIT", parse: parsePositiveIntValue }),
   field({ key: "command_rate_limit", envName: "COMMAND_RATE_LIMIT", parse: parseBoolValue }),
   field({ key: "http_rate_limit_max_requests", envName: "HTTP_RATE_LIMIT_MAX_REQUESTS", parse: parsePositiveIntValue }),
   field({ key: "http_rate_limit_window_ms", envName: "HTTP_RATE_LIMIT_WINDOW_MS", parse: parsePositiveIntValue }),

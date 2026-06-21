@@ -19,7 +19,7 @@ export type ConnectionRateLimiterOptions = {
 export class ConnectionRateLimiter {
   private readonly windows = new Map<string, WindowEntry>();
   private readonly banned = new Map<string, number>();
-  private readonly maxConnections: number;
+  private maxConnections: number;
   private readonly windowMs: number;
   private readonly banDurationMs: number;
   private cleanupTimer: NodeJS.Timeout | null = null;
@@ -28,6 +28,14 @@ export class ConnectionRateLimiter {
     this.maxConnections = opts.maxConnections;
     this.windowMs = opts.windowMs;
     this.banDurationMs = opts.banDurationMs ?? opts.windowMs * 2;
+  }
+
+  /**
+   * 运行时更新每窗口最大连接数（配置热重载时调用）。
+   * 仅影响后续 check 的判定，不重置已有窗口/封禁状态。
+   */
+  setMaxConnections(maxConnections: number): void {
+    this.maxConnections = maxConnections;
   }
 
   /**
