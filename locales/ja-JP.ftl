@@ -143,7 +143,7 @@ log-heartbeat-timeout-disconnect = ハートビートタイムアウト。切断
 log-auth-ok = 認証成功。id={ $id }、user=「{ $user }」{ $monitorSuffix }、proto=「{ $version }」
 log-auth-failed = 認証失敗。id={ $id }、reason={ $reason }
 
-log-player-join = プレイヤー { $who }({ $id })
+log-player-join = プレイヤー { $user }({ $id }){ $monitorSuffix } がサーバーに参加しました
 
 log-disconnect = 切断しました。id={ $id }{ $who }
 log-disconnect-user = 、user=「{ $user }」

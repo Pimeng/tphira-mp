@@ -143,7 +143,7 @@ log-heartbeat-timeout-disconnect = Тайм-аут пульса. Отключе�
 log-auth-ok = Аутентификация успешна. id={ $id }, user=«{ $user }»{ $monitorSuffix }, proto=«{ $version }»
 log-auth-failed = Ошибка аутентификации. id={ $id }, reason={ $reason }
 
-log-player-join = Игрок { $who }({ $id })
+log-player-join = Игрок { $user }({ $id }){ $monitorSuffix } присоединился к серверу
 
 log-disconnect = Отключено. id={ $id }{ $who }
 log-disconnect-user = , user=«{ $user }»

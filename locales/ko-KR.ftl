@@ -143,7 +143,7 @@ log-heartbeat-timeout-disconnect = 하트비트 시간 초과. 연결을 끊습�
 log-auth-ok = 인증 성공. id={ $id }, user="{ $user }"{ $monitorSuffix }, proto="{ $version }"
 log-auth-failed = 인증 실패. id={ $id }, reason={ $reason }
 
-log-player-join = 플레이어 { $who }({ $id })
+log-player-join = 플레이어 { $user }({ $id }){ $monitorSuffix } 서버에 접속했습니다
 
 log-disconnect = 연결 끊김. id={ $id }{ $who }
 log-disconnect-user = , user="{ $user }"
