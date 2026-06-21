@@ -106,7 +106,7 @@ Server name displayed in welcome messages.
 - 类型 / Type: `string`
 - 默认值 / Default: `"Phira MP"`
 - 环境变量 / Environment: `SERVER_NAME`
-- 命令行 / CLI: `--server-name`
+- 命令行 / CLI: `--serverName`
 
 示例 / Example:
 ```yaml
@@ -163,7 +163,7 @@ Whether to enable HTTP service (API and WebSocket).
 - 类型 / Type: `boolean`
 - 默认值 / Default: `false`
 - 环境变量 / Environment: `HTTP_SERVICE`
-- 命令行 / CLI: `--http-service`
+- 命令行 / CLI: `--httpService`
 
 示例 / Example:
 ```yaml
@@ -180,7 +180,7 @@ HTTP service listening port.
 - 默认值 / Default: `12347`
 - 范围 / Range: `1-65535`
 - 环境变量 / Environment: `HTTP_PORT`
-- 命令行 / CLI: `--http-port`
+- 命令行 / CLI: `--httpPort`
 
 示例 / Example:
 ```yaml
@@ -392,6 +392,26 @@ MAX_CONNECTIONS: 2000
 - 与单 IP 限速互补：`MAX_CONNECTIONS` 控制全局总量，连接速率限制器控制单 IP 突发
 - Complements per-IP rate limiting: `MAX_CONNECTIONS` caps the global total, the rate limiter caps per-IP bursts
 
+#### COMMAND_RATE_LIMIT
+
+是否启用会话级命令限流。对已认证 TCP 连接内的命令（聊天、建/退房、选谱、上报成绩等）按类别做令牌桶限流，防止刷屏聊天淹没房间、或借大量不同谱面/成绩 ID 放大对 Phira API 的请求。实时游戏数据（Touches/Judges）与心跳（Ping）不受限。默认阈值刻意宽松，正常游玩不会触发。
+
+Whether to enable session-level command rate limiting. Throttles commands within an authenticated TCP connection (chat, room create/leave, chart select, score upload, etc.) by category, preventing chat floods and amplification of Phira API requests via many distinct chart/record IDs. Real-time gameplay data (Touches/Judges) and heartbeats (Ping) are exempt. Defaults are deliberately loose and never trip during normal play.
+
+- 类型 / Type: `boolean`
+- 默认值 / Default: `true`（启用 / enabled）
+- 环境变量 / Environment: `COMMAND_RATE_LIMIT`
+- 支持热重载 / Hot-reloadable: 是 / Yes
+
+示例 / Example:
+```yaml
+COMMAND_RATE_LIMIT: true
+```
+
+注意 / Note:
+- 内网或比赛等可信场景可设为 `false` 关闭
+- Can be set to `false` in trusted environments such as LAN or contests
+
 #### HTTP_RATE_LIMIT_MAX_REQUESTS
 
 每个 IP 在每个时间窗口内允许的最大 HTTP 请求数。超出后会返回 `429 Too Many Requests` 并在响应头中包含 `Retry-After`。
@@ -524,7 +544,7 @@ Server default language. Affects logs, CLI console, and default HTTP output lang
 
 - 类型 / Type: `string`
 - 默认值 / Default: `"zh-CN"`（按 ENV/系统区域协商；不识别时回退 / Negotiated against ENV and system locale, falls back when unknown）
-- 可选值 / Options: `"zh-CN"`, `"en-US"`
+- 可选值 / Options: `"zh-CN"`, `"zh-TW"`, `"en-US"`, `"ja-JP"`, `"ko-KR"`, `"ru-RU"`
 - 环境变量 / Environment: `PHIRA_MP_LANG`（优先）或 `LANG` / `PHIRA_MP_LANG` (preferred) or `LANG`
 - 优先级 / Priority: `PHIRA_MP_LANG` ENV > `LANG` ENV > 配置文件 / config file > 默认 / default
 - 兼容 POSIX 形式（如 `en_US.UTF-8` 自动归一为 `en-US`）/ POSIX style accepted (e.g. `en_US.UTF-8` is normalized to `en-US`)

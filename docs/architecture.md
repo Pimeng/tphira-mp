@@ -165,7 +165,7 @@ SelectChart → WaitForReady → Playing → SelectChart
 
 ### 8. 本地化 (Localization)
 
-支持多语言（zh-CN, en-US）。
+支持多语言（zh-CN, zh-TW, en-US, ja-JP, ko-KR, ru-RU）。
 
 **使用 Fluent 格式：**
 - 本地化文件：`locales/{lang}.ftl`

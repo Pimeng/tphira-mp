@@ -19,9 +19,6 @@ https://bbs.07210700.xyz/c/7-category/7
 
 [![Deploy on RainYun](https://rainyun-apps.cn-nb1.rains3.com/materials/deploy-on-rainyun-en.svg)](https://app.rainyun.com/apps/rca/store/7497?ref=Pimeng_)
 
-## 🚇 在 RailWay 上部署
-[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/b5IFPX?referralCode=GjgH_Y)
-
 ## 🇿 在 Zeabur 上部署
 
 [![Deploy on Zeabur](https://zeabur.com/button.svg)](https://zeabur.com/templates/5CSUU4?referralCode=pimeng7143)
@@ -65,6 +62,12 @@ Docker 镜像标签三档，按需选择：
 
 **完整配置文档请参考**：[这里](docs/configuration.md)
 
+> [!NOTE]
+> 注意，若你的服务器环境为 en-US.UTF-8 ，则极有可能遇到服务端语言为英文的情况，可以启动时使用 `LANG=zh-CN` 指定为中文，或在 `server_config.yml` 中设置 `LANG: zh-CN`
+> 例如： 
+> ```bash
+> LANG=zh-CN ./server
+> ```
 
 ## 🔨 安装与构建
 

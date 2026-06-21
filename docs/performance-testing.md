@@ -156,7 +156,7 @@ pnpm tsx bench/server-metrics-recorder.ts --pid 12345 --output bench-results/ser
 - `BENCH_TOKENS`：多个 token（逗号分隔）
 - `BENCH_TOKEN`：单个 token（向后兼容）
 
-Release benchmark 工作流会先执行 `pnpm run build`，然后使用生产构建 `node dist/server/main.js` 启动服务端，避免 `pnpm run dev:server` 在正常停止时产生 ELIFECYCLE 错误污染日志。
+Release benchmark 工作流会先执行 `pnpm run build`，然后使用生产构建 `node dist/server/main.js` 启动服务端，避免 `pnpm run dev` 在正常停止时产生 ELIFECYCLE 错误污染日志。
 
 > **性能声明**：GitHub Actions runner 的性能不稳定，Release benchmark 报告仅用于版本间对比基线，不作为生产环境承载能力承诺。
 >

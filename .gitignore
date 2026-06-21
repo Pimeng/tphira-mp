@@ -30,7 +30,7 @@ Thumbs.db
 $RECYCLE.BIN/
 
 # 临时文件
-data/tmp/*
+data/*
 
 # 录制文件（运行时或测试残留）
 record/
