@@ -145,6 +145,9 @@ jobs:
     permissions:
       contents: write
       packages: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      release_notes: ${{ steps.notes.outputs.release_notes }}
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
@@ -349,3 +352,143 @@ jobs:
           pull: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  sync-cnb-release:
+    needs: [release-and-docker]
+    # 未配置同步 token 时直接跳过整个 job，省得白下载一遍构建产物。
+    if: ${{ secrets.CNB_TOKEN_FOR_SYNC_TPHIRA_MIRROR != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      CNB_TOKEN: ${{ secrets.CNB_TOKEN_FOR_SYNC_TPHIRA_MIRROR }}
+      TAG_NAME: v${{ needs.release-and-docker.outputs.version }}
+      RELEASE_BODY: ${{ needs.release-and-docker.outputs.release_notes }}
+      PRERELEASE: ${{ inputs.prerelease }}
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: 下载构建产物
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: 由 ftl 生成 locales.json
+        run: node tools/emit-locales-json.mjs locales.json
+
+      - name: 创建 CNB release 并上传附件
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          REPO="Phira-download/tphira-mp-mirror"
+          API_ENDPOINT="https://api.cnb.cool/${REPO}/-/releases"
+
+          if [ "$PRERELEASE" = "true" ]; then
+            MAKE_LATEST="false"
+          else
+            MAKE_LATEST="true"
+          fi
+
+          # CNB 镜像仓库默认分支叫 master（GitHub 这边是 main），target_commitish 必填，
+          # 实测得出：传分支名而非具体 commit，由 CNB 自行解析为创建时的分支 HEAD。
+          PAYLOAD=$(jq -n \
+            --arg tag_name "$TAG_NAME" \
+            --arg name "$TAG_NAME" \
+            --arg body "$RELEASE_BODY" \
+            --argjson prerelease "$PRERELEASE" \
+            --arg make_latest "$MAKE_LATEST" \
+            --arg target_commitish "master" \
+            '{tag_name: $tag_name, name: $name, body: $body, prerelease: $prerelease, make_latest: $make_latest, target_commitish: $target_commitish}')
+
+          RESPONSE=$(curl -s -w "\n%{http_code}" "$API_ENDPOINT" \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -H "Accept: application/vnd.cnb.api+json" \
+            -H "Authorization: Bearer $CNB_TOKEN" \
+            -d "$PAYLOAD")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+
+          if [ "$HTTP_CODE" != "201" ]; then
+            echo "⚠️ CNB release 创建失败 (HTTP $HTTP_CODE)。"
+            echo "响应内容: $BODY"
+            exit 1
+          fi
+
+          RELEASE_ID=$(echo "$BODY" | jq -r '.id')
+          echo "CNB release 创建成功：$TAG_NAME (id=$RELEASE_ID)"
+
+          # 与 reusable-release.yml 里发 GitHub Release 的 files 列表保持一致。
+          shopt -s nullglob
+          ASSET_FILES=(
+            artifacts/phira-mp-Linux-ARM64/phira-mp-linux-arm64.tar.xz
+            artifacts/phira-mp-Linux-X64/phira-mp-linux-x64.tar.xz
+            artifacts/phira-mp-Windows-X64/phira-mp-windows-x64.exe
+            artifacts/phira-mp-macOS-ARM64/phira-mp-macos-arm64.tar.xz
+            artifacts/phira-mp-FreeBSD-X64/phira-mp-freebsd-x64.tar.xz
+            artifacts/phira-mp-nodejs-bundle/*.zip
+            locales.json
+            server_config.example.yml
+          )
+
+          for FILE in "${ASSET_FILES[@]}"; do
+            if [ ! -f "$FILE" ]; then
+              echo "⚠️ 跳过不存在的文件：$FILE"
+              continue
+            fi
+
+            ASSET_NAME=$(basename "$FILE")
+            SIZE=$(stat -c%s "$FILE")
+
+            UPLOAD_URL_PAYLOAD=$(jq -n \
+              --arg asset_name "$ASSET_NAME" \
+              --argjson size "$SIZE" \
+              '{asset_name: $asset_name, size: $size, overwrite: true, ttl: 0}')
+
+            UPLOAD_URL_RESPONSE=$(curl -s -w "\n%{http_code}" "${API_ENDPOINT}/${RELEASE_ID}/asset-upload-url" \
+              -X POST \
+              -H "Content-Type: application/json" \
+              -H "Accept: application/vnd.cnb.api+json" \
+              -H "Authorization: Bearer $CNB_TOKEN" \
+              -d "$UPLOAD_URL_PAYLOAD")
+
+            UPLOAD_URL_HTTP_CODE=$(echo "$UPLOAD_URL_RESPONSE" | tail -n1)
+            UPLOAD_URL_BODY=$(echo "$UPLOAD_URL_RESPONSE" | sed '$d')
+
+            if [ "$UPLOAD_URL_HTTP_CODE" != "201" ]; then
+              echo "⚠️ 获取 ${ASSET_NAME} 上传地址失败 (HTTP $UPLOAD_URL_HTTP_CODE)：$UPLOAD_URL_BODY"
+              exit 1
+            fi
+
+            UPLOAD_URL=$(echo "$UPLOAD_URL_BODY" | jq -r '.upload_url')
+            VERIFY_URL=$(echo "$UPLOAD_URL_BODY" | jq -r '.verify_url')
+
+            PUT_HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X PUT --data-binary "@${FILE}" "$UPLOAD_URL")
+            if [ "$PUT_HTTP_CODE" -ge 300 ]; then
+              echo "⚠️ 上传 ${ASSET_NAME} 内容失败 (HTTP $PUT_HTTP_CODE)"
+              exit 1
+            fi
+
+            CONFIRM_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$VERIFY_URL" \
+              -H "Accept: application/vnd.cnb.api+json" \
+              -H "Authorization: Bearer $CNB_TOKEN")
+
+            CONFIRM_HTTP_CODE=$(echo "$CONFIRM_RESPONSE" | tail -n1)
+            CONFIRM_BODY=$(echo "$CONFIRM_RESPONSE" | sed '$d')
+
+            if [ "$CONFIRM_HTTP_CODE" != "200" ]; then
+              echo "⚠️ 确认 ${ASSET_NAME} 上传失败 (HTTP $CONFIRM_HTTP_CODE)：$CONFIRM_BODY"
+              exit 1
+            fi
+
+            echo "已上传附件：$ASSET_NAME"
+          done
