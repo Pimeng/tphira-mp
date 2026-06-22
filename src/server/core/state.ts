@@ -190,7 +190,8 @@ export class ServerState {
     this.adminDataPath = adminDataPath;
     this.configPath = configPath;
     this.replayEnabled = Boolean(config.replay_enabled);
-    this.roomCreationEnabled = true;
+    // 建房开关支持持久化：配置缺省（undefined）时默认允许建房
+    this.roomCreationEnabled = config.room_creation_enabled ?? true;
     this.version = readAppVersion();
     const replayBaseDir = config.replay_base_dir ?? defaultReplayBaseDir();
     this.replayRecorder = new ReplayRecorder(replayBaseDir, logger);
@@ -209,6 +210,8 @@ export class ServerState {
     this.serverName = config.server_name || "Phira MP";
     this.serverLang = new Language(config.lang ?? "");
     this.replayEnabled = Boolean(config.replay_enabled);
+    // 与 replayEnabled 一致：热重载时从配置（已落盘的最新值）同步建房开关
+    this.roomCreationEnabled = config.room_creation_enabled ?? true;
     this.replayRecorder.setBaseDir(config.replay_base_dir ?? defaultReplayBaseDir());
   }
 

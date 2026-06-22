@@ -70,6 +70,13 @@ function parseNonNegativeIntValue(value: unknown): number | undefined {
   return v;
 }
 
+/** 解析对局断线重连宽限秒数：非负整数，0 表示关闭，上限 120 秒。非法值返回 undefined（用默认） */
+function parsePlayingGraceValue(value: unknown): number | undefined {
+  const v = parseNonNegativeIntValue(value);
+  if (v === undefined) return undefined;
+  return Math.min(v, 120);
+}
+
 function parseStringListValue(value: unknown): string[] | undefined {
   if (Array.isArray(value)) {
     const out = value.filter((it): it is string => typeof it === "string" && it.trim().length > 0);
@@ -157,6 +164,8 @@ const CONFIG_FIELDS: ReadonlyArray<ConfigField> = [
   field({ key: "http_port", envName: "HTTP_PORT", parse: parsePortValue, startupOnly: true }),
   field({ key: "gui", envName: "GUI", parse: parseBoolValue, startupOnly: true }),
   field({ key: "room_max_users", envName: "ROOM_MAX_USERS", parse: parseRoomMaxUsersValue }),
+  field({ key: "room_creation_enabled", envName: "ROOM_CREATION_ENABLED", parse: parseBoolValue }),
+  field({ key: "playing_reconnect_grace", envName: "PLAYING_RECONNECT_GRACE", parse: parsePlayingGraceValue }),
   field({ key: "max_rooms", envName: "MAX_ROOMS", parse: parsePositiveIntValue }),
   field({ key: "max_connections", envName: "MAX_CONNECTIONS", parse: parsePositiveIntValue }),
   field({ key: "connection_rate_limit", envName: "CONNECTION_RATE_LIMIT", parse: parsePositiveIntValue }),

@@ -325,3 +325,46 @@ describe("CONNECTION_RATE_LIMIT 配置接线", () => {
     expect(config.connection_rate_limit).toBe(60);
   });
 });
+
+describe("ROOM_CREATION_ENABLED 配置接线", () => {
+  it("从 yaml/env 记录解析为布尔", () => {
+    expect(buildConfigFromRecord({ ROOM_CREATION_ENABLED: false }).room_creation_enabled).toBe(false);
+    expect(buildConfigFromRecord({ ROOM_CREATION_ENABLED: "off" }).room_creation_enabled).toBe(false);
+    expect(buildConfigFromRecord({ ROOM_CREATION_ENABLED: "on" }).room_creation_enabled).toBe(true);
+  });
+
+  it("缺省时为 undefined（由 state 默认放行建房）", () => {
+    expect(buildConfigFromRecord({}).room_creation_enabled).toBeUndefined();
+  });
+
+  it("可热重载：变更被检测且不要求重启", () => {
+    const prev = buildConfigFromRecord({ ROOM_CREATION_ENABLED: true });
+    const next = buildConfigFromRecord({ ROOM_CREATION_ENABLED: false });
+    expect(changedConfigKeys(prev, next)).toContain("ROOM_CREATION_ENABLED");
+    const { config, restartRequiredKeys } = keepStartupOnlyConfig(prev, next);
+    expect(restartRequiredKeys).not.toContain("ROOM_CREATION_ENABLED");
+    expect(config.room_creation_enabled).toBe(false);
+  });
+});
+
+describe("PLAYING_RECONNECT_GRACE 配置接线", () => {
+  it("从 yaml/env 记录解析为非负整数秒（上限 120）", () => {
+    expect(buildConfigFromRecord({ PLAYING_RECONNECT_GRACE: "30" }).playing_reconnect_grace).toBe(30);
+    expect(buildConfigFromRecord({ PLAYING_RECONNECT_GRACE: 0 }).playing_reconnect_grace).toBe(0);
+    expect(buildConfigFromRecord({ PLAYING_RECONNECT_GRACE: 999 }).playing_reconnect_grace).toBe(120);
+  });
+
+  it("非法值视为未设置（回退默认）", () => {
+    expect(buildConfigFromRecord({ PLAYING_RECONNECT_GRACE: -5 }).playing_reconnect_grace).toBeUndefined();
+    expect(buildConfigFromRecord({ PLAYING_RECONNECT_GRACE: "abc" }).playing_reconnect_grace).toBeUndefined();
+  });
+
+  it("可热重载：变更被检测且不要求重启", () => {
+    const prev = buildConfigFromRecord({ PLAYING_RECONNECT_GRACE: "15" });
+    const next = buildConfigFromRecord({ PLAYING_RECONNECT_GRACE: "0" });
+    expect(changedConfigKeys(prev, next)).toContain("PLAYING_RECONNECT_GRACE");
+    const { config, restartRequiredKeys } = keepStartupOnlyConfig(prev, next);
+    expect(restartRequiredKeys).not.toContain("PLAYING_RECONNECT_GRACE");
+    expect(config.playing_reconnect_grace).toBe(0);
+  });
+});

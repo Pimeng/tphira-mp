@@ -44,6 +44,12 @@ export class User {
   private dangleToken: object | null = null;
 
   /**
+   * 断线挂起的截止时间戳（Unix 毫秒）；null 表示当前未挂起。
+   * 仅用于在「其他玩家都完成、仅等这名挂起玩家」时向房间播报剩余重连倒计时。
+   */
+  dangleDeadline: number | null = null;
+
+  /**
    * 创建新用户实例
    * @param opts - 用户创建选项
    */
@@ -83,6 +89,7 @@ export class User {
   setSession(session: Session | null): void {
     this.session = session;
     this.dangleToken = null;
+    this.dangleDeadline = null;
   }
 
   /**

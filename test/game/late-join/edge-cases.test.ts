@@ -55,7 +55,8 @@ describe("late-join / edge-cases", () => {
   }, 20000);
 
   test("游戏中房主离开后剩余玩家继续对局，late-join 玩家可被随机选为新房主", async () => {
-    const { running, port, alice, bob, tempDir } = await createPlayingGame("edge2");
+    // 本例验证「断线即离开 → 立即转移房主」的路径，故关闭对局重连宽限（grace=0）
+    const { running, port, alice, bob, tempDir } = await createPlayingGame("edge2", { playingReconnectGrace: 0 });
     const dave = await Client.connect("127.0.0.1", port);
 
     try {

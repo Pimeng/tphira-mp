@@ -98,6 +98,7 @@ log-auth-rejected-maintenance = メンテナンスモード：新規接続「{ $
 chat-maintenance-enabled = ⚙️ サーバーがメンテナンスモードに入りました。新規参加を停止します。現在の対局を早めに終了してください
 chat-maintenance-disabled = ✅ サーバーのメンテナンスが終了し、通常状態に戻りました
 chat-server-stopping = ⚠️ サーバーはまもなくメンテナンスのため停止します。対局終了後に切断されます
+chat-waiting-reconnect = ⏳ 「{ $user }」が切断されました。再接続を待っています。{ $seconds } 秒以内に戻らない場合、対局を終了します
 cli-maintenance-status = メンテナンスモード：{ $state }
 cli-usage-maintenance = 使い方：maintenance <on|off|status> [お知らせメッセージ]
 

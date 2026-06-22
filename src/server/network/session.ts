@@ -79,6 +79,11 @@ type DangleTimeout = {
 const dangleTimeouts = new Map<number, DangleTimeout>();
 let dangleSweepTimer: NodeJS.Timeout | null = null;
 
+/** 非对局态断线后保留房间、等待重连的常规 dangle 窗口（毫秒） */
+const DANGLE_WINDOW_MS = 10_000;
+/** 对局（Playing）进行中断线的默认重连宽限（秒）；config.playing_reconnect_grace 未设置时采用，0 表示关闭 */
+const DEFAULT_PLAYING_RECONNECT_GRACE_SEC = 5;
+
 function startDangleSweepIfNeeded(): void {
   if (dangleSweepTimer) return;
   dangleSweepTimer = setInterval(() => {
@@ -686,28 +691,10 @@ export class Session {
 
   private async dangleUser(user: User): Promise<void> {
     const room = user.room;
-    if (room && room.state.type === "Playing") {
-      logRoomWarn(
-        this.state.logger,
-        this.state.serverLang,
-        room.id,
-        "log-user-disconnect-playing",
-        { user: user.name },
-        { userId: user.id }
-      );
-      await this.state.mutex.runExclusive(async () => {
-        this.state.users.delete(user.id);
-      });
-      // 清理用户相关内存数据，防止泄漏
-      this.state.cleanupUserData(user.id);
-      await this.handleUserLeaveRoom(user, room);
-      return;
-    }
 
-    // 如果用户被封禁，直接删除而不是等待重连
-    // 优化：直接读取Set，不需要mutex
-    const isBanned = this.state.bannedUsers.has(user.id);
-    if (isBanned) {
+    // 被封禁用户：不等待重连，直接移除（无论是否在对局中）
+    // 优化：直接读取 Set，不需要 mutex
+    if (this.state.bannedUsers.has(user.id)) {
       this.state.logger.info(tl(this.state.serverLang, "log-user-dangle", { user: user.name }), undefined, {
         userId: user.id
       });
@@ -722,11 +709,47 @@ export class Session {
       return;
     }
 
+    // 对局（Playing）进行中断线：默认给一段重连宽限（移动端弱网/切后台友好），
+    // 期间该玩家仍占位、其他已完成玩家在结算前等待；超时未回则由 dangle 扫掠移除并结算本局。
+    // 配置 PLAYING_RECONNECT_GRACE=0 时关闭宽限，保持旧行为——立即判定离开本局。
+    if (room?.state.type === "Playing") {
+      const graceSec = this.state.config.playing_reconnect_grace ?? DEFAULT_PLAYING_RECONNECT_GRACE_SEC;
+      if (graceSec <= 0) {
+        logRoomWarn(
+          this.state.logger,
+          this.state.serverLang,
+          room.id,
+          "log-user-disconnect-playing",
+          { user: user.name },
+          { userId: user.id }
+        );
+        await this.state.mutex.runExclusive(async () => {
+          this.state.users.delete(user.id);
+        });
+        // 清理用户相关内存数据，防止泄漏
+        this.state.cleanupUserData(user.id);
+        await this.handleUserLeaveRoom(user, room);
+        return;
+      }
+      this.dangleWithWindow(user, graceSec * 1000);
+      // 立即检查：若其他玩家此刻都已完成，仅剩这名挂起玩家，则广播等待重连提示
+      await this.checkRoomAllReady(room);
+      return;
+    }
+
+    // 非对局态断线：保留房间的常规 dangle 窗口
+    this.dangleWithWindow(user, DANGLE_WINDOW_MS);
+  }
+
+  /** 把用户标记为 dangling 并登记到统一扫掠定时器，windowMs 后未重连则移除 */
+  private dangleWithWindow(user: User, windowMs: number): void {
     this.state.logger.info(tl(this.state.serverLang, "log-user-dangle", { user: user.name }), undefined, {
       userId: user.id
     });
     const token = user.markDangle();
-    dangleTimeouts.set(user.id, { user, token, deadline: Date.now() + 10_000, state: this.state });
+    const deadline = Date.now() + windowMs;
+    user.dangleDeadline = deadline;
+    dangleTimeouts.set(user.id, { user, token, deadline, state: this.state });
     startDangleSweepIfNeeded();
   }
 

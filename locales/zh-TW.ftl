@@ -98,6 +98,7 @@ log-auth-rejected-maintenance = 維護模式：已拒絕新連線 “{ $user }�
 chat-maintenance-enabled = ⚙️ 伺服器已進入維護模式，暫停新玩家加入，請盡快結束當前對局
 chat-maintenance-disabled = ✅ 伺服器維護已結束，恢復正常
 chat-server-stopping = ⚠️ 伺服器即將關閉維護，對局結束後連線將斷開
+chat-waiting-reconnect = ⏳ “{ $user }” 異常斷線，正在等待重連，{ $seconds } 秒後仍未重連將結束本局
 cli-maintenance-status = 維護模式：{ $state }
 cli-usage-maintenance = 用法：maintenance <on|off|status> [提示訊息]
 

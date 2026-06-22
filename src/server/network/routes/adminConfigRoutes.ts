@@ -1,7 +1,4 @@
-import { readFile, writeFile, rename, unlink } from "node:fs/promises";
-import { mkdir } from "node:fs/promises";
-import { dirname } from "node:path";
-import yaml from "js-yaml";
+import { persistConfigValues } from "../../core/configPersist.js";
 import { refreshRoomLive } from "../../game/roomUtils.js";
 import type { RequestContext } from "./types.js";
 
@@ -33,6 +30,14 @@ export async function tryHandleAdminConfigRoutes(ctx: RequestContext): Promise<b
       state.roomCreationEnabled = enabled;
     });
 
+    // 持久化到配置文件（保留注释），重启后保持
+    try {
+      await persistConfigValues(state.configPath, { ROOM_CREATION_ENABLED: enabled });
+      state.logger.info(`Room creation config persisted: ROOM_CREATION_ENABLED=${enabled}`);
+    } catch (e) {
+      state.logger.warn(`Failed to persist room creation config: ${e}`);
+    }
+
     write(200, { ok: true, enabled });
     return true;
   }
@@ -57,34 +62,9 @@ export async function tryHandleAdminConfigRoutes(ctx: RequestContext): Promise<b
       await Promise.allSettled(tasks);
     }
 
-    // 持久化配置到文件（原子写入：先写临时文件再重命名，防止写入过程中崩溃导致配置文件损坏）
-    // 注意：yaml.load + yaml.dump 会丢失 YAML 注释，如需保留注释请手动编辑配置文件
+    // 持久化到配置文件（保留注释与格式：逐行原地更新目标键，不再整体 dump）
     try {
-      const configPath = state.configPath;
-      const configText = await readFile(configPath, "utf8").catch(() => "");
-      const loadedConfig = yaml.load(configText);
-      const configObj =
-        typeof loadedConfig === "object" && loadedConfig !== null && !Array.isArray(loadedConfig)
-          ? (loadedConfig as Record<string, unknown>)
-          : {};
-      delete configObj.replay_enabled;
-      delete configObj.replayEnabled;
-      configObj.REPLAY_ENABLED = enabled;
-      const newText = yaml.dump(configObj, { lineWidth: -1 });
-      // 原子写入
-      await mkdir(dirname(configPath), { recursive: true });
-      const tmpPath = `${configPath}.tmp`;
-      await writeFile(tmpPath, newText, "utf8");
-      try {
-        await rename(tmpPath, configPath);
-      } catch {
-        try {
-          await unlink(configPath);
-        } catch {
-          /* 文件可能不存在 */
-        }
-        await rename(tmpPath, configPath);
-      }
+      await persistConfigValues(state.configPath, { REPLAY_ENABLED: enabled });
       state.logger.info(`Replay config persisted: REPLAY_ENABLED=${enabled}`);
     } catch (e) {
       state.logger.warn(`Failed to persist replay config: ${e}`);

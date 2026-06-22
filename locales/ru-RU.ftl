@@ -98,6 +98,7 @@ log-auth-rejected-maintenance = Режим обслуживания: новое 
 chat-maintenance-enabled = ⚙️ Сервер перешёл в режим обслуживания, новые игроки приостановлены. Пожалуйста, скорее завершите текущую игру
 chat-maintenance-disabled = ✅ Обслуживание сервера завершено, работа в обычном режиме
 chat-server-stopping = ⚠️ Сервер скоро остановится на обслуживание; вы будете отключены после текущей игры
+chat-waiting-reconnect = ⏳ «{ $user }» неожиданно отключился; ожидание переподключения — игра завершится через { $seconds } с, если он не вернётся
 cli-maintenance-status = Режим обслуживания: { $state }
 cli-usage-maintenance = Использование: maintenance <on|off|status> [текст уведомления]
 

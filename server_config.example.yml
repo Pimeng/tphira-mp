@@ -47,6 +47,17 @@ HAPROXY_PROTOCOL: false
 # 单房间最大用户数
 ROOM_MAX_USERS: 12
 
+# 是否允许玩家创建新房间，默认允许
+# 可通过 CLI `roomcreation on|off` 或 API /admin/room-creation/config 在运行时切换
+# 运行时切换会自动写回本文件（保留注释），重启后保持
+# ROOM_CREATION_ENABLED: true
+
+# 对局进行中断线的重连宽限时长（秒），默认 5
+# 移动端弱网/切后台时不再立即判定离开本局，这么多秒内可重连回原局继续
+# 当其他玩家都已完成、仅在等这名断线玩家时，会广播提示并倒计时（上限 120 秒）
+# 填 0 关闭宽限，恢复旧行为：对局中断线立即判定离开本局
+# PLAYING_RECONNECT_GRACE: 5
+
 # 全服同时存在的房间数上限；不配置或填 0 表示不限制
 # 小内存机器建议设置，防止房间过多导致 OOM
 # MAX_ROOMS: 200

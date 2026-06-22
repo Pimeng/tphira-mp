@@ -353,6 +353,53 @@ ROOM_MAX_USERS: 16
 - 此配置仅影响新创建的房间
 - This configuration only affects newly created rooms
 
+#### ROOM_CREATION_ENABLED
+
+是否允许玩家创建新房间。关闭后玩家建房会收到 `room-creation-disabled` 提示，已存在的房间不受影响。
+
+Whether players are allowed to create new rooms. When disabled, creating a room returns the `room-creation-disabled` notice; existing rooms are unaffected.
+
+- 类型 / Type: `boolean`
+- 默认值 / Default: `true`
+- 环境变量 / Environment: `ROOM_CREATION_ENABLED`
+
+示例 / Example:
+```yaml
+ROOM_CREATION_ENABLED: true
+```
+
+注意 / Note:
+- 可通过 CLI `roomcreation on|off` 或管理员 API `/admin/room-creation/config` 在运行时切换
+- Can be toggled at runtime via the CLI `roomcreation on|off` command or the admin API `/admin/room-creation/config`
+- 运行时切换会自动写回配置文件（保留注释），重启后保持
+- Runtime toggles are persisted back to the config file (comments preserved) and survive restarts
+
+#### PLAYING_RECONNECT_GRACE
+
+对局（Playing）进行中断线的重连宽限时长（秒）。移动端弱网或切后台时，不再立即判定离开本局，玩家可在该时长内重连回原局继续游戏。
+
+Reconnect grace period (seconds) for disconnections during an in-progress game (Playing). On flaky mobile networks or when backgrounded, a player is no longer immediately dropped from the round and may reconnect within this window to resume.
+
+- 类型 / Type: `number`
+- 默认值 / Default: `5`
+- 范围 / Range: `0-120`（`0` 表示关闭 / `0` disables）
+- 环境变量 / Environment: `PLAYING_RECONNECT_GRACE`
+
+示例 / Example:
+```yaml
+PLAYING_RECONNECT_GRACE: 5
+```
+
+注意 / Note:
+- 宽限期间其他已完成的玩家会在结算前等待，直到该玩家重连提交成绩或宽限超时
+- During the grace window, other players who already finished will wait before the round settles, until the player reconnects and submits, or the window times out
+- 当其他玩家都已完成、仅剩在等这名断线玩家时，会向房间广播提示并提示剩余倒计时秒数
+- When all other players have finished and only the disconnected player is being waited on, a notice with the remaining countdown is broadcast to the room
+- 填 `0` 恢复旧行为：对局中断线立即判定离开本局
+- Set to `0` to restore the old behavior: a disconnection during Playing immediately drops the player from the round
+- 支持热重载
+- Supports hot reload
+
 #### MAX_ROOMS
 
 全服同时存在的房间数上限。达到上限后，玩家创建房间会收到 `rooms-limit-reached` 提示，已存在的房间不受影响。

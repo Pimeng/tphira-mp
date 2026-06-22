@@ -98,6 +98,7 @@ log-auth-rejected-maintenance = Maintenance mode: rejected new connection "{ $us
 chat-maintenance-enabled = ⚙️ The server has entered maintenance mode; new players are paused. Please finish the current game soon
 chat-maintenance-disabled = ✅ Server maintenance is over; back to normal
 chat-server-stopping = ⚠️ The server is shutting down for maintenance; you will be disconnected after the current game
+chat-waiting-reconnect = ⏳ "{ $user }" disconnected unexpectedly; waiting for reconnect — the game will end in { $seconds }s if they don't return
 cli-maintenance-status = Maintenance mode: { $state }
 cli-usage-maintenance = Usage: maintenance <on|off|status> [notice message]
 

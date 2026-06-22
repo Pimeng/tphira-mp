@@ -24,7 +24,13 @@ const ROOM_STATE_PLAYING: RoomState = Object.freeze({ type: "Playing" });
 export type InternalRoomState =
   | { type: "SelectChart" }
   | { type: "WaitForReady"; started: Set<number> }
-  | { type: "Playing"; results: Map<number, RecordData>; aborted: Set<number> };
+  | {
+      type: "Playing";
+      results: Map<number, RecordData>;
+      aborted: Set<number>;
+      /** 已就「等待重连」播报过的挂起玩家 id，避免重复刷屏；惰性初始化，随每局新 Playing 状态自动重置 */
+      reconnectNotified?: Set<number>;
+    };
 
 /** WebSocket 实时广播接口（房间状态 / 管理面板更新推送） */
 export type WsBroadcaster = {
@@ -379,11 +385,38 @@ export class Room {
     }
 
     if (this.state.type === "Playing") {
-      const results = this.state.results;
-      const aborted = this.state.aborted;
+      const playingState = this.state;
+      const results = playingState.results;
+      const aborted = playingState.aborted;
       const playerIds = this.userIds();
       const finished = playerIds.every((id) => results.has(id) || aborted.has(id));
-      if (!finished) return;
+      if (!finished) {
+        // 其他玩家都已完成、仅剩断线挂起(dangling，session 为 null)的玩家未完成时，
+        // 向房间广播「正在等待重连 + 剩余倒计时」提示（每名玩家仅播报一次）。
+        const unfinished = playerIds.filter((id) => !results.has(id) && !aborted.has(id));
+        const dangling = unfinished.filter((id) => opts.usersById(id)?.session == null);
+        if (unfinished.length > 0 && dangling.length === unfinished.length) {
+          const notified = (playingState.reconnectNotified ??= new Set<number>());
+          for (const id of dangling) {
+            if (notified.has(id)) continue;
+            const u = opts.usersById(id);
+            if (!u) continue;
+            notified.add(id);
+            const seconds = u.dangleDeadline ? Math.max(1, Math.ceil((u.dangleDeadline - Date.now()) / 1000)) : 0;
+            await this.send(
+              opts.broadcast,
+              {
+                type: "Chat",
+                user: 0,
+                content: tl(opts.lang, "chat-waiting-reconnect", { user: u.name, seconds: String(seconds) })
+              },
+              undefined,
+              opts.lang
+            );
+          }
+        }
+        return;
+      }
 
       if (results.size > 0) {
         let bestScore = Number.NEGATIVE_INFINITY;

@@ -98,6 +98,7 @@ log-auth-rejected-maintenance = 점검 모드: 새 연결 "{ $user }"을(를) �
 chat-maintenance-enabled = ⚙️ 서버가 점검 모드로 전환되어 신규 참가가 중단됩니다. 현재 게임을 곧 마쳐 주세요
 chat-maintenance-disabled = ✅ 서버 점검이 끝나 정상으로 돌아왔습니다
 chat-server-stopping = ⚠️ 서버가 곧 점검을 위해 종료됩니다. 현재 게임이 끝나면 연결이 끊깁니다
+chat-waiting-reconnect = ⏳ "{ $user }" 님의 연결이 끊겼습니다. 재접속을 기다리는 중이며, { $seconds }초 내에 돌아오지 않으면 대국을 종료합니다
 cli-maintenance-status = 점검 모드: { $state }
 cli-usage-maintenance = 사용법: maintenance <on|off|status> [안내 메시지]
 

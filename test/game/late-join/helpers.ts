@@ -12,6 +12,8 @@ export async function createPlayingGame(
     replay?: boolean;
     extraMonitors?: number[];
     maxUsers?: number;
+    /** 对局断线重连宽限（秒）；测试需要「断线即离开」的旧行为时传 0 */
+    playingReconnectGrace?: number;
   } = {}
 ) {
   const tempDir = opts.replay ? await createTempDir("late-join-test") : null;
@@ -22,6 +24,7 @@ export async function createPlayingGame(
       monitors: opts.extraMonitors ?? [],
       replay_enabled: opts.replay ?? false,
       room_max_users: opts.maxUsers,
+      ...(opts.playingReconnectGrace !== undefined ? { playing_reconnect_grace: opts.playingReconnectGrace } : {}),
       ...(tempDir ? { replay_base_dir: tempDir } : {})
     }
   });

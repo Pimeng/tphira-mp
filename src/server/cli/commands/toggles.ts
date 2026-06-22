@@ -1,3 +1,4 @@
+import { persistConfigValues } from "../../core/configPersist.js";
 import { refreshRoomLive } from "../../game/roomUtils.js";
 import { parseToggleArg } from "../cliHelpers.js";
 import type { CommandCtx } from "./types.js";
@@ -56,6 +57,13 @@ export async function handleRoomCreation(ctx: CommandCtx, args: string[]): Promi
   await state.mutex.runExclusive(async () => {
     state.roomCreationEnabled = enabled;
   });
+
+  // 持久化到配置文件（保留注释），重启后保持
+  try {
+    await persistConfigValues(state.configPath, { ROOM_CREATION_ENABLED: enabled });
+  } catch (e) {
+    state.logger.warn(`Failed to persist room creation config: ${e}`);
+  }
 
   printSuccess(enabled ? t("cli-room-creation-toggled-on") : t("cli-room-creation-toggled-off"));
 }

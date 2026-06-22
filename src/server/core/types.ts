@@ -30,6 +30,14 @@ export type ServerConfig = {
   /** 是否在启动时打开服务端 GUI 窗口（基于系统浏览器应用模式）；启用时自动开启 http_service */
   gui?: boolean;
   room_max_users?: number;
+  /** 是否允许玩家创建新房间，默认允许。服主可在运行时切换并持久化到配置文件 */
+  room_creation_enabled?: boolean;
+  /**
+   * 对局（Playing）进行中断线的重连宽限时长（秒）。默认 5。
+   * 0 表示关闭——保持旧行为：Playing 中断线立即判定离开本局。
+   * >0 时给该玩家这么多秒重连回原局，期间其他已完成玩家会在结算前等待，上限 120 秒。
+   */
+  playing_reconnect_grace?: number;
   /** 是否启用玩家聊天，默认启用 */
   chat_enabled?: boolean;
   replay_enabled?: boolean;
