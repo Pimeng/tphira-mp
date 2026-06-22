@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   parseBoolValue,
+  parseLogLevelValue,
   parseStringValue,
   parseOutboundProxyValue,
   parsePortValue,
@@ -86,6 +87,20 @@ describe("parseStringValue", () => {
   it("非字符串", () => {
     expect(parseStringValue(123)).toBeUndefined();
     expect(parseStringValue(null)).toBeUndefined();
+  });
+});
+
+describe("parseLogLevelValue", () => {
+  it("接受合法日志等级并标准化为大写", () => {
+    expect(parseLogLevelValue("info")).toBe("INFO");
+    expect(parseLogLevelValue(" WARN ")).toBe("WARN");
+    expect(parseLogLevelValue("ERROR")).toBe("ERROR");
+  });
+
+  it("拒绝非法日志等级", () => {
+    expect(parseLogLevelValue("trace")).toBeUndefined();
+    expect(parseLogLevelValue(123)).toBeUndefined();
+    expect(parseLogLevelValue("")).toBeUndefined();
   });
 });
 

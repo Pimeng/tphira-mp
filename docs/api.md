@@ -791,6 +791,111 @@ Body：
 
 - Body 缺少 `enabled`：`400 { "ok": false, "error": "bad-enabled" }`
 
+### 1.5) 统一运行时配置接口（批量修改 + 回滚）
+
+用于批量修改一组常见的服主运营参数。接口会先做参数校验，再写回 `server_config.yml`（保留注释），并立即在当前进程内生效。
+
+Use this endpoint to batch-update common operator-facing runtime settings. The server validates the payload first, persists the changes back to `server_config.yml` while preserving comments, and applies them immediately in the current process.
+
+查询当前可管理配置：
+
+`GET /admin/runtime-config`
+
+返回示例：
+
+```json
+{
+  "ok": true,
+  "managedKeys": [
+    "ROOM_CREATION_ENABLED",
+    "REPLAY_ENABLED",
+    "ROOM_MAX_USERS",
+    "PLAYING_RECONNECT_GRACE",
+    "MAX_ROOMS",
+    "MAX_CONNECTIONS",
+    "CONNECTION_RATE_LIMIT",
+    "COMMAND_RATE_LIMIT",
+    "HTTP_RATE_LIMIT_MAX_REQUESTS",
+    "HTTP_RATE_LIMIT_WINDOW_MS",
+    "CHAT_ENABLED",
+    "REPLAY_TTL_DAYS",
+    "ROOM_LIST_TIP",
+    "LOG_LEVEL",
+    "LOG_COMPRESS_AFTER_DAYS",
+    "LOG_MAX_TOTAL_MB"
+  ],
+  "rollbackAvailable": false,
+  "config": {
+    "ROOM_CREATION_ENABLED": true,
+    "REPLAY_ENABLED": false,
+    "ROOM_MAX_USERS": 8,
+    "PLAYING_RECONNECT_GRACE": 5,
+    "MAX_ROOMS": 0,
+    "MAX_CONNECTIONS": 0,
+    "CONNECTION_RATE_LIMIT": 30,
+    "COMMAND_RATE_LIMIT": true,
+    "HTTP_RATE_LIMIT_MAX_REQUESTS": 100,
+    "HTTP_RATE_LIMIT_WINDOW_MS": 60000,
+    "CHAT_ENABLED": true,
+    "REPLAY_TTL_DAYS": 4,
+    "ROOM_LIST_TIP": "",
+    "LOG_LEVEL": "INFO",
+    "LOG_COMPRESS_AFTER_DAYS": 14,
+    "LOG_MAX_TOTAL_MB": 500
+  }
+}
+```
+
+批量修改：
+
+`POST /admin/runtime-config`
+
+Body 直接使用与 `server_config.yml` 相同的全大写键名：
+
+```json
+{
+  "MAX_ROOMS": 200,
+  "ROOM_LIST_TIP": "欢迎加入交流群：123456",
+  "LOG_LEVEL": "WARN",
+  "ROOM_CREATION_ENABLED": false
+}
+```
+
+成功：
+
+```json
+{
+  "ok": true,
+  "updatedKeys": ["MAX_ROOMS", "ROOM_LIST_TIP", "LOG_LEVEL", "ROOM_CREATION_ENABLED"],
+  "rollbackAvailable": true,
+  "config": {
+    "MAX_ROOMS": 200,
+    "ROOM_LIST_TIP": "欢迎加入交流群：123456",
+    "LOG_LEVEL": "WARN",
+    "ROOM_CREATION_ENABLED": false
+  }
+}
+```
+
+说明：
+
+- `MAX_ROOMS=0` / `MAX_CONNECTIONS=0` 表示恢复为“不限制”
+- `ROOM_LIST_TIP` 传空字符串可清空提示文案
+- `REPLAY_ENABLED` 关闭时会像旧接口一样停止当前录制并更新房间 live 状态
+- 运行时配置会压过当前进程启动时传入的 CLI / ENV 同名值，但**仅对当前进程有效**；重启后仍遵循正常优先级
+
+常见错误：
+
+- 非法值、不可热改项或未知键：`400 { "ok": false, "error": "bad-runtime-config", "invalidKeys": [...], "startupOnlyKeys": [...], "unsupportedKeys": [...] }`
+
+一键回滚上一笔修改：
+
+`POST /admin/runtime-config/rollback`
+
+成功：`200 { "ok": true, "updatedKeys": [...], "rollbackAvailable": true, "config": { ... } }`
+
+无可回滚内容：`409 { "ok": false, "error": "runtime-config-rollback-unavailable" }`
+
 ### 2) 查询任意玩家在哪个房间
 
 `GET /admin/users/:id`

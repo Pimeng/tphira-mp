@@ -19,15 +19,33 @@ export type HttpRateLimiterOptions = {
 export class HttpRateLimiter {
   private readonly windows = new Map<string, WindowEntry>();
   private readonly banned = new Map<string, number>();
-  private readonly maxRequests: number;
-  private readonly windowMs: number;
-  private readonly banDurationMs: number;
+  private maxRequests: number;
+  private windowMs: number;
+  private banDurationMs: number;
   private cleanupTimer: NodeJS.Timeout | null = null;
 
   constructor(opts: HttpRateLimiterOptions) {
     this.maxRequests = opts.maxRequests;
     this.windowMs = opts.windowMs;
     this.banDurationMs = opts.banDurationMs ?? opts.windowMs * 2;
+  }
+
+  /**
+   * 运行时更新限流参数（配置热重载时调用）。
+   *
+   * 当窗口长度变化时，旧窗口的 resetAt 已不再可靠，因此直接清空当前窗口/封禁状态，
+   * 让后续请求按新策略重新计数。
+   */
+  updateOptions(opts: HttpRateLimiterOptions): void {
+    this.maxRequests = opts.maxRequests;
+    this.windowMs = opts.windowMs;
+    this.banDurationMs = opts.banDurationMs ?? opts.windowMs * 2;
+    this.windows.clear();
+    this.banned.clear();
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer);
+      this.cleanupTimer = null;
+    }
   }
 
   /**

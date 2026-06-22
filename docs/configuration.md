@@ -18,6 +18,23 @@ Configuration priority (highest to lowest):
 3. Configuration file (`server_config.yml`)
 4. Default values
 
+## 生产环境自检 / Production Self-Check
+
+服务端启动时，以及配置热重载后，会自动检查一组常见的生产环境风险并输出警告日志（`[SelfCheck] ...`）。
+
+The server performs a lightweight production self-check on startup and after config hot reload, emitting warning logs prefixed with `[SelfCheck] ...` for common risky setups.
+
+当前会检查 / Current checks:
+
+- HTTP 服务已启用但 `CORS_ORIGINS` 未配置，导致浏览器跨域默认放开为 `*`
+- `ALLOW_TOKEN_IN_QUERY=true`，管理员 token 可能进入 URL、浏览器历史和代理日志
+- `ADMIN_TOKEN` 过短或明显像占位值（如 `replace_me`、`test-token`）
+- `SHARE_STATION.TOKEN` 仍是占位值，容易导致生产环境误配
+
+这些检查**不会阻止服务启动**，仅作为服主的安全基线提醒。
+
+These checks **do not block startup**; they are guardrails for safer production deployments.
+
 ## 配置文件格式 / Configuration File Format
 
 配置文件使用 YAML 格式，键名统一使用全大写，并按 UTF-8 编码读取。

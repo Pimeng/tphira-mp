@@ -26,6 +26,7 @@ import { getAppPaths } from "../utils/appPaths.js";
 import { readAppVersion } from "../core/version.js";
 import { startHttpService, type HttpService } from "../network/httpService.js";
 import { detectLocaleOverrides, tl } from "../utils/l10n.js";
+import { refreshRoomLive } from "../game/roomUtils.js";
 import { startReplayCleanup } from "../replay/replayCleanup.js";
 import { startLogMaintenance } from "../utils/logMaintenance.js";
 import { ensureLocalesAvailable, fetchRemoteConfigExample } from "../utils/remoteAssets.js";
@@ -47,6 +48,7 @@ import { startConfigFileWatcher, type ConfigWatcher } from "./configWatcher.js";
 import { NOOP } from "../../common/utils.js";
 import { isHighPriorityServerCommand } from "../network/serverCommandTransport.js";
 import { ConnectionRateLimiter } from "../utils/connectionRateLimiter.js";
+import { computeOperationalSelfCheckFindings } from "./operationalSelfCheck.js";
 
 /** 启动服务器选项 */
 export type StartServerOptions = {
@@ -205,6 +207,8 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
     ...(options.host !== undefined ? { host: options.host } : {}),
     ...(options.port !== undefined ? { port: options.port } : {})
   };
+  let runtimeOverrideConfig: Partial<ServerConfig> = {};
+  const runtimeOverrideKeys = new Set<keyof ServerConfig>();
 
   /**
    * 加载合并配置
@@ -215,12 +219,17 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
     const fileCfg = loadConfig(configPath);
     const envCfg = loadEnvConfig();
     const merged = mergeConfig(mergeConfig(fileCfg, envCfg), cliCfg);
+    const withRuntimeOverrides = { ...merged };
+    for (const key of runtimeOverrideKeys) {
+      (withRuntimeOverrides as Record<string, unknown>)[key] = (runtimeOverrideConfig as Record<string, unknown>)[key];
+    }
+    httpServiceForcedByGui = false;
     // GUI 窗口依赖 HTTP 服务：启用 GUI 时自动开启（在加载阶段统一隐含，热重载同样适用）
-    if (merged.gui === true && merged.http_service !== true) {
-      merged.http_service = true;
+    if (withRuntimeOverrides.gui === true && withRuntimeOverrides.http_service !== true) {
+      withRuntimeOverrides.http_service = true;
       httpServiceForcedByGui = true;
     }
-    return merged;
+    return withRuntimeOverrides;
   };
   const mergedCfg = loadMergedConfig();
   let currentConfig = mergedCfg;
@@ -298,6 +307,24 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
     windowMs: 10_000,
     banDurationMs: 30_000
   });
+
+  let activeSelfCheckFindings = new Map<string, string>();
+  const applyOperationalSelfCheck = (config: ServerConfig): void => {
+    const nextFindings = new Map(
+      computeOperationalSelfCheckFindings(config).map((finding) => [finding.key, finding.message] as const)
+    );
+    for (const [key, message] of nextFindings) {
+      if (!activeSelfCheckFindings.has(key)) {
+        logger.warn(message);
+      }
+    }
+    for (const [key] of activeSelfCheckFindings) {
+      if (!nextFindings.has(key)) {
+        logger.mark(`[SelfCheck] Cleared: ${key}`);
+      }
+    }
+    activeSelfCheckFindings = nextFindings;
+  };
 
   const server = net.createServer(async (socket) => {
     // 全服连接数硬上限：超过即拒绝（保护小内存机器，防连接洪水导致 OOM）。
@@ -408,7 +435,14 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
    * 重新加载配置并应用变更。某些配置（如 host、port）需要重启服务器才能生效。
    * 只会应用运行时可修改的配置项。
    */
-  const reloadRuntimeConfig = async (): Promise<void> => {
+  const reloadRuntimeConfig = async (overridePatch?: Partial<ServerConfig>): Promise<void> => {
+    if (overridePatch) {
+      for (const [key, value] of Object.entries(overridePatch)) {
+        (runtimeOverrideConfig as Record<string, unknown>)[key] = value;
+        runtimeOverrideKeys.add(key as keyof ServerConfig);
+      }
+    }
+
     let nextConfig: ServerConfig;
     try {
       nextConfig = loadMergedConfig();
@@ -417,10 +451,12 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
       return;
     }
 
-    const { config: effectiveConfig, restartRequiredKeys } = keepStartupOnlyConfig(currentConfig, nextConfig);
-    const changedKeys = changedConfigKeys(currentConfig, effectiveConfig);
+    const prevConfig = currentConfig;
+    const { config: effectiveConfig, restartRequiredKeys } = keepStartupOnlyConfig(prevConfig, nextConfig);
+    const changedKeys = changedConfigKeys(prevConfig, effectiveConfig);
     if (changedKeys.length === 0 && restartRequiredKeys.length === 0) return;
 
+    const replayChanged = prevConfig.replay_enabled !== effectiveConfig.replay_enabled;
     state.applyConfig(effectiveConfig);
     logger.updateOptions({
       minLevel: effectiveConfig.log_level as any,
@@ -430,6 +466,22 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
 
     // 单 IP 连接限速：热重载新阈值（限速器实例常驻，仅更新阈值，不重置已有窗口/封禁）
     connectionLimiter.setMaxConnections(effectiveConfig.connection_rate_limit ?? 30);
+    httpService?.httpRateLimiter.updateOptions({
+      maxRequests: effectiveConfig.http_rate_limit_max_requests ?? 100,
+      windowMs: effectiveConfig.http_rate_limit_window_ms ?? 60_000,
+      banDurationMs: (effectiveConfig.http_rate_limit_window_ms ?? 60_000) * 2
+    });
+
+    if (replayChanged) {
+      const replayEnabled = Boolean(effectiveConfig.replay_enabled);
+      const roomIds = await state.mutex.runExclusive(async () => {
+        for (const room of state.rooms.values()) refreshRoomLive(room, replayEnabled);
+        return replayEnabled ? [] : [...state.rooms.keys()];
+      });
+      if (!replayEnabled && roomIds.length > 0) {
+        await Promise.allSettled(roomIds.map((rid) => state.replayRecorder.endRoom(rid)));
+      }
+    }
 
     if (changedKeys.length > 0) {
       logger.mark(`Config reloaded: ${changedKeys.join(", ")}`);
@@ -437,7 +489,9 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
     if (restartRequiredKeys.length > 0) {
       logger.warn(`Config changes require restart to take effect: ${restartRequiredKeys.join(", ")}`);
     }
+    applyOperationalSelfCheck(effectiveConfig);
   };
+  state.runtimeConfigReloader = reloadRuntimeConfig;
 
   // 启动 TCP 服务器
   try {
@@ -528,6 +582,7 @@ export async function startServer(options: StartServerOptions): Promise<RunningS
   if (httpServiceForcedByGui) {
     logger.mark(tl(state.serverLang, "log-gui-http-forced"));
   }
+  applyOperationalSelfCheck(currentConfig);
 
   // 启动时立即执行一次日志维护，清理历史堆积（异步，不阻塞启动）
   void logMaintenance.runOnce().catch(NOOP);

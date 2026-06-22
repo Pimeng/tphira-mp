@@ -40,6 +40,16 @@ export function parsePortValue(value: unknown): number | undefined {
   return v;
 }
 
+export function parseLogLevelValue(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim().toUpperCase();
+  if (!normalized) return undefined;
+  if (normalized === "DEBUG" || normalized === "INFO" || normalized === "MARK" || normalized === "WARN" || normalized === "ERROR") {
+    return normalized;
+  }
+  return undefined;
+}
+
 export function parseRoomMaxUsersValue(value: unknown): number | undefined {
   if (value === undefined || value === null || value === "") return undefined;
   const v = Number(value);
@@ -47,7 +57,7 @@ export function parseRoomMaxUsersValue(value: unknown): number | undefined {
   return Math.min(v, 64);
 }
 
-function parseReplayTtlDaysValue(value: unknown): number | undefined {
+export function parseReplayTtlDaysValue(value: unknown): number | undefined {
   if (value === undefined || value === null || value === "") return undefined;
   const v = Number(value);
   if (!Number.isInteger(v) || v < 1) return undefined;
@@ -55,7 +65,7 @@ function parseReplayTtlDaysValue(value: unknown): number | undefined {
 }
 
 /** 解析正整数（>=1）；用于全服房间数 / 连接数上限等。非法值返回 undefined（视为不限制） */
-function parsePositiveIntValue(value: unknown): number | undefined {
+export function parsePositiveIntValue(value: unknown): number | undefined {
   if (value === undefined || value === null || value === "") return undefined;
   const v = Number(value);
   if (!Number.isInteger(v) || v < 1) return undefined;
@@ -63,7 +73,7 @@ function parsePositiveIntValue(value: unknown): number | undefined {
 }
 
 /** 解析非负整数（>=0）；0 通常表示“关闭/不限制”，如日志压缩天数、日志容量上限。非法值返回 undefined */
-function parseNonNegativeIntValue(value: unknown): number | undefined {
+export function parseNonNegativeIntValue(value: unknown): number | undefined {
   if (value === undefined || value === null || value === "") return undefined;
   const v = Number(value);
   if (!Number.isInteger(v) || v < 0) return undefined;
@@ -71,7 +81,7 @@ function parseNonNegativeIntValue(value: unknown): number | undefined {
 }
 
 /** 解析对局断线重连宽限秒数：非负整数，0 表示关闭，上限 120 秒。非法值返回 undefined（用默认） */
-function parsePlayingGraceValue(value: unknown): number | undefined {
+export function parsePlayingGraceValue(value: unknown): number | undefined {
   const v = parseNonNegativeIntValue(value);
   if (v === undefined) return undefined;
   return Math.min(v, 120);
@@ -180,7 +190,7 @@ const CONFIG_FIELDS: ReadonlyArray<ConfigField> = [
   field({ key: "admin_token", envName: "ADMIN_TOKEN", parse: parseStringValue }),
   field({ key: "admin_data_path", envName: "ADMIN_DATA_PATH", parse: parseStringValue, startupOnly: true }),
   field({ key: "room_list_tip", envName: "ROOM_LIST_TIP", parse: parseStringValue }),
-  field({ key: "log_level", envName: "LOG_LEVEL", parse: parseStringValue }),
+  field({ key: "log_level", envName: "LOG_LEVEL", parse: parseLogLevelValue }),
   field({ key: "log_compress_after_days", envName: "LOG_COMPRESS_AFTER_DAYS", parse: parseNonNegativeIntValue }),
   field({ key: "log_max_total_mb", envName: "LOG_MAX_TOTAL_MB", parse: parseNonNegativeIntValue }),
   field({ key: "real_ip_header", envName: "REAL_IP_HEADER", parse: parseStringValue }),
@@ -218,6 +228,11 @@ const CONFIG_FIELDS: ReadonlyArray<ConfigField> = [
   field({ key: "hitokoto_api_url", envName: "HITOKOTO_API_URL", parse: parseStringValue }),
   field({ key: "allow_token_in_query", envName: "ALLOW_TOKEN_IN_QUERY", parse: parseBoolValue })
 ];
+
+export const KNOWN_CONFIG_ENV_NAMES = Object.freeze(CONFIG_FIELDS.map((field) => field.envName));
+export const STARTUP_ONLY_CONFIG_ENV_NAMES = Object.freeze(
+  CONFIG_FIELDS.filter((field) => field.startupOnly).map((field) => field.envName)
+);
 
 /**
  * 从环境变量解析配置。

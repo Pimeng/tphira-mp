@@ -15,6 +15,7 @@ import { dirname } from "node:path";
 import { Mutex } from "../utils/mutex.js";
 import type { RoomId } from "../../common/roomId.js";
 import { parseRoomId, roomIdToString } from "../../common/roomId.js";
+import type { ScalarConfigValue } from "./configPersist.js";
 import type { ServerConfig, ShareStationConfig } from "../core/types.js";
 import type { Room } from "../game/room.js";
 import type { Session } from "../network/session.js";
@@ -128,6 +129,10 @@ export class ServerState {
    * 输入一行命令文本，返回捕获到的输出行；null 表示尚未就绪。
    */
   consoleExecutor: ((line: string) => Promise<ConsoleOutputLine[]>) | null = null;
+  /** 运行时配置重载器（由 server.ts 注册，供 admin 配置接口在写回配置后立即生效） */
+  runtimeConfigReloader: ((overridePatch?: Partial<ServerConfig>) => Promise<void>) | null = null;
+  /** 最近一次运行时配置修改的回滚快照（envName -> scalar value） */
+  lastRuntimeConfigRollback: Record<string, ScalarConfigValue> | null = null;
   /** 自动上传回调函数（由 HttpService 设置，用于游戏结束后触发回放上传） */
   autoUploadCallback: ((userId: number, chartId: number, timestamp: number, recordId: number) => void) | null = null;
 
