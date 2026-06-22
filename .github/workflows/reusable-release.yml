@@ -148,6 +148,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       release_notes: ${{ steps.notes.outputs.release_notes }}
+      has_cnb_token: ${{ secrets.CNB_TOKEN_FOR_SYNC_TPHIRA_MIRROR != '' }}
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
@@ -356,7 +357,8 @@ jobs:
   sync-cnb-release:
     needs: [release-and-docker]
     # 未配置同步 token 时直接跳过整个 job，省得白下载一遍构建产物。
-    if: ${{ secrets.CNB_TOKEN_FOR_SYNC_TPHIRA_MIRROR != '' }}
+    # secrets 上下文不允许直接用在 jobs.<job_id>.if 里，需经 release-and-docker 的 outputs 中转。
+    if: needs.release-and-docker.outputs.has_cnb_token == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
